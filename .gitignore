@@ -62,3 +62,7 @@ CMakeFiles
 include/divisible/*
 src/.cache/
 Release
+
+# Stats ingestor
+stats/__pycache__/
+stats/.venv/

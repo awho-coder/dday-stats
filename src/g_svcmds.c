@@ -828,6 +828,7 @@ void Svcmd_FreezeMode_f()
 void Svcmd_NextMap(void)
 {
 	disable_mapvoting = true;
+	StatsLog_MarkForcedEnd ();
 	EndDMLevel();
 	safe_bprintf(PRINT_HIGH, "Changing to next map.\n");
 }

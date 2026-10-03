@@ -432,7 +432,10 @@ void Svcmd_Maplist_f ()
 		if (Q_stricmp(gi.argv(2), "START") == 0)
 		{
 			if (maplist.nummaps > 0)  // does a maplist exist?
+			{
+				StatsLog_MarkForcedEnd ();
 				EndDMLevel();
+			}
 			else
 				DisplayMaplistUsage(NULL);
 
@@ -441,7 +444,10 @@ void Svcmd_Maplist_f ()
 		else if (Q_stricmp(gi.argv(2), "NEXT") == 0)
 		{
 			if (maplist.nummaps > 0)  // does a maplist exist?
+			{
+				StatsLog_MarkForcedEnd ();
 				EndDMLevel();
+			}
 			else
 				DisplayMaplistUsage(NULL);
 
@@ -485,6 +491,7 @@ void Svcmd_Maplist_f ()
 					ent->classname = "target_changelevel";
 					ent->map = maplist.mapnames[i-1];
 					maplist.currentmap = i-1;
+					StatsLog_MarkForcedEnd ();
 					BeginIntermission(ent);
 				}
 

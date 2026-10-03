@@ -1214,6 +1214,7 @@ void SpawnEntities2 (char *mapname, char *entities, char *spawnpoint)
 
 	AI_NewMap();//JABot
 
+	StatsLog_MatchBegin ();
 }
 
 

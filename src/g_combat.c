@@ -180,6 +180,8 @@ void Killed (edict_t *targ, edict_t *inflictor, edict_t *attacker, int damage, v
 	if (targ->client && inflictor && inflictor != attacker && !inflictor->client && inflictor->owner && inflictor->owner->client)
 		attacker = inflictor->owner;
 
+	if (targ->client && !targ->deadflag)
+		StatsLog_Kill (targ, inflictor, attacker);
 
 	if(!targ->deadflag)
 	{
@@ -213,8 +215,8 @@ void Killed (edict_t *targ, edict_t *inflictor, edict_t *attacker, int damage, v
 				{
 					team_list[(targ->client->resp.team_on->index+1)%2]->kills++;
 					//targ->client->resp.plus_minus--;	
-					if (targ->client->aim)
-						targ->client->resp.stat_bot_minus--;
+					if (targ->ai)
+						targ->client->resp.stat_bot_minus++;
 					else
 						targ->client->resp.stat_human_minus++;	
 				}

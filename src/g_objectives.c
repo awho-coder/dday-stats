@@ -88,6 +88,9 @@ void objective_area_think (edict_t *self) {
 
 	if (count >= self->obj_count)
 	{
+		if (self->obj_owner != newteam)
+			StatsLog_Objective (STATS_OBJ_AREA, self->obj_name, newteam, NULL);
+
 		// kernel: only adds to score when in deathmatch mode
 		if (deathmatch->value)
 		{
@@ -206,6 +209,8 @@ void objective_touch (edict_t *self, edict_t *other, cplane_t *plane, csurface_t
 			return;
 
 		self->obj_owner = other->client->resp.team_on->index;
+
+		StatsLog_Objective (STATS_OBJ_TOUCH, self->message, self->obj_owner, other);
 
 		// kernel: only adds to score when in deathmatch mode
 		if (deathmatch->value)
@@ -377,6 +382,8 @@ void timed_objective_touch_think (edict_t *self)
 				team_list[self->obj_owner]->teamname);
 
 		team_list[self->obj_owner]->score += self->health;
+
+		StatsLog_Objective (STATS_OBJ_TIMED_HELD, self->message, self->obj_owner, NULL);
 		
 		level.obj_time = 0;
 		
@@ -415,6 +422,8 @@ void timed_objective_touch (edict_t *self, edict_t *other, cplane_t *plane, csur
 		
 		self->obj_owner = other->client->resp.team_on->index;
 //		team_list[self->obj_owner]->score += self->health;
+
+		StatsLog_Objective (STATS_OBJ_TIMED, self->message, self->obj_owner, other);
 
 		otherteam = (self->obj_owner + 1) % 2;
 		if ((!team_list[otherteam]->kills_and_points &&
@@ -621,6 +630,8 @@ void func_explosive_objective_explode (edict_t *self, edict_t *inflictor, edict_
 	}
 
 	G_UseTargets (self, attacker);
+
+	StatsLog_Objective (STATS_OBJ_EXPLOSIVE, self->obj_name, attacker->client->resp.team_on ? attacker->client->resp.team_on->index : -1, attacker);
 
 	// hack for 2 team games
 
@@ -836,6 +847,8 @@ qboolean Pickup_Briefcase (edict_t *ent, edict_t *other)
 
 	briefcase_respawn_needed = false;
 
+	StatsLog_Objective (STATS_OBJ_BC_PICKUP, "briefcase", other->client->resp.team_on ? other->client->resp.team_on->index : -1, other);
+
 	// emit a capture sound for team who pickups
 	PlayTeamSound(other->client->resp.team_on->index, "ctb/pickup.wav", true);
 
@@ -861,6 +874,8 @@ void Drop_Briefcase (edict_t *ent, gitem_t *item)
 
 	ent->client->has_briefcase = false;
 	ent->s.modelindex3 = 0;
+
+	StatsLog_Objective (STATS_OBJ_BC_DROP, "briefcase", ent->client->resp.team_on ? ent->client->resp.team_on->index : -1, ent);
 
 	gi.sound(&g_edicts[0], CHAN_AUTO, gi.soundindex("ctb/drop.wav"), 1, ATTN_NONE, 0);
 	centerprintothers(ent, "%s lost the briefcase of team %s!", ent->client->pers.netname,
@@ -940,6 +955,8 @@ void base_touch(edict_t *self, edict_t *other, cplane_t *plane, csurface_t *surf
 	// add 1 point to player's team
 	other->client->resp.team_on->score++;
 	other->client->resp.points++;
+
+	StatsLog_Objective (STATS_OBJ_BC_CAPTURE, "briefcase", other->client->resp.team_on->index, other);
 
 	// scoring team will listen flagcap
 	PlayTeamSound(other->client->resp.team_on->index, "ctb/flagcap.wav", true);

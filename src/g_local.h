@@ -2268,4 +2268,6 @@ void briefcase_warn (edict_t *ent);//faf;  ctb code
 qboolean Pickup_Briefcase (edict_t *ent, edict_t *other); 
 void Drop_Briefcase (edict_t *ent, gitem_t *item);
 
+#include "g_statslog.h"
+
 #endif /* __G_LOCAL_H__ */

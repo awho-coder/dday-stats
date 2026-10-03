@@ -265,6 +265,8 @@ void ShutdownGame (void)
 	}
 	gi.dprintf ("==== ShutdownGame ====\n");
 
+	StatsLog_Shutdown ();
+
 	CleanUpCmds();
 	//ClearUserDLLs();
 
@@ -609,6 +611,8 @@ void EndDMLevel (void)
 	edict_t	*ent = NULL;
 	
 	i = 0;
+
+	StatsLog_EndDMLevel ();
 
 	mapname = level.mapname;
 
@@ -1648,6 +1652,8 @@ void G_RunFrame (void)
 			}
 		}
 	}
+
+	StatsLog_RunFrame ();
 
 	// see if it is time to end a deathmatch
 	CheckDMRules ();
