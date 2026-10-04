@@ -55,9 +55,16 @@ sv startcount 20
 ```
 
 Ese duelo cuenta en la categoría **`official`** (con su propio ladder y Elo,
-separados de los duelos casuales) y queda agrupado bajo "copa-verano". Para
-volver a duelos casuales: `set stats_event ""`. En duelos vale el valor que
-tenga la cvar cuando la cuenta llega a 0.
+separados de los duelos casuales) y queda agrupado bajo "copa-verano". En
+duelos vale el valor que tenga la cvar cuando la cuenta llega a 0.
+
+> **Importante:** la cvar se mantiene entre mapas (cómodo para torneos de
+> varios mapas). Al terminar el torneo hay que borrarla con
+> `set stats_event ""`; si no, los duelos casuales siguientes contarán como
+> oficiales.
+
+`sv freeze` (pausa) solo funciona con `tournament 1`, que es lo normal en los
+servidores de duelo.
 
 Si se olvidó ponerla, se corrige después:
 
