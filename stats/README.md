@@ -104,6 +104,10 @@ export DDAY_STATS_DSN="postgresql://dday:clave@localhost/dday"
 python3 stats/ingest.py --init-schema       # crea tablas y vistas (idempotente)
 ```
 
+`createuser` y `createdb` dejan la base **vacía**. Las tablas, vistas y
+funciones las crea `ingest.py --init-schema` a partir de `stats/schema.sql`
+(idempotente: se puede repetir sin perder datos y también sirve para migrar).
+
 ## 3. Ingestor
 
 ```sh

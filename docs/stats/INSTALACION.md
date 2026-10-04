@@ -155,6 +155,11 @@ podman run -d --name dday-stats-pg --restart unless-stopped \
 El volumen `dday-stats-pgdata` conserva los datos aunque se borre el
 contenedor. Sin `-v`, **los datos se pierden** al detenerlo.
 
+> **Las tablas no se crean aquí.** La base queda **vacía** (solo el usuario y
+> la base). Las tablas, vistas y funciones las crea el ingestor con
+> `ingest.py --init-schema` al final de la sección 3; no hace falta ejecutar
+> SQL a mano.
+
 ---
 
 ## 3. Ingestor
