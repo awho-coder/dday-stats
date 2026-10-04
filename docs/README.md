@@ -11,6 +11,14 @@
 | [`stats/INSTALACION.md`](stats/INSTALACION.md) | Instalación genérica paso a paso (Windows y Linux, todo en una máquina). |
 | [`../stats/`](../stats/) | Código del sistema: `schema.sql`, `ingest.py`, `requirements.txt`. |
 
+## Base de conocimiento (OKF)
+
+[`knowledge/`](knowledge/) es un bundle [Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format)
+del sistema: una página por **tabla, vista y función** (generadas desde el
+catálogo de PostgreSQL con `stats/okf_export.py`, reusando los comentarios del
+esquema) más las **reglas del ladder**. Es una forma navegable y versionada de
+recorrer el esquema, legible por humanos y agentes.
+
 ## El juego
 
 | Documento | Para qué |

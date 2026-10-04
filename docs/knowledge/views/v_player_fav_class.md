@@ -1,0 +1,24 @@
+---
+type: PostgreSQL View
+title: v_player_fav_class
+description: Clase favorita de cada jugador.
+resource: postgresql://dday/public/v_player_fav_class
+tags: [postgresql, view, ladder]
+status: stable
+generated: { by: process:okf-export, at: 2026-10-04T18:27:40Z }
+sources: 
+  - id: schema
+    resource: /references/schema.sql
+---
+
+# Schema
+
+| Columna | Tipo | Nulo | Descripción |
+|---|---|---|---|
+| `player_id` | integer | sí |  |
+| `class` | text | sí |  |
+| `seconds` | integer | sí |  |
+
+# Relaciones
+
+- Referencia a [player_class_stats](/tables/player_class_stats.md).
