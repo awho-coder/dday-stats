@@ -9,4 +9,4 @@ Las DLL solo han sido testeadas con VS2022 y el compilador MSVC y vscode con cla
 
 ## Estadísticas y ladder
 
-Desde la versión 5.068 el servidor puede registrar estadísticas de las partidas (K/D, Elo, rachas, duelos oficiales y temporadas) para cargarlas en PostgreSQL. Ver [stats/README.md](stats/README.md) y la guía de instalación para Windows y Linux en [docs/stats/INSTALACION.md](docs/stats/INSTALACION.md). El índice de toda la documentación está en [docs/README.md](docs/README.md).
+Desde la versión 5.068 el servidor puede registrar estadísticas de las partidas (K/D, Elo, rachas, duelos oficiales y temporadas) para cargarlas en PostgreSQL. Ver [stats/README.md](stats/README.md) y la guía de instalación para Windows y Linux en [docs/stats/INSTALACION.md](docs/stats/INSTALACION.md). El índice de toda la documentación está en [docs/README.md](docs/README.md) y el **catálogo del esquema** (una página por tabla, vista y función) en [docs/knowledge/](docs/knowledge/).
