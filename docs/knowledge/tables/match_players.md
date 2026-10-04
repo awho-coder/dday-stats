@@ -5,7 +5,7 @@ description: Resumen de un jugador en una partida (suma de sus tramos/reconexion
 resource: postgresql://dday/public/match_players
 tags: [postgresql, table, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-04T18:27:40Z }
+generated: { by: process:okf-export, at: 2026-10-04T18:33:53Z }
 sources: 
   - id: schema
     resource: /references/schema.sql
@@ -15,8 +15,8 @@ sources:
 
 | Columna | Tipo | Nulo | Descripción |
 |---|---|---|---|
-| `match_id` | text | no | Partida. (PK; FK → [matches](/tables/matches.md)) |
-| `player_id` | integer | no | Jugador. (PK; FK → [players](/tables/players.md)) |
+| `match_id` | text | no | Partida. (PK; FK → [matches](matches.md)) |
+| `player_id` | integer | no | Jugador. (PK; FK → [players](players.md)) |
 | `team` | smallint | sí | Equipo donde jugo mas tiempo: 0 aliados, 1 eje, -1 observador. |
 | `time_team0` | integer | no | Segundos jugados en el equipo 0. |
 | `time_team1` | integer | no | Segundos jugados en el equipo 1. |
@@ -48,5 +48,5 @@ sources:
 
 # Relaciones
 
-- Referencia a [matches](/tables/matches.md).
-- Referencia a [players](/tables/players.md).
+- Referencia a [matches](matches.md).
+- Referencia a [players](players.md).

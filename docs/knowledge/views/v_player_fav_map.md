@@ -5,7 +5,7 @@ description: Mapa favorito de cada jugador (el mas jugado).
 resource: postgresql://dday/public/v_player_fav_map
 tags: [postgresql, view, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-04T18:27:40Z }
+generated: { by: process:okf-export, at: 2026-10-04T18:33:53Z }
 sources: 
   - id: schema
     resource: /references/schema.sql
@@ -22,5 +22,5 @@ sources:
 
 # Relaciones
 
-- Referencia a [matches](/tables/matches.md).
-- Referencia a [v_player_maps](/views/v_player_maps.md).
+- Referencia a [matches](../tables/matches.md).
+- Referencia a [v_player_maps](v_player_maps.md).

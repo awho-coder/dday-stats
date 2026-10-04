@@ -5,7 +5,7 @@ description: Estadisticas de un jugador por mapa.
 resource: postgresql://dday/public/v_player_maps
 tags: [postgresql, view, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-04T18:27:40Z }
+generated: { by: process:okf-export, at: 2026-10-04T18:33:53Z }
 sources: 
   - id: schema
     resource: /references/schema.sql
@@ -27,6 +27,6 @@ sources:
 
 # Relaciones
 
-- Referencia a [kills](/tables/kills.md).
-- Referencia a [matches](/tables/matches.md).
-- Referencia a [player_map_stats](/tables/player_map_stats.md).
+- Referencia a [kills](../tables/kills.md).
+- Referencia a [matches](../tables/matches.md).
+- Referencia a [player_map_stats](../tables/player_map_stats.md).

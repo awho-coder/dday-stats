@@ -5,7 +5,7 @@ description: 'Temporadas del ladder (se crean con "ingest.py --new-season NOMBRE
 resource: postgresql://dday/public/seasons
 tags: [postgresql, table, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-04T18:27:40Z }
+generated: { by: process:okf-export, at: 2026-10-04T18:33:53Z }
 sources: 
   - id: schema
     resource: /references/schema.sql

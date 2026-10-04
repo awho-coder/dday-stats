@@ -33,6 +33,6 @@ SELECT * FROM ladder_kd(1, 'official');      -- duelos oficiales
 
 # Ver también
 
-- [Ladder por Elo](/rules/elo.md)
-- [Temporadas y categorías](/rules/seasons.md)
-- Función [`ladder_kd`](/functions/ladder_kd.md)
+- [Ladder por Elo](elo.md)
+- [Temporadas y categorías](seasons.md)
+- Función [`ladder_kd`](../functions/ladder_kd.md)

@@ -46,6 +46,6 @@ La cvar se mantiene entre mapas: al terminar el torneo hay que borrarla con
 
 # Ver también
 
-- [Ladder por K/D](/rules/kd.md)
-- [Ladder por Elo](/rules/elo.md)
-- Vista [`v_seasons`](/views/v_seasons.md)
+- [Ladder por K/D](kd.md)
+- [Ladder por Elo](elo.md)
+- Vista [`v_seasons`](../views/v_seasons.md)

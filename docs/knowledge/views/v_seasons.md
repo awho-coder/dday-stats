@@ -5,7 +5,7 @@ description: Temporadas con su fecha de fin y cantidad de partidas.
 resource: postgresql://dday/public/v_seasons
 tags: [postgresql, view, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-04T18:27:40Z }
+generated: { by: process:okf-export, at: 2026-10-04T18:33:53Z }
 sources: 
   - id: schema
     resource: /references/schema.sql
@@ -23,5 +23,5 @@ sources:
 
 # Relaciones
 
-- Referencia a [matches](/tables/matches.md).
-- Referencia a [seasons](/tables/seasons.md).
+- Referencia a [matches](../tables/matches.md).
+- Referencia a [seasons](../tables/seasons.md).

@@ -39,6 +39,14 @@ def slug(name: str) -> str:
     return re.sub(r"[^a-z0-9_]+", "-", name.lower()).strip("-")
 
 
+def rel_link(ref: str, from_dir: str) -> str:
+    """Link relativo entre conceptos (el visualizador de OKF ignora los absolutos)."""
+    to_dir = "views" if ref.startswith("v_") else "tables"
+    if to_dir == from_dir:
+        return f"{slug(ref)}.md"
+    return f"../{to_dir}/{slug(ref)}.md"
+
+
 def yaml_scalar(value: str) -> str:
     # comillas simples para strings con caracteres especiales
     if value == "" or re.search(r"[:#\-\[\]{},&*!|>'\"%@`]", value) or value.strip() != value:
@@ -157,6 +165,7 @@ def referenced_objects(text: str, names: set[str], exclude: str) -> list[str]:
 def render_object(obj, columns_by_table, pk_by_table, fk_by_table, refs) -> str:
     name = obj["name"]
     is_view = obj["kind"] == "v"
+    from_dir = "views" if is_view else "tables"
     type_label = "PostgreSQL View" if is_view else "PostgreSQL Table"
     fallback = ("Vista" if is_view else "Tabla") + f" `{SCHEMA}.{name}` del ladder de D-Day."
     fm = frontmatter([
@@ -177,7 +186,7 @@ def render_object(obj, columns_by_table, pk_by_table, fk_by_table, refs) -> str:
             marks.append("PK")
         for fk in fk_by_table.get(name, []):
             if fk["col"] == col["name"]:
-                marks.append(f"FK → [{fk['ref']}](/tables/{slug(fk['ref'])}.md)")
+                marks.append(f"FK → [{fk['ref']}]({rel_link(fk['ref'], from_dir)})")
         desc = (col["comment"] or "").strip().replace("|", "\\|")
         if marks:
             desc = (desc + " " if desc else "") + f"({'; '.join(marks)})"
@@ -187,8 +196,7 @@ def render_object(obj, columns_by_table, pk_by_table, fk_by_table, refs) -> str:
     if refs:
         body += ["", "# Relaciones", ""]
         for ref in refs:
-            kind = "view" if ref.startswith("v_") else "table"
-            body.append(f"- Referencia a [{ref}](/{kind}s/{slug(ref)}.md).")
+            body.append(f"- Referencia a [{ref}]({rel_link(ref, from_dir)}).")
 
     return fm + "\n" + "\n".join(body) + "\n"
 
@@ -213,8 +221,7 @@ def render_function(fn, refs) -> str:
     if refs:
         body += ["", "# Relaciones", ""]
         for ref in refs:
-            kind = "view" if ref.startswith("v_") else "table"
-            body.append(f"- Usa [{ref}](/{kind}s/{slug(ref)}.md).")
+            body.append(f"- Usa [{ref}]({rel_link(ref, 'functions')}).")
     return fm + "\n" + "\n".join(body) + "\n"
 
 
@@ -296,7 +303,11 @@ def main() -> int:
                         ("references/", "Material de origen (schema.sql).")):
         if (out / extra.rstrip("/")).is_dir():
             root_entries.append((extra.rstrip("/").capitalize(), extra, desc))
-    (out / "index.md").write_text(index_md("Base de conocimiento — ladder de D-Day", root_entries), encoding="utf-8")
+    # el index raiz se escribe solo si no existe: en este repo lo mantenemos a mano
+    root_index = out / "index.md"
+    if not root_index.exists():
+        root_index.write_text(
+            index_md("Base de conocimiento — ladder de D-Day", root_entries), encoding="utf-8")
 
     total = len(table_entries) + len(view_entries) + len(function_entries)
     print(f"OKF: {total} conceptos en {out} "

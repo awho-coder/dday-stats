@@ -43,6 +43,6 @@ SELECT * FROM ladder_elo(10, 'public', 'all');-- histórico
 
 # Ver también
 
-- [Ladder por K/D](/rules/kd.md)
-- [Temporadas y categorías](/rules/seasons.md)
-- Función [`ladder_elo`](/functions/ladder_elo.md)
+- [Ladder por K/D](kd.md)
+- [Temporadas y categorías](seasons.md)
+- Función [`ladder_elo`](../functions/ladder_elo.md)

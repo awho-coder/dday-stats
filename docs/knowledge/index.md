@@ -16,6 +16,9 @@ Para regenerar (con la base a mano):
 python3 stats/okf_export.py --dsn "$DDAY_STATS_DSN" --out docs/knowledge
 ```
 
+`viz.html` es el grafo interactivo (autocontenido) del bundle; se abre en
+cualquier navegador.
+
 # Reglas
 
 * [Reglas del ladder](rules/) - K/D, Elo, temporadas y categorías.

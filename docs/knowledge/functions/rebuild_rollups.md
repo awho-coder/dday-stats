@@ -5,7 +5,7 @@ description: Recalcula todas las tablas de resumen desde las tablas de detalle.
 resource: postgresql://dday/public/rebuild_rollups
 tags: [postgresql, function, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-04T18:27:40Z }
+generated: { by: process:okf-export, at: 2026-10-04T18:33:53Z }
 sources: 
   - id: schema
     resource: /references/schema.sql

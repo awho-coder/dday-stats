@@ -5,7 +5,7 @@ description: Perfil completo de un jugador (totales + Elo + favoritos + nemesis)
 resource: postgresql://dday/public/v_player_profile
 tags: [postgresql, view, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-04T18:27:40Z }
+generated: { by: process:okf-export, at: 2026-10-04T18:33:53Z }
 sources: 
   - id: schema
     resource: /references/schema.sql
@@ -62,13 +62,13 @@ sources:
 
 # Relaciones
 
-- Referencia a [kills](/tables/kills.md).
-- Referencia a [matches](/tables/matches.md).
-- Referencia a [objectives](/tables/objectives.md).
-- Referencia a [ratings](/tables/ratings.md).
-- Referencia a [v_player_fav_class](/views/v_player_fav_class.md).
-- Referencia a [v_player_fav_map](/views/v_player_fav_map.md).
-- Referencia a [v_player_fav_weapon](/views/v_player_fav_weapon.md).
-- Referencia a [v_player_favorite_victim](/views/v_player_favorite_victim.md).
-- Referencia a [v_player_nemesis](/views/v_player_nemesis.md).
-- Referencia a [v_player_totals](/views/v_player_totals.md).
+- Referencia a [kills](../tables/kills.md).
+- Referencia a [matches](../tables/matches.md).
+- Referencia a [objectives](../tables/objectives.md).
+- Referencia a [ratings](../tables/ratings.md).
+- Referencia a [v_player_fav_class](v_player_fav_class.md).
+- Referencia a [v_player_fav_map](v_player_fav_map.md).
+- Referencia a [v_player_fav_weapon](v_player_fav_weapon.md).
+- Referencia a [v_player_favorite_victim](v_player_favorite_victim.md).
+- Referencia a [v_player_nemesis](v_player_nemesis.md).
+- Referencia a [v_player_totals](v_player_totals.md).

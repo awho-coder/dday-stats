@@ -5,7 +5,7 @@ description: Clase favorita de cada jugador.
 resource: postgresql://dday/public/v_player_fav_class
 tags: [postgresql, view, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-04T18:27:40Z }
+generated: { by: process:okf-export, at: 2026-10-04T18:33:53Z }
 sources: 
   - id: schema
     resource: /references/schema.sql
@@ -21,4 +21,4 @@ sources:
 
 # Relaciones
 
-- Referencia a [player_class_stats](/tables/player_class_stats.md).
+- Referencia a [player_class_stats](../tables/player_class_stats.md).

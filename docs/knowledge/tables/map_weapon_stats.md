@@ -5,7 +5,7 @@ description: 'Kills por mapa, categoria y arma.'
 resource: postgresql://dday/public/map_weapon_stats
 tags: [postgresql, table, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-04T18:27:40Z }
+generated: { by: process:okf-export, at: 2026-10-04T18:33:53Z }
 sources: 
   - id: schema
     resource: /references/schema.sql

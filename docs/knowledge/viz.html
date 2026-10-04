@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<!--
+  Copyright 2026 Google LLC
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OKF Bundle Viewer</title>
+<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+<style>
+/*
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  color: #0f172a;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+.title strong { font-size: 16px; margin-right: 8px; }
+.muted { color: #64748b; font-size: 12px; }
+.controls { display: flex; gap: 8px; }
+.controls input, .controls select, .controls button {
+  font-size: 13px;
+  padding: 5px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #fff;
+}
+.controls input { width: 220px; }
+.controls button { cursor: pointer; background: #f1f5f9; }
+.controls button:hover { background: #e2e8f0; }
+
+main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+#graph {
+  flex: 1 1 60%;
+  background: #fff;
+  border-right: 1px solid #e2e8f0;
+  min-width: 0;
+  position: relative;
+}
+#detail {
+  flex: 0 0 40%;
+  overflow-y: auto;
+  padding: 18px 22px;
+  background: #fff;
+}
+#detail-empty {
+  text-align: center;
+  margin-top: 40px;
+}
+
+.detail-header { margin-bottom: 12px; }
+.detail-header h1 {
+  font-size: 18px;
+  margin: 4px 0 2px;
+  font-weight: 600;
+}
+.type-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+dl.frontmatter {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  row-gap: 4px;
+  column-gap: 12px;
+  margin: 8px 0 12px;
+  font-size: 13px;
+}
+dl.frontmatter dt {
+  color: #64748b;
+  font-weight: 500;
+}
+dl.frontmatter dd { margin: 0; }
+dl.frontmatter a { color: #2563eb; word-break: break-all; }
+
+.tag {
+  display: inline-block;
+  padding: 1px 6px;
+  margin: 0 4px 2px 0;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 11px;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+.badge.status-stable { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+.badge.status-draft { background: #fefce8; color: #a16207; border-color: #fde68a; }
+.badge.status-deprecated { background: #f1f5f9; color: #64748b; border-color: #cbd5e1; text-decoration: line-through; }
+.badge.trust-unverified { background: #f1f5f9; color: #64748b; border-color: #cbd5e1; }
+.badge.trust-machine-confirmed { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.badge.trust-human-reviewed { background: #f5f3ff; color: #6d28d9; border-color: #ddd6fe; }
+.badge.stale { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+.badge.fresh { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+
+.sources-list { padding-left: 18px; margin: 0; }
+.sources-list li { margin: 1px 0; }
+
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 14px 0; }
+
+#detail-body { font-size: 13px; line-height: 1.55; }
+#detail-body h1 {
+  font-size: 16px; margin: 18px 0 6px;
+  padding-bottom: 4px; border-bottom: 1px solid #e2e8f0;
+}
+#detail-body h2 { font-size: 14px; margin: 14px 0 4px; }
+#detail-body h3 { font-size: 13px; margin: 12px 0 4px; }
+#detail-body p { margin: 6px 0; }
+#detail-body code {
+  background: #f1f5f9;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+}
+#detail-body pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 12px;
+}
+#detail-body pre code { background: transparent; color: inherit; padding: 0; }
+#detail-body ul, #detail-body ol { padding-left: 22px; margin: 6px 0; }
+#detail-body li { margin: 2px 0; }
+#detail-body table { border-collapse: collapse; margin: 8px 0; }
+#detail-body th, #detail-body td {
+  border: 1px solid #e2e8f0; padding: 4px 8px; font-size: 12px;
+}
+#detail-body a.internal { color: #2563eb; cursor: pointer; }
+#detail-body a.external { color: #2563eb; }
+
+#detail-backlinks { margin-top: 18px; }
+#detail-backlinks h2 { font-size: 13px; color: #64748b; margin-bottom: 6px; }
+#detail-backlinks ul { padding-left: 18px; }
+#detail-backlinks a { color: #2563eb; cursor: pointer; }
+
+</style>
+</head>
+<body>
+<header>
+  <div class="title">
+    <strong id="bundle-name"></strong>
+    <span class="muted">OKF bundle</span>
+  </div>
+  <div class="controls">
+    <input id="search" type="search" placeholder="Search title / id / tag">
+    <select id="filter-type">
+      <option value="">All types</option>
+    </select>
+    <select id="layout">
+      <option value="cose">cose (force)</option>
+      <option value="concentric">concentric</option>
+      <option value="breadthfirst">breadth-first</option>
+      <option value="circle">circle</option>
+      <option value="grid">grid</option>
+    </select>
+    <button id="reset">Reset view</button>
+  </div>
+</header>
+
+<main>
+  <section id="graph"></section>
+  <section id="detail">
+    <div id="detail-empty" class="muted">Click a node to see its details.</div>
+    <article id="detail-content" hidden>
+      <header class="detail-header">
+        <span class="type-chip" id="detail-type"></span>
+        <h1 id="detail-title"></h1>
+        <div class="muted" id="detail-id"></div>
+      </header>
+      <div class="badges" id="detail-badges"></div>
+      <dl class="frontmatter">
+        <dt>Description</dt><dd id="detail-description"></dd>
+        <dt>Resource</dt><dd id="detail-resource"></dd>
+        <dt>Tags</dt><dd id="detail-tags"></dd>
+        <dt>Generated</dt><dd id="detail-generated"></dd>
+        <dt>Verified</dt><dd id="detail-verified"></dd>
+        <dt>Sources</dt><dd id="detail-sources"></dd>
+      </dl>
+      <hr>
+      <div id="detail-body"></div>
+      <section id="detail-backlinks" hidden>
+        <h2>Cited by</h2>
+        <ul id="backlinks-list"></ul>
+      </section>
+    </article>
+  </section>
+</main>
+
+<script>
+window.BUNDLE_NAME = "Ladder D-Day";
+window.BUNDLE = {"nodes": [{"data": {"id": "functions/apply_rollups", "label": "apply_rollups(ids text[])", "type": "PostgreSQL Function", "description": "Suma las partidas indicadas a las tablas de resumen (una sola vez por partida).", "resource": "postgresql://dday/public/apply_rollups", "tags": ["postgresql", "function", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 30}}, {"data": {"id": "functions/ladder_elo", "label": "ladder_elo(min_games integer, match_kind text, season text)", "type": "PostgreSQL Function", "description": "Ladder por rating Elo, por categoria.", "resource": "postgresql://dday/public/ladder_elo", "tags": ["postgresql", "function", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "functions/ladder_kd", "label": "ladder_kd(min_matches integer, match_kind text, season text, match_event text)", "type": "PostgreSQL Function", "description": "Ladder por K/D (humano vs humano).", "resource": "postgresql://dday/public/ladder_kd", "tags": ["postgresql", "function", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "functions/ladder_luck", "label": "ladder_luck(min_matches integer, match_kind text, season text)", "type": "PostgreSQL Function", "description": "Los mas suertudos (casco que desvia + pie salvado).", "resource": "postgresql://dday/public/ladder_luck", "tags": ["postgresql", "function", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "functions/ladder_streak", "label": "ladder_streak(match_kind text, max_rows integer, season text)", "type": "PostgreSQL Function", "description": "Mejores rachas de kills (una fila por partida).", "resource": "postgresql://dday/public/ladder_streak", "tags": ["postgresql", "function", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "functions/ladder_streak_tiers", "label": "ladder_streak_tiers(min_matches integer, match_kind text, season text)", "type": "PostgreSQL Function", "description": "Rachas por nivel: quien mas llego a GODLIKE, UNSTOPPABLE, etc.", "resource": "postgresql://dday/public/ladder_streak_tiers", "tags": ["postgresql", "function", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "functions/ladder_unlucky", "label": "ladder_unlucky(min_matches integer, match_kind text, season text)", "type": "PostgreSQL Function", "description": "Los tiradores mas desafortunados (tiros desviados por cascos).", "resource": "postgresql://dday/public/ladder_unlucky", "tags": ["postgresql", "function", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "functions/match_category", "label": "match_category(kind text, event text)", "type": "PostgreSQL Function", "description": "Categoria de ladder de una partida: official si tiene torneo, si no el modo (public/duel).", "resource": "postgresql://dday/public/match_category", "tags": ["postgresql", "function", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 30}}, {"data": {"id": "functions/player_totals", "label": "player_totals(season text, match_kind text, match_event text)", "type": "PostgreSQL Function", "description": "Totales por jugador para una temporada, categoria y torneo (base de los ladders).", "resource": "postgresql://dday/public/player_totals", "tags": ["postgresql", "function", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 33}}, {"data": {"id": "functions/rebuild_rollups", "label": "rebuild_rollups()", "type": "PostgreSQL Function", "description": "Recalcula todas las tablas de resumen desde las tablas de detalle.", "resource": "postgresql://dday/public/rebuild_rollups", "tags": ["postgresql", "function", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 30}}, {"data": {"id": "functions/season_lookup", "label": "season_lookup(season text)", "type": "PostgreSQL Function", "description": "Resuelve una temporada: current (la vigente), all (NULL) o el nombre.", "resource": "postgresql://dday/public/season_lookup", "tags": ["postgresql", "function", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 30}}, {"data": {"id": "functions/streak_base", "label": "streak_base()", "type": "PostgreSQL Function", "description": "Kills seguidas para el primer anuncio de racha (igual al cvar exbattleinfo).", "resource": "postgresql://dday/public/streak_base", "tags": ["postgresql", "function", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 30}}, {"data": {"id": "rules/elo", "label": "Ladder por Elo", "type": "Rule", "description": "C\u00f3mo se calcula el rating Elo por equipos.", "resource": "", "tags": ["ladder", "reglas", "elo"], "status": "stable", "generated": {"by": "human:awho", "at": "2026-10-04T00:00:00Z"}, "verified": [], "stale_after": "", "sources": [{"id": "readme", "resource": "https://github.com/awho-coder/dday-stats/blob/main/stats/README.md"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 36}}, {"data": {"id": "rules/kd", "label": "Ladder por K/D", "type": "Rule", "description": "C\u00f3mo se calcula el ranking por kills y muertes.", "resource": "", "tags": ["ladder", "reglas", "kd"], "status": "stable", "generated": {"by": "human:awho", "at": "2026-10-04T00:00:00Z"}, "verified": [], "stale_after": "", "sources": [{"id": "readme", "resource": "https://github.com/awho-coder/dday-stats/blob/main/stats/README.md"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 34}}, {"data": {"id": "rules/seasons", "label": "Temporadas y categor\u00edas", "type": "Rule", "description": "C\u00f3mo se separan los ladders por temporada, categor\u00eda y torneo.", "resource": "", "tags": ["ladder", "reglas", "temporadas", "categorias"], "status": "stable", "generated": {"by": "human:awho", "at": "2026-10-04T00:00:00Z"}, "verified": [], "stale_after": "", "sources": [{"id": "readme", "resource": "https://github.com/awho-coder/dday-stats/blob/main/stats/README.md"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 35}}, {"data": {"id": "tables/daily_players", "label": "daily_players", "type": "PostgreSQL Table", "description": "Que jugador jugo cada dia (para no contarlo dos veces en daily_stats.players).", "resource": "postgresql://dday/public/daily_players", "tags": ["postgresql", "table", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "tables/daily_stats", "label": "daily_stats", "type": "PostgreSQL Table", "description": "Actividad por dia (hora de Chile): partidas y jugadores nuevos.", "resource": "postgresql://dday/public/daily_stats", "tags": ["postgresql", "table", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "tables/kills", "label": "kills", "type": "PostgreSQL Table", "description": "Una kill (o suicidio/muerte por entorno). Tabla de detalle, la mas grande.", "resource": "postgresql://dday/public/kills", "tags": ["postgresql", "table", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 37}}, {"data": {"id": "tables/map_stats", "label": "map_stats", "type": "PostgreSQL Table", "description": "Resumen por mapa y categoria (balance, duracion, letalidad).", "resource": "postgresql://dday/public/map_stats", "tags": ["postgresql", "table", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 33}}, {"data": {"id": "tables/map_weapon_stats", "label": "map_weapon_stats", "type": "PostgreSQL Table", "description": "Kills por mapa, categoria y arma.", "resource": "postgresql://dday/public/map_weapon_stats", "tags": ["postgresql", "table", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 32}}, {"data": {"id": "tables/match_players", "label": "match_players", "type": "PostgreSQL Table", "description": "Resumen de un jugador en una partida (suma de sus tramos/reconexiones).", "resource": "postgresql://dday/public/match_players", "tags": ["postgresql", "table", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 40}}, {"data": {"id": "tables/matches", "label": "matches", "type": "PostgreSQL Table", "description": "Una partida (un mapa jugado en un servidor).", "resource": "postgresql://dday/public/matches", "tags": ["postgresql", "table", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 38}}, {"data": {"id": "tables/objectives", "label": "objectives", "type": "PostgreSQL Table", "description": "Eventos de objetivo de una partida (banderas, maletin, zonas, etc.).", "resource": "postgresql://dday/public/objectives", "tags": ["postgresql", "table", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 33}}, {"data": {"id": "tables/player_class_stats", "label": "player_class_stats", "type": "PostgreSQL Table", "description": "Segundos jugados por clase y jugador.", "resource": "postgresql://dday/public/player_class_stats", "tags": ["postgresql", "table", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "tables/player_duel_stats", "label": "player_duel_stats", "type": "PostgreSQL Table", "description": "Kills entre humanos (nemesis / victima favorita).", "resource": "postgresql://dday/public/player_duel_stats", "tags": ["postgresql", "table", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "tables/player_map_stats", "label": "player_map_stats", "type": "PostgreSQL Table", "description": "Resumen por jugador y mapa (todas las temporadas).", "resource": "postgresql://dday/public/player_map_stats", "tags": ["postgresql", "table", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 32}}, {"data": {"id": "tables/player_stats", "label": "player_stats", "type": "PostgreSQL Table", "description": "Resumen por jugador, temporada, categoria y torneo (lo mantiene apply_rollups).", "resource": "postgresql://dday/public/player_stats", "tags": ["postgresql", "table", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 40}}, {"data": {"id": "tables/player_weapon_stats", "label": "player_weapon_stats", "type": "PostgreSQL Table", "description": "Kills por arma y jugador (arma en mano o, si no aplica, la causa).", "resource": "postgresql://dday/public/player_weapon_stats", "tags": ["postgresql", "table", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 32}}, {"data": {"id": "tables/players", "label": "players", "type": "PostgreSQL Table", "description": "Jugador o bot. La identidad es el nombre (sin colores).", "resource": "postgresql://dday/public/players", "tags": ["postgresql", "table", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "tables/rating_history", "label": "rating_history", "type": "PostgreSQL Table", "description": "Elo antes/despues de cada partida (para graficos de evolucion).", "resource": "postgresql://dday/public/rating_history", "tags": ["postgresql", "table", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 32}}, {"data": {"id": "tables/ratings", "label": "ratings", "type": "PostgreSQL Table", "description": "Elo por equipos, por jugador, categoria (public/duel/official) y temporada.", "resource": "postgresql://dday/public/ratings", "tags": ["postgresql", "table", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 33}}, {"data": {"id": "tables/seasons", "label": "seasons", "type": "PostgreSQL Table", "description": "Temporadas del ladder (se crean con \"ingest.py --new-season NOMBRE\").", "resource": "postgresql://dday/public/seasons", "tags": ["postgresql", "table", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "views/v_daily_activity", "label": "v_daily_activity", "type": "PostgreSQL View", "description": "Actividad diaria (partidas y jugadores por dia).", "resource": "postgresql://dday/public/v_daily_activity", "tags": ["postgresql", "view", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "views/v_events", "label": "v_events", "type": "PostgreSQL View", "description": "Torneos jugados (partidas y mapas).", "resource": "postgresql://dday/public/v_events", "tags": ["postgresql", "view", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "views/v_map_stats", "label": "v_map_stats", "type": "PostgreSQL View", "description": "Estadisticas por mapa: balance aliados/eje, duracion, kills.", "resource": "postgresql://dday/public/v_map_stats", "tags": ["postgresql", "view", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 33}}, {"data": {"id": "views/v_map_weapons", "label": "v_map_weapons", "type": "PostgreSQL View", "description": "Armas mas letales por mapa.", "resource": "postgresql://dday/public/v_map_weapons", "tags": ["postgresql", "view", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "views/v_player_classes", "label": "v_player_classes", "type": "PostgreSQL View", "description": "Segundos por clase y jugador.", "resource": "postgresql://dday/public/v_player_classes", "tags": ["postgresql", "view", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "views/v_player_duels", "label": "v_player_duels", "type": "PostgreSQL View", "description": "Kills entre pares de jugadores.", "resource": "postgresql://dday/public/v_player_duels", "tags": ["postgresql", "view", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "views/v_player_fav_class", "label": "v_player_fav_class", "type": "PostgreSQL View", "description": "Clase favorita de cada jugador.", "resource": "postgresql://dday/public/v_player_fav_class", "tags": ["postgresql", "view", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "views/v_player_fav_map", "label": "v_player_fav_map", "type": "PostgreSQL View", "description": "Mapa favorito de cada jugador (el mas jugado).", "resource": "postgresql://dday/public/v_player_fav_map", "tags": ["postgresql", "view", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "views/v_player_fav_weapon", "label": "v_player_fav_weapon", "type": "PostgreSQL View", "description": "Arma favorita de cada jugador.", "resource": "postgresql://dday/public/v_player_fav_weapon", "tags": ["postgresql", "view", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "views/v_player_favorite_victim", "label": "v_player_favorite_victim", "type": "PostgreSQL View", "description": "A quien mas mata cada jugador (su victima favorita).", "resource": "postgresql://dday/public/v_player_favorite_victim", "tags": ["postgresql", "view", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "views/v_player_maps", "label": "v_player_maps", "type": "PostgreSQL View", "description": "Estadisticas de un jugador por mapa.", "resource": "postgresql://dday/public/v_player_maps", "tags": ["postgresql", "view", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 32}}, {"data": {"id": "views/v_player_nemesis", "label": "v_player_nemesis", "type": "PostgreSQL View", "description": "Quien mas mata a cada jugador (su nemesis).", "resource": "postgresql://dday/public/v_player_nemesis", "tags": ["postgresql", "view", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "views/v_player_profile", "label": "v_player_profile", "type": "PostgreSQL View", "description": "Perfil completo de un jugador (totales + Elo + favoritos + nemesis).", "resource": "postgresql://dday/public/v_player_profile", "tags": ["postgresql", "view", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 40}}, {"data": {"id": "views/v_player_totals", "label": "v_player_totals", "type": "PostgreSQL View", "description": "Totales historicos por jugador (una fila por jugador).", "resource": "postgresql://dday/public/v_player_totals", "tags": ["postgresql", "view", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 36}}, {"data": {"id": "views/v_player_totals_by_kind", "label": "v_player_totals_by_kind", "type": "PostgreSQL View", "description": "Totales historicos por jugador y categoria (public/duel/official).", "resource": "postgresql://dday/public/v_player_totals_by_kind", "tags": ["postgresql", "view", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 36}}, {"data": {"id": "views/v_player_weapons", "label": "v_player_weapons", "type": "PostgreSQL View", "description": "Kills de un jugador por arma.", "resource": "postgresql://dday/public/v_player_weapons", "tags": ["postgresql", "view", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "views/v_seasons", "label": "v_seasons", "type": "PostgreSQL View", "description": "Temporadas con su fecha de fin y cantidad de partidas.", "resource": "postgresql://dday/public/v_seasons", "tags": ["postgresql", "view", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}, {"data": {"id": "views/v_weapon_stats", "label": "v_weapon_stats", "type": "PostgreSQL View", "description": "Armas globales: kills, headshots y distancia media.", "resource": "postgresql://dday/public/v_weapon_stats", "tags": ["postgresql", "view", "ladder"], "status": "stable", "generated": {"by": "process:okf-export", "at": "2026-10-04T18:33:53Z"}, "verified": [], "stale_after": "", "sources": [{"id": "schema", "resource": "/references/schema.sql"}], "trust_tier": "unverified", "stale": false, "color": "#94a3b8", "size": 31}}], "edges": [{"data": {"id": "functions/ladder_streak__tables/kills", "source": "functions/ladder_streak", "target": "tables/kills"}}, {"data": {"id": "rules/elo__rules/kd", "source": "rules/elo", "target": "rules/kd"}}, {"data": {"id": "rules/elo__rules/seasons", "source": "rules/elo", "target": "rules/seasons"}}, {"data": {"id": "rules/elo__functions/ladder_elo", "source": "rules/elo", "target": "functions/ladder_elo"}}, {"data": {"id": "rules/kd__rules/elo", "source": "rules/kd", "target": "rules/elo"}}, {"data": {"id": "rules/kd__rules/seasons", "source": "rules/kd", "target": "rules/seasons"}}, {"data": {"id": "rules/kd__functions/ladder_kd", "source": "rules/kd", "target": "functions/ladder_kd"}}, {"data": {"id": "rules/seasons__rules/kd", "source": "rules/seasons", "target": "rules/kd"}}, {"data": {"id": "rules/seasons__rules/elo", "source": "rules/seasons", "target": "rules/elo"}}, {"data": {"id": "rules/seasons__views/v_seasons", "source": "rules/seasons", "target": "views/v_seasons"}}, {"data": {"id": "tables/daily_players__tables/players", "source": "tables/daily_players", "target": "tables/players"}}, {"data": {"id": "tables/kills__tables/matches", "source": "tables/kills", "target": "tables/matches"}}, {"data": {"id": "tables/kills__tables/players", "source": "tables/kills", "target": "tables/players"}}, {"data": {"id": "tables/match_players__tables/matches", "source": "tables/match_players", "target": "tables/matches"}}, {"data": {"id": "tables/match_players__tables/players", "source": "tables/match_players", "target": "tables/players"}}, {"data": {"id": "tables/matches__tables/seasons", "source": "tables/matches", "target": "tables/seasons"}}, {"data": {"id": "tables/objectives__tables/matches", "source": "tables/objectives", "target": "tables/matches"}}, {"data": {"id": "tables/objectives__tables/players", "source": "tables/objectives", "target": "tables/players"}}, {"data": {"id": "tables/player_class_stats__tables/players", "source": "tables/player_class_stats", "target": "tables/players"}}, {"data": {"id": "tables/player_duel_stats__tables/players", "source": "tables/player_duel_stats", "target": "tables/players"}}, {"data": {"id": "tables/player_map_stats__tables/players", "source": "tables/player_map_stats", "target": "tables/players"}}, {"data": {"id": "tables/player_stats__tables/players", "source": "tables/player_stats", "target": "tables/players"}}, {"data": {"id": "tables/player_stats__tables/seasons", "source": "tables/player_stats", "target": "tables/seasons"}}, {"data": {"id": "tables/player_weapon_stats__tables/players", "source": "tables/player_weapon_stats", "target": "tables/players"}}, {"data": {"id": "tables/rating_history__tables/matches", "source": "tables/rating_history", "target": "tables/matches"}}, {"data": {"id": "tables/rating_history__tables/players", "source": "tables/rating_history", "target": "tables/players"}}, {"data": {"id": "tables/ratings__tables/players", "source": "tables/ratings", "target": "tables/players"}}, {"data": {"id": "views/v_daily_activity__tables/daily_stats", "source": "views/v_daily_activity", "target": "tables/daily_stats"}}, {"data": {"id": "views/v_daily_activity__tables/matches", "source": "views/v_daily_activity", "target": "tables/matches"}}, {"data": {"id": "views/v_daily_activity__tables/players", "source": "views/v_daily_activity", "target": "tables/players"}}, {"data": {"id": "views/v_events__tables/matches", "source": "views/v_events", "target": "tables/matches"}}, {"data": {"id": "views/v_map_stats__tables/kills", "source": "views/v_map_stats", "target": "tables/kills"}}, {"data": {"id": "views/v_map_stats__tables/map_stats", "source": "views/v_map_stats", "target": "tables/map_stats"}}, {"data": {"id": "views/v_map_stats__tables/matches", "source": "views/v_map_stats", "target": "tables/matches"}}, {"data": {"id": "views/v_map_weapons__tables/kills", "source": "views/v_map_weapons", "target": "tables/kills"}}, {"data": {"id": "views/v_map_weapons__tables/map_weapon_stats", "source": "views/v_map_weapons", "target": "tables/map_weapon_stats"}}, {"data": {"id": "views/v_player_classes__tables/player_class_stats", "source": "views/v_player_classes", "target": "tables/player_class_stats"}}, {"data": {"id": "views/v_player_duels__tables/kills", "source": "views/v_player_duels", "target": "tables/kills"}}, {"data": {"id": "views/v_player_duels__tables/player_duel_stats", "source": "views/v_player_duels", "target": "tables/player_duel_stats"}}, {"data": {"id": "views/v_player_fav_class__tables/player_class_stats", "source": "views/v_player_fav_class", "target": "tables/player_class_stats"}}, {"data": {"id": "views/v_player_fav_map__tables/matches", "source": "views/v_player_fav_map", "target": "tables/matches"}}, {"data": {"id": "views/v_player_fav_map__views/v_player_maps", "source": "views/v_player_fav_map", "target": "views/v_player_maps"}}, {"data": {"id": "views/v_player_fav_weapon__tables/kills", "source": "views/v_player_fav_weapon", "target": "tables/kills"}}, {"data": {"id": "views/v_player_fav_weapon__tables/player_weapon_stats", "source": "views/v_player_fav_weapon", "target": "tables/player_weapon_stats"}}, {"data": {"id": "views/v_player_favorite_victim__tables/kills", "source": "views/v_player_favorite_victim", "target": "tables/kills"}}, {"data": {"id": "views/v_player_favorite_victim__tables/player_duel_stats", "source": "views/v_player_favorite_victim", "target": "tables/player_duel_stats"}}, {"data": {"id": "views/v_player_favorite_victim__tables/players", "source": "views/v_player_favorite_victim", "target": "tables/players"}}, {"data": {"id": "views/v_player_maps__tables/kills", "source": "views/v_player_maps", "target": "tables/kills"}}, {"data": {"id": "views/v_player_maps__tables/matches", "source": "views/v_player_maps", "target": "tables/matches"}}, {"data": {"id": "views/v_player_maps__tables/player_map_stats", "source": "views/v_player_maps", "target": "tables/player_map_stats"}}, {"data": {"id": "views/v_player_nemesis__tables/kills", "source": "views/v_player_nemesis", "target": "tables/kills"}}, {"data": {"id": "views/v_player_nemesis__tables/player_duel_stats", "source": "views/v_player_nemesis", "target": "tables/player_duel_stats"}}, {"data": {"id": "views/v_player_nemesis__tables/players", "source": "views/v_player_nemesis", "target": "tables/players"}}, {"data": {"id": "views/v_player_profile__tables/kills", "source": "views/v_player_profile", "target": "tables/kills"}}, {"data": {"id": "views/v_player_profile__tables/matches", "source": "views/v_player_profile", "target": "tables/matches"}}, {"data": {"id": "views/v_player_profile__tables/objectives", "source": "views/v_player_profile", "target": "tables/objectives"}}, {"data": {"id": "views/v_player_profile__tables/ratings", "source": "views/v_player_profile", "target": "tables/ratings"}}, {"data": {"id": "views/v_player_profile__views/v_player_fav_class", "source": "views/v_player_profile", "target": "views/v_player_fav_class"}}, {"data": {"id": "views/v_player_profile__views/v_player_fav_map", "source": "views/v_player_profile", "target": "views/v_player_fav_map"}}, {"data": {"id": "views/v_player_profile__views/v_player_fav_weapon", "source": "views/v_player_profile", "target": "views/v_player_fav_weapon"}}, {"data": {"id": "views/v_player_profile__views/v_player_favorite_victim", "source": "views/v_player_profile", "target": "views/v_player_favorite_victim"}}, {"data": {"id": "views/v_player_profile__views/v_player_nemesis", "source": "views/v_player_profile", "target": "views/v_player_nemesis"}}, {"data": {"id": "views/v_player_profile__views/v_player_totals", "source": "views/v_player_profile", "target": "views/v_player_totals"}}, {"data": {"id": "views/v_player_totals__tables/kills", "source": "views/v_player_totals", "target": "tables/kills"}}, {"data": {"id": "views/v_player_totals__tables/matches", "source": "views/v_player_totals", "target": "tables/matches"}}, {"data": {"id": "views/v_player_totals__tables/objectives", "source": "views/v_player_totals", "target": "tables/objectives"}}, {"data": {"id": "views/v_player_totals_by_kind__tables/kills", "source": "views/v_player_totals_by_kind", "target": "tables/kills"}}, {"data": {"id": "views/v_player_totals_by_kind__tables/matches", "source": "views/v_player_totals_by_kind", "target": "tables/matches"}}, {"data": {"id": "views/v_player_totals_by_kind__tables/objectives", "source": "views/v_player_totals_by_kind", "target": "tables/objectives"}}, {"data": {"id": "views/v_player_weapons__tables/kills", "source": "views/v_player_weapons", "target": "tables/kills"}}, {"data": {"id": "views/v_player_weapons__tables/player_weapon_stats", "source": "views/v_player_weapons", "target": "tables/player_weapon_stats"}}, {"data": {"id": "views/v_seasons__tables/matches", "source": "views/v_seasons", "target": "tables/matches"}}, {"data": {"id": "views/v_seasons__tables/seasons", "source": "views/v_seasons", "target": "tables/seasons"}}, {"data": {"id": "views/v_weapon_stats__tables/kills", "source": "views/v_weapon_stats", "target": "tables/kills"}}, {"data": {"id": "views/v_weapon_stats__tables/map_weapon_stats", "source": "views/v_weapon_stats", "target": "tables/map_weapon_stats"}}], "bodies": {"functions/apply_rollups": "# Firma\n\n```\napply_rollups(ids text[]) RETURNS void\n```\n\nSuma las partidas indicadas a las tablas de resumen (una sola vez por partida).", "functions/ladder_elo": "# Firma\n\n```\nladder_elo(min_games integer, match_kind text, season text) RETURNS TABLE(pos bigint, name text, rating integer, peak integer, games integer, wins integer, losses integer, draws integer, win_pct numeric)\n```\n\nLadder por rating Elo, por categoria.", "functions/ladder_kd": "# Firma\n\n```\nladder_kd(min_matches integer, match_kind text, season text, match_event text) RETURNS TABLE(pos bigint, name text, matches bigint, kills bigint, deaths bigint, kd numeric, kills_per_min numeric, win_pct numeric, hs_pct numeric)\n```\n\nLadder por K/D (humano vs humano).", "functions/ladder_luck": "# Firma\n\n```\nladder_luck(min_matches integer, match_kind text, season text) RETURNS TABLE(pos bigint, name text, luck bigint, helmet_saves bigint, foot_saves bigint, matches bigint, luck_per_match numeric)\n```\n\nLos mas suertudos (casco que desvia + pie salvado).", "functions/ladder_streak": "# Firma\n\n```\nladder_streak(match_kind text, max_rows integer, season text) RETURNS TABLE(pos bigint, name text, best_streak integer, map text, kind text, event text, played_at timestamp with time zone)\n```\n\nMejores rachas de kills (una fila por partida).\n\n# Relaciones\n\n- Usa [kills](../tables/kills.md).", "functions/ladder_streak_tiers": "# Firma\n\n```\nladder_streak_tiers(min_matches integer, match_kind text, season text) RETURNS TABLE(pos bigint, name text, matches bigint, godlikes bigint, unstoppables bigint, dominatings bigint, rampages bigint, sprees bigint, streaks_ended bigint, best_streak integer)\n```\n\nRachas por nivel: quien mas llego a GODLIKE, UNSTOPPABLE, etc.", "functions/ladder_unlucky": "# Firma\n\n```\nladder_unlucky(min_matches integer, match_kind text, season text) RETURNS TABLE(pos bigint, name text, deflected bigint, matches bigint, deflected_per_match numeric)\n```\n\nLos tiradores mas desafortunados (tiros desviados por cascos).", "functions/match_category": "# Firma\n\n```\nmatch_category(kind text, event text) RETURNS text\n```\n\nCategoria de ladder de una partida: official si tiene torneo, si no el modo (public/duel).", "functions/player_totals": "# Firma\n\n```\nplayer_totals(season text, match_kind text, match_event text) RETURNS TABLE(player_id integer, name text, matches bigint, wins bigint, losses bigint, draws bigint, kills bigint, deaths bigint, kd numeric, bot_kills bigint, headshots bigint, hs_pct numeric, accuracy_pct numeric, teamkills bigint, suicides bigint, objectives bigint, best_streak integer, hours_played numeric, kills_per_min numeric, win_pct numeric, most_kills_match integer, longest_kill integer, last_match timestamp with time zone, helmet_saves bigint, foot_saves bigint, luck bigint, deflected bigint, sprees bigint, rampages bigint, dominatings bigint, unstoppables bigint, godlikes bigint, streaks_ended bigint)\n```\n\nTotales por jugador para una temporada, categoria y torneo (base de los ladders).", "functions/rebuild_rollups": "# Firma\n\n```\nrebuild_rollups() RETURNS void\n```\n\nRecalcula todas las tablas de resumen desde las tablas de detalle.", "functions/season_lookup": "# Firma\n\n```\nseason_lookup(season text) RETURNS integer\n```\n\nResuelve una temporada: current (la vigente), all (NULL) o el nombre.", "functions/streak_base": "# Firma\n\n```\nstreak_base() RETURNS integer\n```\n\nKills seguidas para el primer anuncio de racha (igual al cvar exbattleinfo).", "rules/elo": "# Definici\u00f3n\n\nRating **Elo por equipos**, solo para partidas **rankeadas**. Se compara el\nrating promedio de cada equipo (ponderado por el tiempo jugado) y cada jugador\ngana o pierde `K \u00d7 (resultado \u2212 esperado) \u00d7 participaci\u00f3n`.\n\n# Cu\u00e1ndo una partida es rankeada\n\n- Termin\u00f3 normalmente, con ganador o empate.\n- Dur\u00f3 lo suficiente: **5 min** en p\u00fablico (`--min-duration`), **2 min** en\n  duelos (`--duel-min-duration`).\n- Cada equipo tuvo suficientes humanos: **2** en p\u00fablico (`--min-humans`),\n  **1** en duelos (`--duel-min-humans`).\n\nLos bots nunca cuentan. Quien jug\u00f3 menos del 20 % de la partida en su equipo\n(`--min-participation`) no se ve afectado.\n\n# Par\u00e1metros\n\n- `K = 40` en las primeras 10 partidas, luego `24`.\n- El Elo parte de **1500** en cada temporada.\n- Hay tres categor\u00edas con rating separado: `public`, `duel` y `official`.\n\n# Consulta\n\n```sql\nSELECT * FROM ladder_elo(10);                 -- Elo p\u00fablico, temporada actual\nSELECT * FROM ladder_elo(5, 'official');      -- duelos oficiales\nSELECT * FROM ladder_elo(10, 'public', 'all');-- hist\u00f3rico\n```\n\n# Ver tambi\u00e9n\n\n- [Ladder por K/D](kd.md)\n- [Temporadas y categor\u00edas](seasons.md)\n- Funci\u00f3n [`ladder_elo`](../functions/ladder_elo.md)", "rules/kd": "# Definici\u00f3n\n\nEl ladder por K/D ordena a los jugadores por `kills / muertes`, contando **solo\nenfrentamientos entre humanos**: las kills a bots y las muertes causadas por\nbots no cuentan (se muestran aparte en `bot_kills`). Aparecen quienes tienen al\nmenos un m\u00ednimo de partidas (por defecto 10).\n\n# Reglas\n\n- Solo partidas terminadas; las abortadas igual cuentan para el K/D.\n- Los bots nunca cuentan.\n- El m\u00ednimo de partidas es configurable (`ladder_kd(min_matches)`).\n\n# Consulta\n\n```sql\nSELECT * FROM ladder_kd(10);                 -- temporada actual, m\u00ednimo 10 partidas\nSELECT * FROM ladder_kd(10, 'public');       -- solo p\u00fablico\nSELECT * FROM ladder_kd(1, 'official');      -- duelos oficiales\n```\n\n# Ver tambi\u00e9n\n\n- [Ladder por Elo](elo.md)\n- [Temporadas y categor\u00edas](seasons.md)\n- Funci\u00f3n [`ladder_kd`](../functions/ladder_kd.md)", "rules/seasons": "# Temporadas\n\nLas temporadas se inician a mano. Cada partida pertenece a la temporada vigente\ncuando empez\u00f3. Los ladders muestran por defecto la temporada actual y el Elo\nparte de 1500 en cada una. El hist\u00f3rico (todas las temporadas) se conserva.\n\n```sh\npython3 stats/ingest.py --new-season \"Temporada 2\"\npython3 stats/ingest.py --new-season \"Copa Invierno\" --season-start \"2026-07-01 00:00-04\"\n```\n\n# Categor\u00edas\n\n| categor\u00eda | qu\u00e9 incluye |\n|---|---|\n| `public` | partidas del servidor en modo p\u00fablico |\n| `duel` | duelos casuales (`stats_mode duel`) |\n| `official` | cualquier partida con `stats_event` (torneo) |\n| `all` | todas |\n\nCada categor\u00eda tiene su propio ladder K/D y su propio Elo.\n\n# Duelos oficiales de torneo\n\nEl admin pone el nombre del torneo antes de `sv startcount`:\n\n```\nset stats_event \"copa-verano\"\nsv startcount 20\n```\n\nLa cvar se mantiene entre mapas: al terminar el torneo hay que borrarla con\n`set stats_event \"\"`.\n\n# Ver tambi\u00e9n\n\n- [Ladder por K/D](kd.md)\n- [Ladder por Elo](elo.md)\n- Vista [`v_seasons`](../views/v_seasons.md)", "tables/daily_players": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `day` | date | no | Dia. (PK) |\n| `player_id` | integer | no | Jugador. (PK; FK \u2192 [players](players.md)) |\n\n# Relaciones\n\n- Referencia a [players](players.md).", "tables/daily_stats": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `day` | date | no | Dia. (PK) |\n| `matches` | integer | no | Partidas jugadas ese dia. |\n| `players` | integer | no | Jugadores humanos distintos ese dia. |", "tables/kills": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `id` | bigint | no | Clave interna. (PK) |\n| `match_id` | text | no | Partida. (FK \u2192 [matches](matches.md)) |\n| `t` | real | no | Segundos desde el inicio del mapa. |\n| `killer_id` | integer | s\u00ed | Quien mato; NULL en suicidio o muerte por entorno. (FK \u2192 [players](players.md)) |\n| `victim_id` | integer | no | Quien murio. (FK \u2192 [players](players.md)) |\n| `killer_team` | smallint | s\u00ed | Equipo del killer (0 aliados, 1 eje). |\n| `victim_team` | smallint | s\u00ed | Equipo de la victima. |\n| `killer_class` | text | s\u00ed | Clase del killer. |\n| `victim_class` | text | s\u00ed | Clase de la victima. |\n| `mod` | text | no | Causa de la muerte: rifle, sniper, grenade, wound, ... |\n| `weapon` | text | s\u00ed | Arma en mano (solo armas de fuego o cuchillo). |\n| `headshot` | boolean | no | true si fue tiro a la cabeza. |\n| `friendly_fire` | boolean | no | true si fue fuego amigo. |\n| `suicide` | boolean | no | true si fue suicidio. |\n| `distance` | integer | s\u00ed | Distancia killer-victima en unidades de Quake 2 (~3 cm). |\n| `killer_x` | integer | s\u00ed | Posicion X del killer (unidades de Quake 2). |\n| `killer_y` | integer | s\u00ed | Posicion Y del killer. |\n| `killer_z` | integer | s\u00ed | Posicion Z del killer (altura). |\n| `victim_x` | integer | s\u00ed | Posicion X de la victima. |\n| `victim_y` | integer | s\u00ed | Posicion Y de la victima. |\n| `victim_z` | integer | s\u00ed | Posicion Z de la victima. |\n\n# Relaciones\n\n- Referencia a [matches](matches.md).\n- Referencia a [players](players.md).\n- Referencia a [players](players.md).", "tables/map_stats": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `map` | text | no | Mapa. (PK) |\n| `kind` | text | no | Categoria: public o duel. (PK) |\n| `matches` | integer | no | Partidas jugadas. |\n| `allied_wins` | integer | no | Victorias de aliados. |\n| `axis_wins` | integer | no | Victorias del eje. |\n| `draws` | integer | no | Empates. |\n| `seconds` | bigint | no | Segundos totales jugados. |\n| `humans` | integer | no | Suma de humanos por partida. |\n| `kills` | integer | no | Kills totales. |\n| `best_streak` | integer | no | Mejor racha en ese mapa. |\n| `last_played` | timestamp with time zone | s\u00ed | Ultima vez jugado. |", "tables/map_weapon_stats": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `map` | text | no | Mapa. (PK) |\n| `kind` | text | no | Categoria: public o duel. (PK) |\n| `weapon` | text | no | Arma o causa. (PK) |\n| `kills` | integer | no | Kills. |\n| `headshots` | integer | no | Kills a la cabeza. |\n| `distance_sum` | bigint | no | Suma de distancias. |\n| `distance_n` | integer | no | Cantidad de kills con distancia conocida. |\n| `max_distance` | integer | s\u00ed | Kill mas larga con esa arma. |", "tables/match_players": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `match_id` | text | no | Partida. (PK; FK \u2192 [matches](matches.md)) |\n| `player_id` | integer | no | Jugador. (PK; FK \u2192 [players](players.md)) |\n| `team` | smallint | s\u00ed | Equipo donde jugo mas tiempo: 0 aliados, 1 eje, -1 observador. |\n| `time_team0` | integer | no | Segundos jugados en el equipo 0. |\n| `time_team1` | integer | no | Segundos jugados en el equipo 1. |\n| `kills` | integer | no | Kills a enemigos (humanos o bots). |\n| `deaths` | integer | no | Todas las muertes. |\n| `human_kills` | integer | no | Kills a enemigos humanos (lo que cuenta el ladder). |\n| `human_deaths` | integer | no | Muertes por humanos, suicidio o entorno (lo que cuenta el ladder). |\n| `suicides` | integer | no | Suicidios. |\n| `teamkills` | integer | no | Fuego amigo. |\n| `headshots` | integer | no | Kills con tiro a la cabeza. |\n| `objectives` | integer | no | Objetivos completados (banderas, maletin, etc.). |\n| `best_streak` | integer | no | Mejor racha de kills en la partida. |\n| `helmet_saves` | integer | no | El casco le desvio un tiro a la cabeza. |\n| `foot_saves` | integer | no | Sobrevivio con \"almost lost a foot\". |\n| `deflected` | integer | no | Tiros suyos desviados por el casco de otro. |\n| `hits` | integer | no | Disparos acertados. |\n| `misses` | integer | no | Disparos fallados. |\n| `score` | integer | no | Puntaje del juego. |\n| `points` | integer | no | Puntos del juego. |\n| `classes` | jsonb | no | Segundos jugados por clase (JSON: {\"clase\": segundos}). |\n| `main_class` | text | s\u00ed | Clase en la que jugo mas tiempo. |\n| `result` | character(1) | s\u00ed | Resultado: W (gano), L (perdio), D (empate) o NULL (sin ganador). |\n| `sprees` | integer | no | Veces que alcanzo KILLING SPREE. |\n| `rampages` | integer | no | Veces que alcanzo RAMPAGE. |\n| `dominatings` | integer | no | Veces que alcanzo DOMINATING. |\n| `unstoppables` | integer | no | Veces que alcanzo UNSTOPPABLE. |\n| `godlikes` | integer | no | Veces que alcanzo GODLIKE. |\n| `streaks_ended` | integer | no | Rachas ajenas (>= base) que corto matando. |\n\n# Relaciones\n\n- Referencia a [matches](matches.md).\n- Referencia a [players](players.md).", "tables/matches": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `id` | text | no | Id de partida: <fecha>-<servidor>-<random>. Clave primaria. (PK) |\n| `server` | text | no | Id del servidor (cvar stats_server). |\n| `map` | text | no | Mapa jugado. |\n| `mode` | text | no | Modo del juego: dm, ctb o campaign. |\n| `kind` | text | no | Tipo de partida: public o duel (cvar stats_mode). |\n| `event` | text | no | Torneo (cvar stats_event); cadena vacia = casual. |\n| `season_id` | integer | s\u00ed | Temporada a la que pertenece la partida. (FK \u2192 [seasons](seasons.md)) |\n| `tournament` | boolean | no | true si el servidor estaba en modo torneo. |\n| `started_at` | timestamp with time zone | no | Inicio de la partida. |\n| `ended_at` | timestamp with time zone | s\u00ed | Fin de la partida (NULL si no se cerro). |\n| `duration_s` | real | no | Duracion de la partida en segundos. |\n| `winner` | smallint | s\u00ed | Ganador: 0 aliados, 1 eje, -1 empate, NULL sin ganador. |\n| `end_reason` | text | no | Como termino: normal, forced, other o aborted. |\n| `team0_army` | text | s\u00ed | Ejercito del equipo 0 (aliados). |\n| `team1_army` | text | s\u00ed | Ejercito del equipo 1 (eje). |\n| `team0_score` | integer | s\u00ed | Puntaje final del equipo 0. |\n| `team1_score` | integer | s\u00ed | Puntaje final del equipo 1. |\n| `team0_kills` | integer | s\u00ed | Kills del equipo 0. |\n| `team1_kills` | integer | s\u00ed | Kills del equipo 1. |\n| `humans` | integer | no | Cantidad de jugadores humanos en la partida. |\n| `ranked` | boolean | no | true si la partida cuenta para el Elo. |\n| `ingested_at` | timestamp with time zone | no | Cuando se cargo en la base. |\n\n# Relaciones\n\n- Referencia a [seasons](seasons.md).", "tables/objectives": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `id` | bigint | no | Clave interna. (PK) |\n| `match_id` | text | no | Partida. (FK \u2192 [matches](matches.md)) |\n| `t` | real | no | Segundos desde el inicio del mapa. |\n| `type` | text | no | Tipo: touch, area, timed, timed_held, explosive, bc_pickup/bc_drop/bc_capture. |\n| `name` | text | s\u00ed | Nombre del objetivo. |\n| `team` | smallint | s\u00ed | Equipo que lo completo. |\n| `player_id` | integer | s\u00ed | Jugador que lo hizo (NULL si no aplica). (FK \u2192 [players](players.md)) |\n\n# Relaciones\n\n- Referencia a [matches](matches.md).\n- Referencia a [players](players.md).", "tables/player_class_stats": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `player_id` | integer | no | Jugador. (PK; FK \u2192 [players](players.md)) |\n| `class` | text | no | Clase (sniper, medic, engineer, ...). (PK) |\n| `seconds` | integer | no | Segundos jugados con esa clase. |\n\n# Relaciones\n\n- Referencia a [players](players.md).", "tables/player_duel_stats": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `killer_id` | integer | no | Quien mata. (PK; FK \u2192 [players](players.md)) |\n| `victim_id` | integer | no | A quien mata. (PK; FK \u2192 [players](players.md)) |\n| `kills` | integer | no | Veces que lo mato. |\n\n# Relaciones\n\n- Referencia a [players](players.md).\n- Referencia a [players](players.md).", "tables/player_map_stats": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `player_id` | integer | no | Jugador. (PK; FK \u2192 [players](players.md)) |\n| `map` | text | no | Mapa. (PK) |\n| `kind` | text | no | Categoria: public o duel. (PK) |\n| `matches` | integer | no | Partidas jugadas en ese mapa. |\n| `wins` | integer | no | Partidas ganadas. |\n| `kills` | integer | no | Kills. |\n| `deaths` | integer | no | Muertes. |\n| `seconds` | integer | no | Segundos jugados. |\n| `best_streak` | integer | no | Mejor racha en ese mapa. |\n\n# Relaciones\n\n- Referencia a [players](players.md).", "tables/player_stats": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `player_id` | integer | no | Jugador. (PK; FK \u2192 [players](players.md)) |\n| `season_id` | integer | no | Temporada. (PK; FK \u2192 [seasons](seasons.md)) |\n| `kind` | text | no | Categoria: public, duel u official. (PK) |\n| `event` | text | no | Torneo; cadena vacia = casual. (PK) |\n| `matches` | integer | no | Partidas jugadas. |\n| `wins` | integer | no | Partidas ganadas. |\n| `losses` | integer | no | Partidas perdidas. |\n| `draws` | integer | no | Partidas empatadas. |\n| `kills` | integer | no | Kills a enemigos (humanos o bots). |\n| `deaths` | integer | no | Todas las muertes. |\n| `human_kills` | integer | no | Kills a humanos (lo que cuenta el ladder). |\n| `human_deaths` | integer | no | Muertes por humanos/suicidio/entorno. |\n| `headshots` | integer | no | Kills con tiro a la cabeza. |\n| `hits` | integer | no | Disparos acertados. |\n| `misses` | integer | no | Disparos fallados. |\n| `teamkills` | integer | no | Fuego amigo. |\n| `suicides` | integer | no | Suicidios. |\n| `objectives` | integer | no | Objetivos completados. |\n| `seconds` | integer | no | Segundos jugados. |\n| `best_streak` | integer | no | Mejor racha de kills. |\n| `max_kills` | integer | no | Mas kills en una sola partida. |\n| `helmet_saves` | integer | no | Cascos que desviaron un tiro a la cabeza. |\n| `foot_saves` | integer | no | Veces que sobrevivio con el pie herido. |\n| `deflected` | integer | no | Tiros desviados por cascos ajenos. |\n| `longest_kill` | integer | s\u00ed | Kill mas larga (distancia en unidades de Quake 2). |\n| `last_match` | timestamp with time zone | s\u00ed | Fecha de la ultima partida. |\n| `sprees` | integer | no | Veces que alcanzo KILLING SPREE. |\n| `rampages` | integer | no | Veces que alcanzo RAMPAGE. |\n| `dominatings` | integer | no | Veces que alcanzo DOMINATING. |\n| `unstoppables` | integer | no | Veces que alcanzo UNSTOPPABLE. |\n| `godlikes` | integer | no | Veces que alcanzo GODLIKE. |\n| `streaks_ended` | integer | no | Rachas ajenas que corto. |\n\n# Relaciones\n\n- Referencia a [players](players.md).\n- Referencia a [seasons](seasons.md).", "tables/player_weapon_stats": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `player_id` | integer | no | Jugador. (PK; FK \u2192 [players](players.md)) |\n| `weapon` | text | no | Arma o causa (rifle, sniper, grenade, ...). (PK) |\n| `kills` | integer | no | Kills con esa arma. |\n| `headshots` | integer | no | Kills a la cabeza con esa arma. |\n| `distance_sum` | bigint | no | Suma de distancias (para el promedio). |\n| `distance_n` | integer | no | Cantidad de kills con distancia conocida. |\n\n# Relaciones\n\n- Referencia a [players](players.md).", "tables/players": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `id` | integer | no | Clave interna del jugador. (PK) |\n| `name` | text | no | Nombre del jugador (sin colores ni sufijos). |\n| `is_bot` | boolean | no | true si es un bot. |\n| `first_seen` | timestamp with time zone | no | Primera vez visto. |\n| `last_seen` | timestamp with time zone | no | Ultima vez visto. |", "tables/rating_history": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `match_id` | text | no | Partida. (PK; FK \u2192 [matches](matches.md)) |\n| `player_id` | integer | no | Jugador. (PK; FK \u2192 [players](players.md)) |\n| `season_id` | integer | no | Temporada; 0 = historico. (PK) |\n| `rating_before` | real | no | Elo antes de la partida. |\n| `rating_after` | real | no | Elo despues de la partida. |\n\n# Relaciones\n\n- Referencia a [matches](matches.md).\n- Referencia a [players](players.md).", "tables/ratings": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `player_id` | integer | no | Jugador. (PK; FK \u2192 [players](players.md)) |\n| `kind` | text | no | Categoria: public, duel u official. (PK) |\n| `season_id` | integer | no | Temporada; 0 = historico (todas). (PK) |\n| `rating` | real | no | Elo actual (arranca en 1500). |\n| `peak` | real | no | Elo maximo alcanzado. |\n| `games` | integer | no | Partidas rankeadas jugadas. |\n| `wins` | integer | no | Partidas ganadas. |\n| `losses` | integer | no | Partidas perdidas. |\n| `draws` | integer | no | Partidas empatadas. |\n| `updated_at` | timestamp with time zone | no | Ultima actualizacion. |\n\n# Relaciones\n\n- Referencia a [players](players.md).", "tables/seasons": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `id` | integer | no | Clave interna de la temporada. (PK) |\n| `name` | text | no | Nombre de la temporada (unico). |\n| `starts_at` | timestamp with time zone | no | Cuando empieza; dura hasta que empieza la siguiente. |", "views/v_daily_activity": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `day` | date | s\u00ed |  |\n| `matches` | integer | s\u00ed |  |\n| `players` | integer | s\u00ed |  |\n\n# Relaciones\n\n- Referencia a [daily_stats](../tables/daily_stats.md).\n- Referencia a [matches](../tables/matches.md).\n- Referencia a [players](../tables/players.md).", "views/v_events": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `event` | text | s\u00ed |  |\n| `matches` | bigint | s\u00ed |  |\n| `first_match` | timestamp with time zone | s\u00ed |  |\n| `last_match` | timestamp with time zone | s\u00ed |  |\n| `maps` | text[] | s\u00ed |  |\n\n# Relaciones\n\n- Referencia a [matches](../tables/matches.md).", "views/v_map_stats": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `map` | text | s\u00ed |  |\n| `kind` | text | s\u00ed |  |\n| `matches` | integer | s\u00ed |  |\n| `allied_wins` | integer | s\u00ed |  |\n| `axis_wins` | integer | s\u00ed |  |\n| `draws` | integer | s\u00ed |  |\n| `allied_win_pct` | numeric | s\u00ed |  |\n| `avg_minutes` | numeric | s\u00ed |  |\n| `avg_humans` | numeric | s\u00ed |  |\n| `best_streak` | integer | s\u00ed |  |\n| `kills` | integer | s\u00ed |  |\n| `last_played` | timestamp with time zone | s\u00ed |  |\n\n# Relaciones\n\n- Referencia a [kills](../tables/kills.md).\n- Referencia a [map_stats](../tables/map_stats.md).\n- Referencia a [matches](../tables/matches.md).", "views/v_map_weapons": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `map` | text | s\u00ed |  |\n| `weapon` | text | s\u00ed |  |\n| `kills` | bigint | s\u00ed |  |\n\n# Relaciones\n\n- Referencia a [kills](../tables/kills.md).\n- Referencia a [map_weapon_stats](../tables/map_weapon_stats.md).", "views/v_player_classes": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `player_id` | integer | s\u00ed |  |\n| `class` | text | s\u00ed |  |\n| `seconds` | integer | s\u00ed |  |\n\n# Relaciones\n\n- Referencia a [player_class_stats](../tables/player_class_stats.md).", "views/v_player_duels": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `killer_id` | integer | s\u00ed |  |\n| `victim_id` | integer | s\u00ed |  |\n| `kills` | integer | s\u00ed |  |\n\n# Relaciones\n\n- Referencia a [kills](../tables/kills.md).\n- Referencia a [player_duel_stats](../tables/player_duel_stats.md).", "views/v_player_fav_class": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `player_id` | integer | s\u00ed |  |\n| `class` | text | s\u00ed |  |\n| `seconds` | integer | s\u00ed |  |\n\n# Relaciones\n\n- Referencia a [player_class_stats](../tables/player_class_stats.md).", "views/v_player_fav_map": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `player_id` | integer | s\u00ed |  |\n| `map` | text | s\u00ed |  |\n| `matches` | bigint | s\u00ed |  |\n| `seconds_played` | bigint | s\u00ed |  |\n\n# Relaciones\n\n- Referencia a [matches](../tables/matches.md).\n- Referencia a [v_player_maps](v_player_maps.md).", "views/v_player_fav_weapon": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `player_id` | integer | s\u00ed |  |\n| `weapon` | text | s\u00ed |  |\n| `kills` | integer | s\u00ed |  |\n\n# Relaciones\n\n- Referencia a [kills](../tables/kills.md).\n- Referencia a [player_weapon_stats](../tables/player_weapon_stats.md).", "views/v_player_favorite_victim": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `player_id` | integer | s\u00ed |  |\n| `victim` | text | s\u00ed |  |\n| `kills` | integer | s\u00ed |  |\n\n# Relaciones\n\n- Referencia a [kills](../tables/kills.md).\n- Referencia a [player_duel_stats](../tables/player_duel_stats.md).\n- Referencia a [players](../tables/players.md).", "views/v_player_maps": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `player_id` | integer | s\u00ed |  |\n| `map` | text | s\u00ed |  |\n| `matches` | bigint | s\u00ed |  |\n| `wins` | bigint | s\u00ed |  |\n| `kills` | bigint | s\u00ed |  |\n| `deaths` | bigint | s\u00ed |  |\n| `kd` | numeric | s\u00ed |  |\n| `seconds_played` | bigint | s\u00ed |  |\n| `best_streak` | integer | s\u00ed |  |\n\n# Relaciones\n\n- Referencia a [kills](../tables/kills.md).\n- Referencia a [matches](../tables/matches.md).\n- Referencia a [player_map_stats](../tables/player_map_stats.md).", "views/v_player_nemesis": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `player_id` | integer | s\u00ed |  |\n| `nemesis` | text | s\u00ed |  |\n| `kills` | integer | s\u00ed |  |\n\n# Relaciones\n\n- Referencia a [kills](../tables/kills.md).\n- Referencia a [player_duel_stats](../tables/player_duel_stats.md).\n- Referencia a [players](../tables/players.md).", "views/v_player_profile": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `player_id` | integer | s\u00ed |  |\n| `name` | text | s\u00ed |  |\n| `matches` | bigint | s\u00ed |  |\n| `wins` | bigint | s\u00ed |  |\n| `losses` | bigint | s\u00ed |  |\n| `draws` | bigint | s\u00ed |  |\n| `kills` | bigint | s\u00ed |  |\n| `deaths` | bigint | s\u00ed |  |\n| `kd` | numeric | s\u00ed |  |\n| `bot_kills` | bigint | s\u00ed |  |\n| `headshots` | bigint | s\u00ed |  |\n| `hs_pct` | numeric | s\u00ed |  |\n| `accuracy_pct` | numeric | s\u00ed |  |\n| `teamkills` | bigint | s\u00ed |  |\n| `suicides` | bigint | s\u00ed |  |\n| `objectives` | bigint | s\u00ed |  |\n| `best_streak` | integer | s\u00ed |  |\n| `hours_played` | numeric | s\u00ed |  |\n| `kills_per_min` | numeric | s\u00ed |  |\n| `win_pct` | numeric | s\u00ed |  |\n| `most_kills_match` | integer | s\u00ed |  |\n| `longest_kill` | integer | s\u00ed |  |\n| `last_match` | timestamp with time zone | s\u00ed |  |\n| `helmet_saves` | bigint | s\u00ed |  |\n| `foot_saves` | bigint | s\u00ed |  |\n| `luck` | bigint | s\u00ed |  |\n| `deflected` | bigint | s\u00ed |  |\n| `sprees` | bigint | s\u00ed |  |\n| `rampages` | bigint | s\u00ed |  |\n| `dominatings` | bigint | s\u00ed |  |\n| `unstoppables` | bigint | s\u00ed |  |\n| `godlikes` | bigint | s\u00ed |  |\n| `streaks_ended` | bigint | s\u00ed |  |\n| `rating` | integer | s\u00ed |  |\n| `ranked_games` | integer | s\u00ed |  |\n| `duel_rating` | integer | s\u00ed |  |\n| `duel_games` | integer | s\u00ed |  |\n| `official_rating` | integer | s\u00ed |  |\n| `official_games` | integer | s\u00ed |  |\n| `fav_map` | text | s\u00ed |  |\n| `fav_weapon` | text | s\u00ed |  |\n| `fav_class` | text | s\u00ed |  |\n| `nemesis` | text | s\u00ed |  |\n| `favorite_victim` | text | s\u00ed |  |\n\n# Relaciones\n\n- Referencia a [kills](../tables/kills.md).\n- Referencia a [matches](../tables/matches.md).\n- Referencia a [objectives](../tables/objectives.md).\n- Referencia a [ratings](../tables/ratings.md).\n- Referencia a [v_player_fav_class](v_player_fav_class.md).\n- Referencia a [v_player_fav_map](v_player_fav_map.md).\n- Referencia a [v_player_fav_weapon](v_player_fav_weapon.md).\n- Referencia a [v_player_favorite_victim](v_player_favorite_victim.md).\n- Referencia a [v_player_nemesis](v_player_nemesis.md).\n- Referencia a [v_player_totals](v_player_totals.md).", "views/v_player_totals": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `player_id` | integer | s\u00ed |  |\n| `name` | text | s\u00ed |  |\n| `matches` | bigint | s\u00ed |  |\n| `wins` | bigint | s\u00ed |  |\n| `losses` | bigint | s\u00ed |  |\n| `draws` | bigint | s\u00ed |  |\n| `kills` | bigint | s\u00ed |  |\n| `deaths` | bigint | s\u00ed |  |\n| `kd` | numeric | s\u00ed |  |\n| `bot_kills` | bigint | s\u00ed |  |\n| `headshots` | bigint | s\u00ed |  |\n| `hs_pct` | numeric | s\u00ed |  |\n| `accuracy_pct` | numeric | s\u00ed |  |\n| `teamkills` | bigint | s\u00ed |  |\n| `suicides` | bigint | s\u00ed |  |\n| `objectives` | bigint | s\u00ed |  |\n| `best_streak` | integer | s\u00ed |  |\n| `hours_played` | numeric | s\u00ed |  |\n| `kills_per_min` | numeric | s\u00ed |  |\n| `win_pct` | numeric | s\u00ed |  |\n| `most_kills_match` | integer | s\u00ed |  |\n| `longest_kill` | integer | s\u00ed |  |\n| `last_match` | timestamp with time zone | s\u00ed |  |\n| `helmet_saves` | bigint | s\u00ed |  |\n| `foot_saves` | bigint | s\u00ed |  |\n| `luck` | bigint | s\u00ed |  |\n| `deflected` | bigint | s\u00ed |  |\n| `sprees` | bigint | s\u00ed |  |\n| `rampages` | bigint | s\u00ed |  |\n| `dominatings` | bigint | s\u00ed |  |\n| `unstoppables` | bigint | s\u00ed |  |\n| `godlikes` | bigint | s\u00ed |  |\n| `streaks_ended` | bigint | s\u00ed |  |\n\n# Relaciones\n\n- Referencia a [kills](../tables/kills.md).\n- Referencia a [matches](../tables/matches.md).\n- Referencia a [objectives](../tables/objectives.md).", "views/v_player_totals_by_kind": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `kind` | text | s\u00ed |  |\n| `player_id` | integer | s\u00ed |  |\n| `name` | text | s\u00ed |  |\n| `matches` | bigint | s\u00ed |  |\n| `wins` | bigint | s\u00ed |  |\n| `losses` | bigint | s\u00ed |  |\n| `draws` | bigint | s\u00ed |  |\n| `kills` | bigint | s\u00ed |  |\n| `deaths` | bigint | s\u00ed |  |\n| `kd` | numeric | s\u00ed |  |\n| `bot_kills` | bigint | s\u00ed |  |\n| `headshots` | bigint | s\u00ed |  |\n| `hs_pct` | numeric | s\u00ed |  |\n| `accuracy_pct` | numeric | s\u00ed |  |\n| `teamkills` | bigint | s\u00ed |  |\n| `suicides` | bigint | s\u00ed |  |\n| `objectives` | bigint | s\u00ed |  |\n| `best_streak` | integer | s\u00ed |  |\n| `hours_played` | numeric | s\u00ed |  |\n| `kills_per_min` | numeric | s\u00ed |  |\n| `win_pct` | numeric | s\u00ed |  |\n| `most_kills_match` | integer | s\u00ed |  |\n| `longest_kill` | integer | s\u00ed |  |\n| `last_match` | timestamp with time zone | s\u00ed |  |\n| `helmet_saves` | bigint | s\u00ed |  |\n| `foot_saves` | bigint | s\u00ed |  |\n| `luck` | bigint | s\u00ed |  |\n| `deflected` | bigint | s\u00ed |  |\n| `sprees` | bigint | s\u00ed |  |\n| `rampages` | bigint | s\u00ed |  |\n| `dominatings` | bigint | s\u00ed |  |\n| `unstoppables` | bigint | s\u00ed |  |\n| `godlikes` | bigint | s\u00ed |  |\n| `streaks_ended` | bigint | s\u00ed |  |\n\n# Relaciones\n\n- Referencia a [kills](../tables/kills.md).\n- Referencia a [matches](../tables/matches.md).\n- Referencia a [objectives](../tables/objectives.md).", "views/v_player_weapons": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `player_id` | integer | s\u00ed |  |\n| `weapon` | text | s\u00ed |  |\n| `kills` | integer | s\u00ed |  |\n| `headshots` | integer | s\u00ed |  |\n| `avg_distance` | numeric | s\u00ed |  |\n\n# Relaciones\n\n- Referencia a [kills](../tables/kills.md).\n- Referencia a [player_weapon_stats](../tables/player_weapon_stats.md).", "views/v_seasons": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `id` | integer | s\u00ed |  |\n| `name` | text | s\u00ed |  |\n| `starts_at` | timestamp with time zone | s\u00ed |  |\n| `ends_at` | timestamp with time zone | s\u00ed |  |\n| `matches` | bigint | s\u00ed |  |\n\n# Relaciones\n\n- Referencia a [matches](../tables/matches.md).\n- Referencia a [seasons](../tables/seasons.md).", "views/v_weapon_stats": "# Schema\n\n| Columna | Tipo | Nulo | Descripci\u00f3n |\n|---|---|---|---|\n| `weapon` | text | s\u00ed |  |\n| `kills` | bigint | s\u00ed |  |\n| `headshots` | bigint | s\u00ed |  |\n| `avg_distance` | numeric | s\u00ed |  |\n| `max_distance` | integer | s\u00ed |  |\n\n# Relaciones\n\n- Referencia a [kills](../tables/kills.md).\n- Referencia a [map_weapon_stats](../tables/map_weapon_stats.md)."}, "types": ["PostgreSQL Function", "PostgreSQL Table", "PostgreSQL View", "Rule"], "palette": {"BigQuery Dataset": "#8b5cf6", "BigQuery Table": "#3b82f6", "Reference": "#10b981"}};
+</script>
+<script>
+// Copyright 2026 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+(function () {
+  const bundle = window.BUNDLE;
+  const bundleName = window.BUNDLE_NAME;
+  document.title = `${bundleName} — OKF Viewer`;
+  document.getElementById("bundle-name").textContent = bundleName;
+
+  // Populate type filter
+  const typeSelect = document.getElementById("filter-type");
+  for (const t of bundle.types) {
+    const opt = document.createElement("option");
+    opt.value = t;
+    opt.textContent = t;
+    typeSelect.appendChild(opt);
+  }
+
+  // Build reverse-link index for backlinks
+  const backlinks = {};
+  for (const edge of bundle.edges) {
+    const { source, target } = edge.data;
+    (backlinks[target] ||= []).push(source);
+  }
+
+  // Look up node label/type by id
+  const nodeIndex = {};
+  for (const n of bundle.nodes) nodeIndex[n.data.id] = n.data;
+
+  const cy = cytoscape({
+    container: document.getElementById("graph"),
+    elements: [...bundle.nodes, ...bundle.edges],
+    style: [
+      {
+        selector: "node",
+        style: {
+          "background-color": "data(color)",
+          "label": "data(label)",
+          "color": "#0f172a",
+          "font-size": 11,
+          "text-valign": "bottom",
+          "text-margin-y": 4,
+          "text-wrap": "wrap",
+          "text-max-width": 120,
+          "width": "data(size)",
+          "height": "data(size)",
+          "border-width": 1,
+          "border-color": "#0f172a",
+        },
+      },
+      {
+        selector: "node[?stale]",
+        style: {
+          "border-width": 2,
+          "border-color": "#b91c1c",
+          "border-style": "dashed",
+        },
+      },
+      {
+        selector: 'node[status = "deprecated"]',
+        style: {
+          "opacity": 0.55,
+        },
+      },
+      {
+        selector: "node:selected",
+        style: {
+          "border-width": 3,
+          "border-color": "#f59e0b",
+        },
+      },
+      {
+        selector: "edge",
+        style: {
+          "width": 1.5,
+          "line-color": "#cbd5e1",
+          "target-arrow-color": "#cbd5e1",
+          "target-arrow-shape": "triangle",
+          "curve-style": "bezier",
+          "arrow-scale": 0.9,
+        },
+      },
+      {
+        selector: "edge:selected",
+        style: {
+          "line-color": "#f59e0b",
+          "target-arrow-color": "#f59e0b",
+          "width": 2.5,
+        },
+      },
+      {
+        selector: ".dim",
+        style: { "opacity": 0.15 },
+      },
+    ],
+    layout: { name: "cose", animate: false, padding: 30 },
+    wheelSensitivity: 0.2,
+  });
+
+  cy.on("tap", "node", (evt) => showDetail(evt.target.id()));
+  cy.on("tap", (evt) => {
+    if (evt.target === cy) clearSelection();
+  });
+
+  document.getElementById("layout").addEventListener("change", (e) => {
+    cy.layout({ name: e.target.value, animate: false, padding: 30 }).run();
+  });
+
+  document.getElementById("reset").addEventListener("click", () => {
+    cy.fit(null, 30);
+    clearSelection();
+  });
+
+  document.getElementById("search").addEventListener("input", (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    if (!q) {
+      cy.elements().removeClass("dim");
+      return;
+    }
+    cy.nodes().forEach((n) => {
+      const d = n.data();
+      const hay =
+        (d.label || "").toLowerCase() + " " +
+        d.id.toLowerCase() + " " +
+        (d.tags || []).join(" ").toLowerCase();
+      n.toggleClass("dim", !hay.includes(q));
+    });
+    cy.edges().forEach((edge) => {
+      const src = edge.source();
+      const tgt = edge.target();
+      edge.toggleClass("dim", src.hasClass("dim") || tgt.hasClass("dim"));
+    });
+  });
+
+  document.getElementById("filter-type").addEventListener("change", (e) => {
+    const t = e.target.value;
+    if (!t) {
+      cy.elements().removeClass("dim");
+      return;
+    }
+    cy.nodes().forEach((n) => {
+      n.toggleClass("dim", n.data("type") !== t);
+    });
+    cy.edges().forEach((edge) => {
+      edge.toggleClass("dim", edge.source().hasClass("dim") || edge.target().hasClass("dim"));
+    });
+  });
+
+  function clearSelection() {
+    cy.elements().unselect();
+    document.getElementById("detail-empty").hidden = false;
+    document.getElementById("detail-content").hidden = true;
+  }
+
+  function showDetail(conceptId) {
+    const data = nodeIndex[conceptId];
+    if (!data) return;
+    cy.elements().unselect();
+    const node = cy.getElementById(conceptId);
+    if (node) node.select();
+
+    document.getElementById("detail-empty").hidden = true;
+    const content = document.getElementById("detail-content");
+    content.hidden = false;
+
+    const chip = document.getElementById("detail-type");
+    chip.textContent = data.type;
+    chip.style.background = data.color;
+
+    document.getElementById("detail-title").textContent = data.label;
+    document.getElementById("detail-id").textContent = conceptId;
+    document.getElementById("detail-description").textContent = data.description || "—";
+
+    const resourceEl = document.getElementById("detail-resource");
+    resourceEl.innerHTML = "";
+    if (data.resource) {
+      const a = document.createElement("a");
+      a.href = data.resource;
+      a.textContent = data.resource;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.className = "external";
+      resourceEl.appendChild(a);
+    } else {
+      resourceEl.textContent = "—";
+    }
+
+    const tagsEl = document.getElementById("detail-tags");
+    tagsEl.innerHTML = "";
+    if (data.tags && data.tags.length) {
+      for (const t of data.tags) {
+        const span = document.createElement("span");
+        span.className = "tag";
+        span.textContent = t;
+        tagsEl.appendChild(span);
+      }
+    } else {
+      tagsEl.textContent = "—";
+    }
+
+    // v0.2 signal badges: status, trust tier, staleness.
+    const badgesEl = document.getElementById("detail-badges");
+    badgesEl.innerHTML = "";
+    const status = data.status || "stable";
+    badgesEl.appendChild(makeBadge(status, "status-" + status));
+    const tier = data.trust_tier || "unverified";
+    badgesEl.appendChild(makeBadge(tier.replace(/-/g, " "), "trust-" + tier));
+    if (data.stale) {
+      const label = data.stale_after ? `stale (since ${data.stale_after})` : "stale";
+      badgesEl.appendChild(makeBadge(label, "stale"));
+    } else if (data.stale_after) {
+      badgesEl.appendChild(makeBadge(`stale after ${data.stale_after}`, "fresh"));
+    }
+
+    document.getElementById("detail-generated").textContent = formatActorEvent(data.generated);
+
+    const verifiedEl = document.getElementById("detail-verified");
+    const verified = data.verified || [];
+    if (verified.length) {
+      verifiedEl.textContent = verified.map(formatActorEvent).join("; ");
+    } else {
+      verifiedEl.textContent = "—";
+    }
+
+    const sourcesEl = document.getElementById("detail-sources");
+    sourcesEl.innerHTML = "";
+    const sources = data.sources || [];
+    if (sources.length) {
+      const ul = document.createElement("ul");
+      ul.className = "sources-list";
+      for (const s of sources) {
+        const li = document.createElement("li");
+        const label = s.title || s.resource || s.id || "source";
+        if (s.resource && /^https?:\/\//.test(s.resource)) {
+          const a = document.createElement("a");
+          a.href = s.resource;
+          a.textContent = label;
+          a.target = "_blank";
+          a.rel = "noopener";
+          a.className = "external";
+          li.appendChild(a);
+        } else {
+          li.textContent = s.resource ? `${label} (${s.resource})` : label;
+        }
+        ul.appendChild(li);
+      }
+      sourcesEl.appendChild(ul);
+    } else {
+      sourcesEl.textContent = "—";
+    }
+
+    const body = bundle.bodies[conceptId] || "";
+    const html = marked.parse(body, { breaks: false, gfm: true });
+    const bodyEl = document.getElementById("detail-body");
+    bodyEl.innerHTML = html;
+    rewriteInternalLinks(bodyEl);
+
+    const bl = backlinks[conceptId] || [];
+    const blSection = document.getElementById("detail-backlinks");
+    const blList = document.getElementById("backlinks-list");
+    blList.innerHTML = "";
+    if (bl.length) {
+      blSection.hidden = false;
+      for (const src of bl) {
+        const li = document.createElement("li");
+        const a = document.createElement("a");
+        a.textContent = nodeIndex[src]?.label || src;
+        a.dataset.target = src;
+        a.addEventListener("click", () => showDetail(src));
+        li.appendChild(a);
+        const muted = document.createElement("span");
+        muted.className = "muted";
+        muted.textContent = ` (${src})`;
+        li.appendChild(muted);
+        blList.appendChild(li);
+      }
+    } else {
+      blSection.hidden = true;
+    }
+
+    cy.animate({ center: { eles: node }, zoom: Math.max(cy.zoom(), 1.0) }, { duration: 200 });
+  }
+
+  function makeBadge(text, cls) {
+    const span = document.createElement("span");
+    span.className = "badge " + cls;
+    span.textContent = text;
+    return span;
+  }
+
+  function formatActorEvent(event) {
+    if (!event || !event.by) return "—";
+    return event.at ? `${event.by} · ${event.at}` : String(event.by);
+  }
+
+  function rewriteInternalLinks(root) {
+    root.querySelectorAll("a[href]").forEach((a) => {
+      const href = a.getAttribute("href");
+      if (!href) return;
+      if (href.startsWith("/") && href.endsWith(".md")) {
+        const target = href.slice(1, -3);
+        if (nodeIndex[target]) {
+          a.className = "internal";
+          a.setAttribute("href", "javascript:void(0)");
+          a.addEventListener("click", (e) => {
+            e.preventDefault();
+            showDetail(target);
+          });
+          return;
+        }
+      }
+      a.className = "external";
+      a.setAttribute("target", "_blank");
+      a.setAttribute("rel", "noopener");
+    });
+  }
+
+  // Auto-show the first node (a dataset if available, else first concept)
+  const initial =
+    bundle.nodes.find((n) => n.data.type === "BigQuery Dataset") ||
+    bundle.nodes[0];
+  if (initial) showDetail(initial.data.id);
+})();
+
+</script>
+</body>
+</html>
