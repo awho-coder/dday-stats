@@ -6,3 +6,7 @@ Este repositorio contiene el código base del juego Quake II D-Day: Normandy, pa
 ## Compilación
 
 Las DLL solo han sido testeadas con VS2022 y el compilador MSVC y vscode con clang 15.
+
+## Estadísticas y ladder
+
+Desde la versión 5.068 el servidor puede registrar estadísticas de las partidas (K/D, Elo, rachas, duelos oficiales y temporadas) para cargarlas en PostgreSQL. Ver [stats/README.md](stats/README.md) y la guía de instalación para Windows y Linux en [docs/stats/INSTALACION.md](docs/stats/INSTALACION.md).

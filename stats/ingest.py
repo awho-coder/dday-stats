@@ -537,7 +537,7 @@ def finish_file(path, delete):
     dest_dir = path.parent / "processed"
     dest_dir.mkdir(exist_ok=True)
     name = path.name[:-5] if path.name.endswith(".part") else path.name
-    path.rename(dest_dir / name)
+    path.replace(dest_dir / name)  # replace: en Windows rename falla si el destino existe
 
 
 def run_once(conn, args, cfg, files):
@@ -556,7 +556,7 @@ def run_once(conn, args, cfg, files):
             log.error("%s: %s", path.name, e)
             bad = path.parent / "failed"
             bad.mkdir(exist_ok=True)
-            path.rename(bad / path.name)
+            path.replace(bad / path.name)
             failed += 1
     if ok or failed:
         log.info("procesados: %d, con error: %d", ok, failed)
@@ -590,11 +590,14 @@ def main():
                     help="inicio de la temporada nueva, ej. '2026-11-01 00:00-03'")
     ap.add_argument("--set-event", nargs=2, metavar=("PARTIDA", "TORNEO"),
                     help="marcar una partida como de un torneo ('' para casual) y recalcular")
+    ap.add_argument("--log-file", metavar="ARCHIVO",
+                    help="escribir el registro en un archivo (util en servicios sin consola)")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
-                        format="%(asctime)s %(levelname)s %(message)s")
+                        format="%(asctime)s %(levelname)s %(message)s",
+                        filename=args.log_file, encoding="utf-8")
 
     if not args.dsn:
         ap.error("falta --dsn o DDAY_STATS_DSN")

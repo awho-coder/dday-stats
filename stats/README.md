@@ -2,7 +2,9 @@
 
 Sistema para guardar las estadísticas de las partidas en PostgreSQL y
 construir un ladder (K/D y Elo), perfiles de jugador y estadísticas de mapa.
-El diseño está en [`docs/stats/PLAN.md`](../docs/stats/PLAN.md).
+El diseño está en [`docs/stats/PLAN.md`](../docs/stats/PLAN.md) y la guía de
+instalación paso a paso para **Windows y Linux** en
+[`docs/stats/INSTALACION.md`](../docs/stats/INSTALACION.md).
 
 ```
 servidor Q2PRO ──> dday/stats/events/*.jsonl ──> ingest.py ──> PostgreSQL
