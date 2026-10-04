@@ -69,6 +69,9 @@ class PlayerAgg:
     points: int = 0
     human_kills: int = 0     # kills a enemigos humanos
     best_streak: int = 0     # la mejor de todos los tramos (no se suma)
+    helmet_saves: int = 0    # el casco le desvio un tiro a la cabeza
+    foot_saves: int = 0      # sobrevivio con "almost lost a foot"
+    deflected: int = 0       # tiros suyos desviados por un casco
     human_deaths: int = 0    # muertes por humanos, suicidio o entorno
 
     def add(self, ev):
@@ -79,7 +82,9 @@ class PlayerAgg:
             self.classes[k] = self.classes.get(k, 0) + int(v)
         for attr, key in (("kills", "kills"), ("deaths", "deaths"), ("suicides", "suicides"),
                           ("tk", "tk"), ("hs", "hs"), ("objs", "objs"), ("hits", "hits"),
-                          ("misses", "misses"), ("score", "score"), ("points", "points")):
+                          ("misses", "misses"), ("score", "score"), ("points", "points"),
+                          ("helmet_saves", "helmet_saves"), ("foot_saves", "foot_saves"),
+                          ("deflected", "deflected")):
             setattr(self, attr, getattr(self, attr) + int(ev.get(key) or 0))
         self.best_streak = max(self.best_streak, int(ev.get("best_streak") or 0))
 
@@ -159,7 +164,7 @@ def strip_bot_flags(events):
     for e in events:
         if "bot" in e:
             e["bot"] = 0
-        for role in ("killer", "victim"):
+        for role in ("killer", "victim", "player", "by"):
             if isinstance(e.get(role), dict):
                 e[role]["bot"] = 0
 
@@ -210,6 +215,20 @@ def build_match(events, path):
         if k["ev"] == "team":
             # el juego reinicia la racha al cambiar de equipo u observar
             streak[(k.get("name"), bool(k.get("bot")))] = 0
+            continue
+        if k["ev"] == "luck":
+            p_key = (k["player"]["name"], bool(k["player"].get("bot")))
+            if p_key not in summarized:
+                p = players.setdefault(p_key, PlayerAgg(*p_key))
+                if k.get("type") == "helmet":
+                    p.helmet_saves += 1
+                else:
+                    p.foot_saves += 1
+            by = k.get("by")
+            if by and k.get("type") == "helmet":
+                b_key = (by["name"], bool(by.get("bot")))
+                if b_key not in summarized:
+                    players.setdefault(b_key, PlayerAgg(*b_key)).deflected += 1
             continue
         if k["ev"] != "kill":
             continue
@@ -330,11 +349,13 @@ class Ingestor:
                 cur.execute(
                     """INSERT INTO match_players (match_id, player_id, team, time_team0, time_team1,
                            kills, deaths, human_kills, human_deaths, suicides, teamkills, headshots,
-                           objectives, best_streak, hits, misses, score, points, classes, main_class, result)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                           objectives, best_streak, helmet_saves, foot_saves, deflected,
+                           hits, misses, score, points, classes, main_class, result)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (match.id, pid, p.team, p.time[0], p.time[1], p.kills, p.deaths,
                      p.human_kills, p.human_deaths,
-                     p.suicides, p.tk, p.hs, p.objs, p.best_streak, p.hits, p.misses, p.score, p.points,
+                     p.suicides, p.tk, p.hs, p.objs, p.best_streak, p.helmet_saves, p.foot_saves,
+                     p.deflected, p.hits, p.misses, p.score, p.points,
                      json.dumps(p.classes), p.main_class, result))
 
             def actor_id(name, bot):

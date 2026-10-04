@@ -84,6 +84,9 @@ typedef struct
 	int			objectives;
 	int			streak;			// racha actual (mismas reglas que KillingSpree)
 	int			best_streak;
+	int			helmet_saves;	// el casco le desvio un tiro a la cabeza
+	int			foot_saves;		// sobrevivio a un tiro con "almost lost a foot"
+	int			deflected;		// tiros suyos que desvio el casco de otro
 
 	stats_counter_t	hits;
 	stats_counter_t	misses;
@@ -379,6 +382,8 @@ static void StatsLog_WritePlayer (stats_player_t *p, const char *reason)
 
 	fprintf (sl.file, ",\"kills\":%d,\"deaths\":%d,\"suicides\":%d,\"tk\":%d,\"hs\":%d,\"objs\":%d,\"best_streak\":%d",
 		p->kills, p->deaths, p->suicides, p->teamkills, p->headshots, p->objectives, p->best_streak);
+	fprintf (sl.file, ",\"helmet_saves\":%d,\"foot_saves\":%d,\"deflected\":%d",
+		p->helmet_saves, p->foot_saves, p->deflected);
 	fprintf (sl.file, ",\"hits\":%d,\"misses\":%d,\"score\":%d,\"points\":%d",
 		StatsLog_CounterGet (&p->hits), StatsLog_CounterGet (&p->misses),
 		p->score, StatsLog_CounterGet (&p->points));
@@ -398,7 +403,8 @@ static void StatsLog_FlushPlayer (int slot, const char *reason)
 	// no registrar a quien nunca entro a un equipo ni hizo nada, ni el
 	// calentamiento de un duelo
 	if ((!sl.duel || sl.live) &&
-		(p->team_time[0] || p->team_time[1] || p->kills || p->deaths))
+		(p->team_time[0] || p->team_time[1] || p->kills || p->deaths ||
+		 p->helmet_saves || p->foot_saves))
 		StatsLog_WritePlayer (p, reason);
 
 	memset (p, 0, sizeof(*p));
@@ -1105,5 +1111,55 @@ void StatsLog_CountdownReset (void)
 	sl.live = false;
 	sl.live_seconds = 0;
 	StatsLog_BeginEvent ("live_cancel");
+	StatsLog_EndEvent ();
+}
+
+/*
+=================
+Golpes de suerte
+=================
+*/
+
+// llamado desde T_Damage() cuando el casco desvia un tiro a la cabeza o cuando
+// un tiro de rifle deja al jugador desangrandose en vez de matarlo
+void StatsLog_Luck (edict_t *targ, edict_t *attacker, int mod, const char *type)
+{
+	stats_player_t	*p, *a = NULL;
+	int				team, ateam = -1;
+
+	if (!sl.open || level.intermissiontime || !targ || !targ->client || targ->deadflag ||
+		!StatsLog_Counting ())
+		return;
+
+	p = StatsLog_GetPlayer (targ);
+	if (!p)
+		return;
+	team = StatsLog_TeamOf (targ);
+
+	if (!strcmp (type, STATS_LUCK_HELMET))
+		p->helmet_saves++;
+	else
+		p->foot_saves++;
+
+	if (attacker && attacker != targ && attacker->inuse && attacker->client)
+	{
+		a = StatsLog_GetPlayer (attacker);
+		if (a)
+		{
+			ateam = StatsLog_TeamOf (attacker);
+			if (!strcmp (type, STATS_LUCK_HELMET))
+				a->deflected++;
+		}
+	}
+
+	StatsLog_BeginEvent ("luck");
+	StatsLog_WriteKey ("type");
+	StatsLog_WriteString (type);
+	StatsLog_WriteActor ("player", targ, p, team);
+	if (a)
+		StatsLog_WriteActor ("by", attacker, a, ateam);
+	else
+		fputs (",\"by\":null", sl.file);
+	fprintf (sl.file, ",\"mod\":\"%s\"", StatsLog_ModName (mod & ~MOD_FRIENDLY_FIRE));
 	StatsLog_EndEvent ();
 }

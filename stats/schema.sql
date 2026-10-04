@@ -68,6 +68,9 @@ CREATE TABLE IF NOT EXISTS match_players (
     headshots    integer NOT NULL DEFAULT 0,
     objectives   integer NOT NULL DEFAULT 0,
     best_streak  integer NOT NULL DEFAULT 0, -- mejor racha de kills en la partida
+    helmet_saves integer NOT NULL DEFAULT 0, -- el casco le desvio un tiro a la cabeza
+    foot_saves   integer NOT NULL DEFAULT 0, -- sobrevivio con "almost lost a foot"
+    deflected    integer NOT NULL DEFAULT 0, -- tiros suyos desviados por un casco
     hits         integer NOT NULL DEFAULT 0,
     misses       integer NOT NULL DEFAULT 0,
     score        integer NOT NULL DEFAULT 0,
@@ -130,6 +133,9 @@ CREATE INDEX IF NOT EXISTS matches_season_idx ON matches (season_id);
 ALTER TABLE match_players ADD COLUMN IF NOT EXISTS human_kills  integer NOT NULL DEFAULT 0;
 ALTER TABLE match_players ADD COLUMN IF NOT EXISTS human_deaths integer NOT NULL DEFAULT 0;
 ALTER TABLE match_players ADD COLUMN IF NOT EXISTS best_streak  integer NOT NULL DEFAULT 0;
+ALTER TABLE match_players ADD COLUMN IF NOT EXISTS helmet_saves integer NOT NULL DEFAULT 0;
+ALTER TABLE match_players ADD COLUMN IF NOT EXISTS foot_saves   integer NOT NULL DEFAULT 0;
+ALTER TABLE match_players ADD COLUMN IF NOT EXISTS deflected    integer NOT NULL DEFAULT 0;
 
 -- rellena las columnas nuevas en filas cargadas antes de que existieran
 UPDATE match_players mp SET
@@ -220,6 +226,9 @@ CREATE TABLE IF NOT EXISTS player_stats (
     seconds       integer NOT NULL DEFAULT 0,
     best_streak   integer NOT NULL DEFAULT 0,
     max_kills     integer NOT NULL DEFAULT 0,  -- mas kills en una partida
+    helmet_saves  integer NOT NULL DEFAULT 0,
+    foot_saves    integer NOT NULL DEFAULT 0,
+    deflected     integer NOT NULL DEFAULT 0,
     longest_kill  integer,
     last_match    timestamptz,
     PRIMARY KEY (player_id, season_id, kind, event)
@@ -291,6 +300,10 @@ CREATE TABLE IF NOT EXISTS map_weapon_stats (
     PRIMARY KEY (map, kind, weapon)
 );
 
+ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS helmet_saves integer NOT NULL DEFAULT 0;
+ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS foot_saves   integer NOT NULL DEFAULT 0;
+ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS deflected    integer NOT NULL DEFAULT 0;
+
 -- actividad por dia (hora de Chile)
 CREATE TABLE IF NOT EXISTS daily_stats (
     day           date    PRIMARY KEY,
@@ -332,14 +345,16 @@ LANGUAGE plpgsql AS $$
 BEGIN
     INSERT INTO player_stats AS s (player_id, season_id, kind, event, matches, wins, losses, draws,
         kills, deaths, human_kills, human_deaths, headshots, hits, misses, teamkills, suicides,
-        objectives, seconds, best_streak, max_kills, longest_kill, last_match)
+        objectives, seconds, best_streak, max_kills, longest_kill, last_match,
+        helmet_saves, foot_saves, deflected)
     SELECT mp.player_id, m.season_id, match_category(m.kind, m.event), m.event, count(*),
            count(*) FILTER (WHERE mp.result = 'W'), count(*) FILTER (WHERE mp.result = 'L'),
            count(*) FILTER (WHERE mp.result = 'D'),
            sum(mp.kills), sum(mp.deaths), sum(mp.human_kills), sum(mp.human_deaths),
            sum(mp.headshots), sum(mp.hits), sum(mp.misses), sum(mp.teamkills), sum(mp.suicides),
            sum(mp.objectives), sum(mp.time_team0 + mp.time_team1), max(mp.best_streak),
-           max(mp.kills), max(lk.longest), max(m.started_at)
+           max(mp.kills), max(lk.longest), max(m.started_at),
+           sum(mp.helmet_saves), sum(mp.foot_saves), sum(mp.deflected)
     FROM match_players mp
     JOIN matches m ON m.id = mp.match_id
     JOIN players p ON p.id = mp.player_id
@@ -363,7 +378,10 @@ BEGIN
         best_streak = greatest(s.best_streak, EXCLUDED.best_streak),
         max_kills = greatest(s.max_kills, EXCLUDED.max_kills),
         longest_kill = greatest(s.longest_kill, EXCLUDED.longest_kill),
-        last_match = greatest(s.last_match, EXCLUDED.last_match);
+        last_match = greatest(s.last_match, EXCLUDED.last_match),
+        helmet_saves = s.helmet_saves + EXCLUDED.helmet_saves,
+        foot_saves = s.foot_saves + EXCLUDED.foot_saves,
+        deflected = s.deflected + EXCLUDED.deflected;
 
     INSERT INTO player_map_stats AS s (player_id, map, kind, matches, wins, kills, deaths, seconds, best_streak)
     SELECT mp.player_id, m.map, m.kind, count(*), count(*) FILTER (WHERE mp.result = 'W'),
@@ -507,6 +525,8 @@ DROP FUNCTION IF EXISTS ladder_kd(integer, text, text, text);
 DROP FUNCTION IF EXISTS ladder_elo(integer, text, text);
 DROP FUNCTION IF EXISTS ladder_streak(text, integer, text);
 DROP FUNCTION IF EXISTS player_totals(text, text, text) CASCADE;
+DROP FUNCTION IF EXISTS ladder_luck(integer, text, text);
+DROP FUNCTION IF EXISTS ladder_unlucky(integer, text, text);
 
 -- Totales por jugador para una temporada, categoria y torneo:
 --   season: 'current' (la vigente), 'all' (historico) o el nombre de una temporada
@@ -521,7 +541,8 @@ RETURNS TABLE (player_id integer, name text, matches bigint, wins bigint, losses
                headshots bigint, hs_pct numeric, accuracy_pct numeric, teamkills bigint,
                suicides bigint, objectives bigint, best_streak integer, hours_played numeric,
                kills_per_min numeric, win_pct numeric, most_kills_match integer,
-               longest_kill integer, last_match timestamptz)
+               longest_kill integer, last_match timestamptz,
+               helmet_saves bigint, foot_saves bigint, luck bigint, deflected bigint)
 LANGUAGE sql STABLE AS $$
     WITH sid AS (SELECT season_lookup(season) AS id),
     s AS (
@@ -532,7 +553,8 @@ LANGUAGE sql STABLE AS $$
                sum(ps.suicides) AS suicides, sum(ps.objectives) AS objectives,
                sum(ps.seconds) AS seconds, max(ps.best_streak) AS best_streak,
                max(ps.max_kills) AS max_kills, max(ps.longest_kill) AS longest_kill,
-               max(ps.last_match) AS last_match
+               max(ps.last_match) AS last_match, sum(ps.helmet_saves) AS helmet_saves,
+               sum(ps.foot_saves) AS foot_saves, sum(ps.deflected) AS deflected
         FROM player_stats ps, sid
         WHERE (season = 'all' OR ps.season_id = sid.id)
           AND (match_kind = 'all' OR ps.kind = match_kind)
@@ -546,7 +568,8 @@ LANGUAGE sql STABLE AS $$
            s.tk, s.suicides, s.objectives, s.best_streak,
            round(s.seconds / 3600.0, 1), round(s.hk * 60.0 / greatest(s.seconds, 1), 2),
            round(100.0 * s.wins / greatest(s.wins + s.losses + s.draws, 1), 1),
-           s.max_kills, s.longest_kill, s.last_match
+           s.max_kills, s.longest_kill, s.last_match,
+           s.helmet_saves, s.foot_saves, s.helmet_saves + s.foot_saves, s.deflected
     FROM s
     JOIN players p ON p.id = s.player_id;
 $$;
@@ -611,6 +634,32 @@ LANGUAGE sql STABLE AS $$
           ORDER BY mp.best_streak DESC, m.started_at
           LIMIT max_rows) t
     ORDER BY t.best_streak DESC, t.started_at;
+$$;
+
+-- Los mas suertudos: casco que desvia un tiro a la cabeza + sobrevivir con
+-- "almost lost a foot". luck_per_match permite comparar a quien juega poco.
+CREATE FUNCTION ladder_luck(min_matches integer DEFAULT 5, match_kind text DEFAULT 'all',
+                            season text DEFAULT 'current')
+RETURNS TABLE (pos bigint, name text, luck bigint, helmet_saves bigint, foot_saves bigint,
+               matches bigint, luck_per_match numeric)
+LANGUAGE sql STABLE AS $$
+    SELECT rank() OVER (ORDER BY t.luck DESC), t.name, t.luck, t.helmet_saves, t.foot_saves,
+           t.matches, round(t.luck::numeric / greatest(t.matches, 1), 2)
+    FROM player_totals(season, match_kind) t
+    WHERE t.matches >= min_matches AND t.luck > 0
+    ORDER BY t.luck DESC, t.name;
+$$;
+
+-- Los tiradores mas desafortunados: mas tiros desviados por cascos ajenos
+CREATE FUNCTION ladder_unlucky(min_matches integer DEFAULT 5, match_kind text DEFAULT 'all',
+                               season text DEFAULT 'current')
+RETURNS TABLE (pos bigint, name text, deflected bigint, matches bigint, deflected_per_match numeric)
+LANGUAGE sql STABLE AS $$
+    SELECT rank() OVER (ORDER BY t.deflected DESC), t.name, t.deflected, t.matches,
+           round(t.deflected::numeric / greatest(t.matches, 1), 2)
+    FROM player_totals(season, match_kind) t
+    WHERE t.matches >= min_matches AND t.deflected > 0
+    ORDER BY t.deflected DESC, t.name;
 $$;
 
 -- Temporadas y torneos

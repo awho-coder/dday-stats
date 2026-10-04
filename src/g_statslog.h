@@ -34,6 +34,12 @@ void StatsLog_ClientDisconnect (edict_t *ent);
 void StatsLog_Kill (edict_t *targ, edict_t *inflictor, edict_t *attacker);
 void StatsLog_Objective (const char *type, const char *name, int team, edict_t *player);
 
+// golpes de suerte para StatsLog_Luck()
+#define STATS_LUCK_HELMET		"helmet"	// el casco desvio un tiro a la cabeza
+#define STATS_LUCK_FOOT			"foot"		// "almost lost a foot": sobrevivio desangrandose
+
+void StatsLog_Luck (edict_t *targ, edict_t *attacker, int mod, const char *type);
+
 void StatsLog_CountdownDone (void);
 void StatsLog_CountdownReset (void);
 

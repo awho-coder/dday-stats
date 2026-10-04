@@ -81,13 +81,15 @@ Todos llevan `ev` y `t` (segundos desde el inicio del mapa).
 | `live` / `resume` / `live_cancel` | solo duelos: la cuenta llegó a 0 (con `event`) / se reanudó tras una pausa / `sv resetcount` |
 | `team` | `slot`, `name`, `bot`, `team` (-1 = observador) |
 | `kill` | `killer`/`victim` (`name`,`bot`,`team`,`class`,`pos`), `mod`, `weapon`, `hs`, `ff`, `suicide`, `dist` |
+| `luck` | `type` (`helmet`/`foot`), `player`, `by` (quien disparó), `mod` |
 | `obj` | `type` (`touch`,`area`,`timed`,`timed_held`,`explosive`,`bc_pickup`,`bc_drop`,`bc_capture`), `name`, `team`, `player` |
 | `leave` | resumen del jugador (igual que en `match_end.players[]`) |
 | `match_end` | `ts`, `dur`, `winner` (0/1, -1 empate, null = sin ganador), `reason` (`normal`/`forced`), `teams[]` (`score`,`kills`,`losses`), `players[]` |
 
 Resumen por jugador: `name`, `bot`, `team` (último), `time` (`[s_aliados, s_eje]`),
 `classes` (segundos por clase), `kills`, `deaths`, `suicides`, `tk`, `hs`,
-`hits`, `misses`, `score`, `points`.
+`best_streak`, `helmet_saves`, `foot_saves`, `deflected`, `hits`, `misses`,
+`score`, `points`.
 
 ## Reglas del ladder
 

@@ -1064,6 +1064,8 @@ void T_Damage (edict_t *targ, edict_t *inflictor, edict_t *attacker, vec3_t dir,
 								 targ->client->pers.netname);
 
 				safe_cprintf(targ, PRINT_HIGH, "You almost lost a foot! Call a medic or your will bleed to death!\n");
+
+				StatsLog_Luck (targ, attacker, mod, STATS_LUCK_FOOT);
 			}
 			else
 			{
@@ -1171,6 +1173,7 @@ void T_Damage (edict_t *targ, edict_t *inflictor, edict_t *attacker, vec3_t dir,
 						targ->client->kick_angles[2] += 3;
 						targ->client->damage_div=0;
 						saved=true;
+						StatsLog_Luck (targ, attacker, mod, STATS_LUCK_HELMET);
 						targ->client->resp.scopewobble = 0;//faf: shakes screen
 					}
 				}

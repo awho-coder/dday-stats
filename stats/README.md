@@ -146,6 +146,18 @@ cambiar de equipo o el fuego amigo la reinician, y la kill por desangrado no
 suma. Funciona aunque `exbattleinfo` esté apagado. Se guarda la mejor racha
 de cada jugador en cada partida.
 
+### Golpes de suerte
+
+Se registran dos momentos de suerte del juego:
+
+- **casco** (`helmet_saves`): el casco desvió un tiro a la cabeza
+  ("X is a lucky bastard! The helmet deflected the shot").
+- **pie** (`foot_saves`): un tiro de rifle de cerrojo lo dejó desangrándose en
+  vez de matarlo ("X almost lost a foot! He needs a medic").
+
+`luck` es la suma de ambos. Al revés, `deflected` cuenta los tiros de un
+jugador que desvió el casco de otro: el tirador más desafortunado.
+
 ### Reglas del rating
 
 Una partida es **rankeada** si terminó normalmente con ganador o empate,
@@ -206,6 +218,9 @@ SELECT * FROM ladder_elo(10, 'public', 'all');       -- Elo histórico
 
 SELECT * FROM ladder_streak();                       -- 20 mejores rachas, temporada actual
 SELECT * FROM ladder_streak('duel', 10, 'all');      -- 10 mejores rachas en duelos, histórico
+
+SELECT * FROM ladder_luck();                         -- los más suertudos (casco + pie), mín. 5 partidas
+SELECT * FROM ladder_unlucky();                      -- tiradores con más tiros desviados por cascos
 
 SELECT * FROM v_seasons;                             -- temporadas, fechas y partidas
 SELECT * FROM v_events;                              -- torneos jugados
