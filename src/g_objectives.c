@@ -997,3 +997,526 @@ void SP_ctb_base(edict_t *ent)
 	team_list[ent->obj_owner]->kills_and_points = false;
 }
 //end faf
+
+
+/*
+========================
+objective_control (modo control de zona)
+
+Zona en disputa al estilo Overwatch. Un solo equipo dentro de la zona la
+captura (mas rapido con 2 o 3 jugadores); con jugadores de ambos equipos
+queda disputada. El equipo dueno acumula control solo mientras tenga
+jugadores dentro y ningun rival (vacia o disputada se congela), y gana al
+llegar al 100%, salvo que el rival tenga una captura en curso: en ese caso
+hay tiempo extra hasta borrarla.
+
+Solo existe con deathmatch y control_mode 1 (ver LoadCTLFile).
+
+"obj_name"	nombre de la zona (por defecto "Zona")
+"obj_area"	radio horizontal en unidades (por defecto 192)
+"polygon"	en vez de radio, borde de la zona como "x y x y ..." (3 a 32 puntos)
+"height"	diferencia de altura maxima con el centro (por defecto 96)
+========================
+*/
+
+extern int countdownActive;
+extern qboolean freeze_mode;
+extern float gameStartTime;
+
+#define CONTROL_RING_POINTS	24
+
+static float Control_Cvar (cvar_t *cvar, float fallback)
+{
+	return (cvar && cvar->value > 0) ? cvar->value : fallback;
+}
+
+// punto dentro del poligono del borde (solo x y)
+static qboolean Control_InPolygon (float x, float y)
+{
+	int			i, j;
+	qboolean	inside = false;
+	float		(*p)[2] = level.control_poly;
+
+	for (i = 0, j = level.control_numpoints - 1; i < level.control_numpoints; j = i++)
+	{
+		if (((p[i][1] > y) != (p[j][1] > y)) &&
+			(x < (p[j][0] - p[i][0]) * (y - p[i][1]) / (p[j][1] - p[i][1]) + p[i][0]))
+			inside = !inside;
+	}
+
+	return inside;
+}
+
+static qboolean Control_InZone (edict_t *zone, edict_t *ent)
+{
+	vec3_t	delta;
+	trace_t	tr;
+
+	VectorSubtract (ent->s.origin, zone->s.origin, delta);
+
+	if (fabs(delta[2]) > zone->count)
+		return false;
+
+	// el poligono lo marco el mapper a mano: no hace falta linea de vista
+	if (level.control_numpoints)
+		return Control_InPolygon (ent->s.origin[0], ent->s.origin[1]);
+
+	delta[2] = 0;
+	if (VectorLength (delta) > zone->obj_area)
+		return false;
+
+	// no se captura a traves de paredes
+	tr = gi.trace (zone->s.origin, NULL, NULL, ent->s.origin, zone, MASK_SOLID);
+	return (tr.fraction == 1.0);
+}
+
+static void Control_CountPlayers (edict_t *zone)
+{
+	edict_t	*ent;
+	int		i;
+
+	level.control_inzone[0] = level.control_inzone[1] = 0;
+
+	for (i = 1; i <= game.maxclients; i++)
+	{
+		ent = &g_edicts[i];
+
+		if (!ent->inuse || !IsValidPlayer(ent))
+			continue;
+		if (ent->deadflag || ent->health <= 0)
+			continue;
+		if (ent->client->resp.team_on->index >= MAX_TEAMS)
+			continue;
+
+		if (Control_InZone (zone, ent))
+			level.control_inzone[ent->client->resp.team_on->index]++;
+	}
+}
+
+static void Control_Reset (edict_t *zone)
+{
+	int i;
+
+	level.control_owner = 0;
+	level.control_capteam = 0;
+	level.control_capture = 0;
+	level.control_unlocked = false;
+	level.control_overtime = false;
+	level.control_winner = 0;
+	level.control_start = level.time;
+	level.control_gamestart = gameStartTime;
+
+	for (i = 0; i < MAX_TEAMS; i++)
+	{
+		level.control_pct[i] = 0;
+
+		// en este modo solo gana el control de la zona
+		if (team_list[i])
+		{
+			team_list[i]->score = 0;
+			team_list[i]->need_kills = 0;
+			team_list[i]->need_points = 0;
+			team_list[i]->kills_and_points = false;
+		}
+	}
+
+	zone->s.modelindex = 0;
+	zone->s.sound = 0;
+}
+
+// aviso general a todos; el estado de la zona espera unos segundos para no taparlo
+static void Control_Announce (char *msg)
+{
+	centerprintall ("%s", msg);
+	level.control_msghold = level.time + 3;
+}
+
+static void Control_Capture (edict_t *zone, int team)
+{
+	level.control_owner = team + 1;
+	level.control_capteam = 0;
+	level.control_capture = 0;
+	level.control_overtime = false;
+
+	StatsLog_Objective (STATS_OBJ_AREA, zone->obj_name, team, NULL);
+
+	// bandera del equipo dueno en el centro de la zona
+	zone->s.modelindex = gi.modelindex (va("models/objects/%sflag/tris.md2", team_list[team]->teamid));
+	zone->s.sound = gi.soundindex ("faf/flag.wav");
+
+	gi.sound (zone, CHAN_NO_PHS_ADD, gi.soundindex(va("%s/objectives/area_cap.wav", team_list[team]->teamid)), 1, 0, 0);
+
+	safe_bprintf (PRINT_HIGH, "Equipo %s capturo la zona %s!\n", team_list[team]->teamname, zone->obj_name);
+	Control_Announce (va("%s\ncapturo la zona!", team_list[team]->teamname));
+}
+
+static void Control_Spark (edict_t *zone, float x, float y, int color)
+{
+	vec3_t	start, end, up = {0, 0, 1};
+	trace_t	tr;
+
+	// se busca el piso desde arriba del rango de altura de la zona
+	start[0] = end[0] = x;
+	start[1] = end[1] = y;
+	start[2] = zone->s.origin[2] + zone->count;
+	end[2] = zone->s.origin[2] - zone->count - 64;
+
+	tr = gi.trace (start, NULL, NULL, end, zone, MASK_SOLID);
+	if (tr.startsolid || tr.fraction == 1.0)
+		return;
+
+	tr.endpos[2] += 4;
+
+	gi.WriteByte (svc_temp_entity);
+	gi.WriteByte (TE_LASER_SPARKS);
+	gi.WriteByte (4);
+	gi.WritePosition (tr.endpos);
+	gi.WriteDir (up);
+	gi.WriteByte (color);
+	gi.multicast (tr.endpos, MULTICAST_PVS);
+}
+
+// borde de chispas de la zona, con el color del dueno
+static void Control_DrawRing (edict_t *zone)
+{
+	float	angle, len, *a, *b;
+	int		i, j, steps, color;
+
+	if (level.control_owner == 1)
+		color = 0xf3;	// azul
+	else if (level.control_owner == 2)
+		color = 0xf2;	// rojo
+	else
+		color = 0x0f;	// blanco
+
+	if (level.control_numpoints)
+	{
+		// una chispa cada ~96 unidades a lo largo de cada lado
+		for (i = 0; i < level.control_numpoints; i++)
+		{
+			a = level.control_poly[i];
+			b = level.control_poly[(i + 1) % level.control_numpoints];
+			len = sqrt((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1]));
+			steps = (int)(len / 96) + 1;
+
+			for (j = 0; j < steps; j++)
+				Control_Spark (zone, a[0] + (b[0] - a[0]) * j / steps, a[1] + (b[1] - a[1]) * j / steps, color);
+		}
+		return;
+	}
+
+	for (i = 0; i < CONTROL_RING_POINTS; i++)
+	{
+		angle = (2 * M_PI * i) / CONTROL_RING_POINTS;
+		Control_Spark (zone, zone->s.origin[0] + cos(angle) * zone->obj_area,
+			zone->s.origin[1] + sin(angle) * zone->obj_area, color);
+	}
+}
+
+// estado de la zona para los que estan dentro: solo cuando cambia, para no
+// llenar la consola (los porcentajes se ven en el HUD: ZONA % y TOMA)
+static void Control_ZoneMessage (edict_t *zone)
+{
+	char	msg[128];
+	edict_t	*ent;
+	int		i, state, owner = level.control_owner - 1;
+
+	if (!level.control_unlocked)
+	{
+		state = 1;
+		Com_sprintf (msg, sizeof(msg), "ZONA BLOQUEADA\nespera a que se abra");
+	}
+	else if (level.control_inzone[0] && level.control_inzone[1])
+	{
+		state = 2;
+		Com_sprintf (msg, sizeof(msg), "ZONA DISPUTADA");
+	}
+	else if (level.control_capture > 0 && level.control_capteam)
+	{
+		state = 10 + level.control_capteam;
+		Com_sprintf (msg, sizeof(msg), "%s CAPTURANDO LA ZONA\n(avance en TOMA)",
+			team_list[level.control_capteam - 1]->teamname);
+	}
+	else if (owner >= 0)
+	{
+		state = (level.control_overtime ? 30 : 20) + owner;
+		Com_sprintf (msg, sizeof(msg), "%s CONTROLA LA ZONA%s",
+			team_list[owner]->teamname, level.control_overtime ? "\nTIEMPO EXTRA" : "");
+	}
+	else
+		state = 3;	// neutral y vacia: no hay nada que mostrar
+
+	for (i = 1; i <= game.maxclients; i++)
+	{
+		ent = &g_edicts[i];
+
+		if (!ent->inuse || !IsValidPlayer(ent) || ent->deadflag || !Control_InZone (zone, ent))
+		{
+			level.control_msgstate[i - 1] = 0;
+			continue;
+		}
+
+		if (level.control_msgstate[i - 1] == state || level.time < level.control_msghold)
+			continue;
+
+		level.control_msgstate[i - 1] = state;
+		if (state != 3)
+			gi.centerprintf (ent, "%s", msg);
+	}
+}
+
+void objective_control_think (edict_t *self)
+{
+	float	unlock_time, rate, mult;
+	int		n, team, enemy, owner, i, before, after;
+	static const int milestones[] = {25, 50, 75, 90};
+
+	self->nextthink = level.time + FRAMETIME;
+
+	if (level.intermissiontime || level.control_winner)
+		return;
+
+	// el juego esta pausado o en cuenta regresiva
+	if (countdownActive || freeze_mode)
+	{
+		// la pausa no consume el tiempo de bloqueo de la zona
+		if (level.control_start && !level.control_unlocked)
+			level.control_start += FRAMETIME;
+		return;
+	}
+
+	// primer frame del mapa, o una cuenta regresiva reinicio la partida
+	if (!level.control_start || level.control_gamestart != gameStartTime)
+		Control_Reset (self);
+
+	Control_CountPlayers (self);
+
+	if (level.framenum % 10 == 0)
+		Control_DrawRing (self);
+
+	unlock_time = level.control_start + Control_Cvar (control_lock, 0.1);
+
+	if (!level.control_unlocked)
+	{
+		Control_ZoneMessage (self);
+
+		if ((int)(unlock_time - level.time) == 10 && level.framenum % 10 == 0)
+			safe_bprintf (PRINT_HIGH, "La zona %s se abre en 10 segundos.\n", self->obj_name);
+
+		if (level.time < unlock_time)
+			return;
+
+		level.control_unlocked = true;
+		safe_bprintf (PRINT_HIGH, "La zona %s esta abierta!\n", self->obj_name);
+		Control_Announce ("La zona esta abierta!\nCapturenla!");
+	}
+
+	owner = level.control_owner - 1;
+
+	// equipo atacante: el unico equipo presente que no es dueno
+	team = -1;
+	if (level.control_inzone[0] && !level.control_inzone[1])
+		team = 0;
+	else if (level.control_inzone[1] && !level.control_inzone[0])
+		team = 1;
+
+	if (team >= 0 && team != owner)
+	{
+		// 1 jugador = x1, 2 = x1.5, 3 o mas = x2
+		n = level.control_inzone[team];
+		mult = (n >= 3) ? 2.0 : (n == 2) ? 1.5 : 1.0;
+		rate = 100.0 / Control_Cvar (control_captime, 15) * mult * FRAMETIME;
+
+		if (level.control_capteam && level.control_capteam != team + 1)
+		{
+			// primero se deshace el avance del otro equipo
+			level.control_capture -= rate;
+			if (level.control_capture <= 0)
+			{
+				level.control_capture = 0;
+				level.control_capteam = 0;
+			}
+		}
+		else
+		{
+			level.control_capteam = team + 1;
+			level.control_capture += rate;
+
+			if (level.control_capture >= 100)
+			{
+				Control_Capture (self, team);
+				owner = team;
+			}
+		}
+	}
+	else if (!(level.control_inzone[0] && level.control_inzone[1]) && level.control_capture > 0)
+	{
+		// nadie disputa la zona: el avance de la captura se pierde
+		level.control_capture -= 100.0 / Control_Cvar (control_captime, 15) * FRAMETIME;
+		if (level.control_capture <= 0)
+		{
+			level.control_capture = 0;
+			level.control_capteam = 0;
+		}
+	}
+
+	if (owner >= 0)
+	{
+		enemy = (owner + 1) % MAX_TEAMS;
+
+		// el control solo sube con el dueno dentro y sin rivales (vacia o disputada se congela)
+		if (level.control_inzone[owner] && !level.control_inzone[enemy])
+		{
+			before = (int)level.control_pct[owner];
+			level.control_pct[owner] += 100.0 / Control_Cvar (control_holdtime, 120) * FRAMETIME;
+			after = (int)level.control_pct[owner];
+
+			for (i = 0; i < sizeof(milestones) / sizeof(milestones[0]); i++)
+			{
+				if (before < milestones[i] && after >= milestones[i])
+					safe_bprintf (PRINT_HIGH, "Equipo %s lleva %i/100 de control de la zona.\n", team_list[owner]->teamname, milestones[i]);
+			}
+		}
+
+		if (level.control_pct[owner] >= 100)
+		{
+			if (level.control_inzone[enemy] || level.control_capture > 0)
+			{
+				// tiempo extra: no se gana mientras quede captura rival en curso
+				level.control_pct[owner] = 99.9;
+
+				if (!level.control_overtime)
+				{
+					level.control_overtime = true;
+					Control_Announce ("TIEMPO EXTRA!");
+					safe_bprintf (PRINT_HIGH, "Tiempo extra! %s debe aguantar en la zona hasta borrar la captura rival.\n", team_list[owner]->teamname);
+				}
+			}
+			else
+			{
+				level.control_pct[owner] = 100;
+				level.control_winner = owner + 1;
+			}
+		}
+	}
+
+	for (i = 0; i < MAX_TEAMS; i++)
+	{
+		if (team_list[i])
+			team_list[i]->score = (int)level.control_pct[i];
+	}
+
+	Control_ZoneMessage (self);
+}
+
+void SP_objective_control (edict_t *self)
+{
+	if (!deathmatch->value || !control_mode->value)
+	{
+		G_FreeEdict (self);
+		return;
+	}
+
+	if (level.control_zone)
+	{
+		gi.dprintf ("objective_control: solo se admite una zona por mapa, se ignora la de %s\n", vtos(self->s.origin));
+		G_FreeEdict (self);
+		return;
+	}
+
+	if (!self->obj_name)
+		self->obj_name = "Zona";
+	if (!self->obj_area)
+		self->obj_area = 192;
+
+	// count guarda la tolerancia de altura
+	self->count = st.height ? st.height : 96;
+
+	if (st.polygon)
+	{
+		char	*s = st.polygon;
+		float	x, y;
+		int		n;
+
+		while (level.control_numpoints < CONTROL_MAX_POINTS &&
+			sscanf (s, "%f %f%n", &x, &y, &n) == 2)
+		{
+			level.control_poly[level.control_numpoints][0] = x;
+			level.control_poly[level.control_numpoints][1] = y;
+			level.control_numpoints++;
+			s += n;
+		}
+
+		if (level.control_numpoints < 3)
+		{
+			gi.dprintf ("objective_control: \"polygon\" necesita al menos 3 puntos, se usa el radio\n");
+			level.control_numpoints = 0;
+		}
+	}
+
+	self->movetype = MOVETYPE_NONE;
+	self->solid = SOLID_NOT;
+	self->s.modelindex = 0;
+	gi.linkentity (self);
+
+	self->think = objective_control_think;
+	self->nextthink = level.time + FRAMETIME;
+
+	level.control_zone = self;
+
+	if (level.control_numpoints)
+		gi.dprintf ("objective_control \"%s\" en %s, poligono de %i puntos, altura %i\n",
+			self->obj_name, vtos(self->s.origin), level.control_numpoints, self->count);
+	else
+		gi.dprintf ("objective_control \"%s\" en %s, radio %i, altura %i\n",
+			self->obj_name, vtos(self->s.origin), (int)self->obj_area, self->count);
+}
+
+// cambia los titulos del HUD: POINTS muestra el % de zona y TIME el avance de captura
+char *Control_StatusBar (char *statusbar)
+{
+	static char	buf[4096];
+	char		*p;
+
+	strncpy (buf, statusbar, sizeof(buf) - 1);
+	buf[sizeof(buf) - 1] = 0;
+
+	if ((p = strstr(buf, "\"POINTS\"")) != NULL)
+		memcpy (p, "\"ZONA %\"", 8);
+	if ((p = strstr(buf, "\"TIME\"")) != NULL)
+		memcpy (p, "\"TOMA\"", 6);
+
+	return buf;
+}
+
+// maximo de granadas por jugador en el modo control (0 = sin granadas, -1 = sin limite)
+int Control_GrenadeLimit (void)
+{
+	if (!level.control_zone || !control_grenades || control_grenades->value < 0)
+		return -1;
+
+	return (int)control_grenades->value;
+}
+
+// clases que no se pueden usar en el modo control (el ingeniero, salvo control_engineer 1)
+qboolean Control_ClassBanned (int mos)
+{
+	if (!level.control_zone)
+		return false;
+
+	return (mos == ENGINEER && control_engineer && !control_engineer->value);
+}
+
+void Control_HudStats (edict_t *ent)
+{
+	if (!level.control_zone)
+		return;
+
+	if (level.control_capteam && level.control_capture > 0)
+	{
+		ent->client->ps.stats[STAT_TIMER2] = (level.control_capture < 1) ? 1 : (int)level.control_capture;
+		ent->client->ps.stats[STAT_TIMER2_ICON] = gi.imageindex (va("teams/%s", team_list[level.control_capteam - 1]->teamid));
+	}
+	else
+		ent->client->ps.stats[STAT_TIMER2] = 0;
+}

@@ -112,6 +112,13 @@ void Give_Class_Weapon(edict_t *ent)
 
 	client=ent->client;
 
+	// modo control de zona: clase deshabilitada, aparece como infanteria
+	if (Control_ClassBanned (client->resp.mos))
+	{
+		client->resp.mos = INFANTRY;
+		safe_cprintf (ent, PRINT_HIGH, "El ingeniero no esta disponible en el modo control.\n");
+	}
+
 
 	if (knifefest->value)
 	{
@@ -168,6 +175,8 @@ void Give_Class_Weapon(edict_t *ent)
 	{ 
 		int random_value = (rand() % 9); // `rand() % 9` genera [0, 8] que son los numeros correspondientes a las clases.
 		client->resp.mos = random_value; // Le asignamos el numero generado.
+		if (Control_ClassBanned (client->resp.mos))
+			client->resp.mos = INFANTRY;
 		item = FindItemInTeam(client->resp.team_on->mos[client->resp.mos]->weapon1,
 							  client->resp.team_on->teamid); // Le entregamos el arma principal a la clase sorteada.
 	}
@@ -223,10 +232,20 @@ void Give_Class_Weapon(edict_t *ent)
 	//{
 
 	if (!no_nades->value)//ddaylife
+	{
 		// kernel: this forces team id when assigns grenades (italians has potato masher like germans)
 		if ((item = FindItemInTeam(client->resp.team_on->mos[client->resp.mos]->grenades,
                                    client->resp.team_on->teamid)))
 			client->pers.inventory[ITEM_INDEX(item)]=client->resp.team_on->mos[client->resp.mos]->grenadenum;
+
+		// modo control de zona: limite de granadas (tambien para las que se recogen)
+		if (item && Control_GrenadeLimit() >= 0)
+		{
+			client->pers.max_grenades = Control_GrenadeLimit();
+			if (client->pers.inventory[ITEM_INDEX(item)] > client->pers.max_grenades)
+				client->pers.inventory[ITEM_INDEX(item)] = client->pers.max_grenades;
+		}
+	}
 	//}
 	//if(client->resp.team_on->mos[client->resp.mos]->special)
 	//{

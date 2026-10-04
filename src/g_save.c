@@ -127,6 +127,7 @@ field_t fields[] = {
 	{"lip", STOFS(lip), F_INT, FFL_SPAWNTEMP},
 	{"distance", STOFS(distance), F_INT, FFL_SPAWNTEMP},
 	{"height", STOFS(height), F_INT, FFL_SPAWNTEMP},
+	{"polygon", STOFS(polygon), F_LSTRING, FFL_SPAWNTEMP},
 	{"noise", STOFS(noise), F_LSTRING, FFL_SPAWNTEMP},
 	{"pausetime", STOFS(pausetime), F_FLOAT, FFL_SPAWNTEMP},
 	{"item", STOFS(item), F_LSTRING, FFL_SPAWNTEMP},
@@ -417,6 +418,14 @@ void InitGame (void)
 
 	// kernel: modes for CTB: (0 disabled, 1 one briefcase, 2 many briefcases)
 	ctb_mode = gi.cvar("ctb_mode", "0", CVAR_LATCH);
+
+	// modo control de zona: carga ents/<mapa>.ctl con una entidad objective_control
+	control_mode = gi.cvar("control_mode", "0", CVAR_LATCH);
+	control_lock = gi.cvar("control_lock", "30", 0);
+	control_captime = gi.cvar("control_captime", "15", 0);
+	control_holdtime = gi.cvar("control_holdtime", "120", 0);
+	control_grenades = gi.cvar("control_grenades", "0", 0);
+	control_engineer = gi.cvar("control_engineer", "0", 0);
 
 	// kernel: time to display the MOTD at beginning of level
 	motd_time = gi.cvar("motd_time", "10", 0);

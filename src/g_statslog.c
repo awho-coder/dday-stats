@@ -775,6 +775,8 @@ void StatsLog_MatchBegin (void)
 		mode = "campaign";
 	else if (ctb_mode->value)
 		mode = "ctb";
+	else if (level.control_zone)
+		mode = "control";
 	else
 		mode = "dm";
 

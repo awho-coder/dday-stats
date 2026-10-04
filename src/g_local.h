@@ -475,6 +475,24 @@ typedef struct
 	int 		allied_sandbags;
 	int 		axis_sandbags;
 
+	// modo control de zona (control_mode)
+#define CONTROL_MAX_POINTS	32
+	edict_t		*control_zone;		// zona en disputa, NULL si el mapa no tiene
+	int			control_numpoints;	// puntos del borde si la zona es un poligono (0 = circulo)
+	float		control_poly[CONTROL_MAX_POINTS][2];
+	int			control_owner;		// equipo dueno + 1 (0 = neutral)
+	int			control_capteam;	// equipo que avanza la captura + 1 (0 = nadie)
+	float		control_capture;	// avance de la captura (0-100)
+	float		control_pct[MAX_TEAMS];	// avance de control de cada equipo (0-100)
+	int			control_inzone[MAX_TEAMS];	// jugadores vivos de cada equipo en la zona
+	qboolean	control_unlocked;
+	qboolean	control_overtime;
+	int			control_winner;		// equipo ganador + 1 (0 = nadie todavia)
+	float		control_start;		// level.time en que empezo la disputa (0 = sin empezar)
+	float		control_gamestart;	// gameStartTime visto al empezar (cambia con cada cuenta regresiva)
+	float		control_msghold;	// hasta cuando no se tapa un aviso general con el estado de la zona
+	int			control_msgstate[MAX_CLIENTS];	// ultimo estado mostrado a cada jugador (0 = fuera)
+
 } level_locals_t;
 
 
@@ -490,6 +508,7 @@ typedef struct
 	float		skyrotate;
 	vec3_t		skyaxis;
 	char		*nextmap;
+	char		*polygon;	// objective_control: "x y x y ..." del borde de la zona
 
 
 	int			lip;
@@ -684,6 +703,12 @@ extern	cvar_t	*deathmatch;
 
 extern	cvar_t	*coop;
 extern	cvar_t	*ctb_mode; // kernel: selects mode for CTB (0 disabled, 1 one briefcase, 2 many briefcases)
+extern	cvar_t	*control_mode;		// modo control de zona (0 desactivado, 1 activo)
+extern	cvar_t	*control_lock;		// segundos que la zona esta bloqueada al empezar
+extern	cvar_t	*control_captime;	// segundos que tarda un jugador solo en capturar la zona
+extern	cvar_t	*control_holdtime;	// segundos de control para llegar al 100%
+extern	cvar_t	*control_engineer;	// 0 = clase ingeniero deshabilitada en este modo, 1 = permitida
+extern	cvar_t	*control_grenades;	// maximo de granadas por jugador en este modo (0 = sin granadas, -1 = sin limite)
 
 extern	cvar_t	*dmflags;
 
@@ -2267,6 +2292,10 @@ void SP_objective_flag (edict_t *self);
 void briefcase_warn (edict_t *ent);//faf;  ctb code
 qboolean Pickup_Briefcase (edict_t *ent, edict_t *other); 
 void Drop_Briefcase (edict_t *ent, gitem_t *item);
+char *Control_StatusBar (char *statusbar);
+void Control_HudStats (edict_t *ent);
+int Control_GrenadeLimit (void);
+qboolean Control_ClassBanned (int mos);
 
 #include "g_statslog.h"
 

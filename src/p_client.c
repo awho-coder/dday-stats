@@ -3367,7 +3367,8 @@ qboolean Setup_Map_Vote (void)
 				if (MapExists(s))
 				{
 					// kernel: CTB mode requeries enabled maps
-					if (!ctb_mode->value || (ctb_mode->value && TestEntFile(s, "ctb")))
+					if ((!ctb_mode->value || TestEntFile(s, "ctb")) &&
+						(!control_mode->value || TestEntFile(s, "ctl")))
 					{
 						maplisttxt[c] = s;
 						mapcount++;

@@ -223,6 +223,7 @@ void SP_Spawn_Toggle (edict_t *self);
 
 void SP_item_botroam (edict_t *self);	//JABot
 void SP_ctb_base(edict_t *self);
+void SP_objective_control(edict_t *self);
 
 
 
@@ -423,6 +424,7 @@ spawn_t spawns[MAX_EDICTS] = {
 	{"item_botroam", SP_item_botroam},	//JABot
 
 	{"ctb_base", SP_ctb_base},//faf:ctb code
+	{"objective_control", SP_objective_control},
 
 
 	{NULL, NULL}
@@ -965,6 +967,34 @@ char *LoadCTBFile(char *mapname, char *entities)
 }
 
 
+// modo control de zona: ents/<mapa>.ctl agrega la entidad objective_control
+char *LoadCTLFile(char *mapname, char *entities)
+{
+	char entfilename[MAX_QPATH] = "";
+	char *newentities;
+	int	i;
+
+	sprintf(entfilename, "ents/%s.ctl", mapname);
+
+	// convert string to all lowercase (for Linux)
+	for (i = 0; entfilename[i]; i++)
+		entfilename[i] = tolower(entfilename[i]);
+
+	newentities = ReadEntFile(entfilename);
+
+	if (newentities)
+	{
+		gi.dprintf("%s.ctl Loaded\n", mapname);
+		return newentities;	// reassign the ents
+	}
+	else
+	{
+		gi.dprintf("No .ctl File for %s.bsp\n", mapname);
+		return LoadEntFile(mapname, entities);
+	}
+}
+
+
 void LoadCampFile(void)
 {
 	char	cmpfilename[MAX_QPATH] = "";
@@ -1136,6 +1166,8 @@ void SpawnEntities2 (char *mapname, char *entities, char *spawnpoint)
 		entities = LoadCTBFile(mapname, entities);
 	else if (ctc->value)
 		entities = LoadCTCFile(mapname,entities);
+	else if (deathmatch->value && control_mode->value)
+		entities = LoadCTLFile(mapname, entities);
 	else
 		entities = LoadEntFile(mapname, entities);//faf
 // parse ents
@@ -1546,7 +1578,11 @@ void SP_worldspawn (edict_t *ent)
 	gi.configstring (CS_MAXCLIENTS, va("%i", (int)(maxclients->value) ) );
 
 	// status bar program
-	gi.configstring (CS_STATUSBAR, dday_statusbar);
+	// los titulos de zona solo si el mapa tiene .ctl (sin .ctl se juega normal)
+	if (deathmatch->value && control_mode->value && TestEntFile(level.mapname, "ctl"))
+		gi.configstring (CS_STATUSBAR, Control_StatusBar(dday_statusbar));
+	else
+		gi.configstring (CS_STATUSBAR, dday_statusbar);
 
 	//---------------
 

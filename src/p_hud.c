@@ -1720,6 +1720,8 @@ void G_SetStats (edict_t *ent)
 			ent->client->ps.stats[STAT_TIMER2] = 0;
 	}
 
+	// modo control de zona: TIMER2 muestra el avance de la captura
+	Control_HudStats (ent);
 
 
 	//

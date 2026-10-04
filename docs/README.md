@@ -46,6 +46,7 @@ autocontenido en `knowledge/viz.html`.
 | Documento | Para qué |
 |---|---|
 | [`../README.md`](../README.md) | Qué es el repositorio (código base del juego) y compilación. |
+| [`modos/CONTROL.md`](modos/CONTROL.md) | Modo control de zona (estilo Overwatch): reglas, cvars y cómo agregar la zona a un mapa. |
 | [`../readme.linux.txt`](../readme.linux.txt) | Notas de compilación en Linux. |
 | [`../readme.amiga.txt`](../readme.amiga.txt) | Notas históricas (Amiga). |
 | [`../ChangeLog.txt`](../ChangeLog.txt) | Cambios por versión del mod. |

@@ -578,7 +578,14 @@ void DoEndOM(edict_t *ent /*,qboolean notOfficer*/)
 	{
 		if (ent->client->resp.mos == NONE || ent->client->resp.mos != ent->client->resp.newmos)
 		{
-			if (OpenSpot(ent, ent->client->resp.newmos))
+			// modo control de zona: clase deshabilitada
+			if (Control_ClassBanned (ent->client->resp.newmos))
+			{
+				safe_centerprintf(ent, "El ingeniero no esta disponible\nen el modo control.\n");
+				if (ent->client->resp.mos == NONE)
+					ent->client->resp.mos = INFANTRY;
+			}
+			else if (OpenSpot(ent, ent->client->resp.newmos))
 			{
 				ent->client->resp.mos =  ent->client->resp.newmos;
 				ent->client->resp.team_on->mos[ent->client->resp.mos]->available--;
@@ -844,7 +851,7 @@ void M_ChooseMOS(edict_t *ent)
 			maxSlots = mapclasslimits[ent->client->resp.team_on->index][i].limit;
 		}
 
-		if (maxSlots < 0)
+		if (maxSlots < 0 || Control_ClassBanned (i))
 			maxSlots = 0;
 
 		// Setup text variable

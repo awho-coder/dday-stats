@@ -46,6 +46,12 @@ edict_t		*g_edicts;
 cvar_t	*deathmatch;
 cvar_t	*coop;
 cvar_t	*ctb_mode; // kernel: selects mode for CTB (0 disabled, 1 one briefcase, 2 many briefcases)
+cvar_t	*control_mode;
+cvar_t	*control_lock;
+cvar_t	*control_captime;
+cvar_t	*control_holdtime;
+cvar_t	*control_grenades;
+cvar_t	*control_engineer;
 cvar_t	*dmflags;
 cvar_t	*skill;
 cvar_t	*fraglimit;
@@ -1104,6 +1110,19 @@ void CheckDMRules (void)
 	}
 //faf end
 
+	// modo control de zona: gana el primer equipo que llega al 100%
+	if (level.control_winner)
+	{
+		i = level.control_winner - 1;
+		safe_bprintf (PRINT_HIGH, "Team %s is victorious (zona %s controlada)!\n",
+			team_list[i]->teamname, level.control_zone->obj_name);
+		Last_Team_Winner = i;
+		ResetCountTimer();
+		ResetFreezeMode();
+		EndDMLevel ();
+		return;
+	}
+
 
 	for(i=0; i < MAX_TEAMS;i++) 
 	{
@@ -1293,9 +1312,9 @@ void CheckDMRules (void)
 		{
 			safe_bprintf(PRINT_HIGH, "Timelimit hit.\n");
 
-			if (ctb_mode->value == 2)
+			if (ctb_mode->value == 2 || level.control_zone)
 			{
-				// kernel: in CTB only points win
+				// kernel: in CTB only points win (control de zona: points = % de zona)
 				if (team_list[0]->score > team_list[1]->score)
 					Last_Team_Winner = 0;
 				else if (team_list[0]->score < team_list[1]->score)
@@ -1322,8 +1341,8 @@ void CheckDMRules (void)
 		}
 	}
 
-	// kernel: CTB mode does not count frags to finish
-	if (fraglimit->value && !ctb_mode->value)
+	// kernel: CTB mode does not count frags to finish (control de zona tampoco)
+	if (fraglimit->value && !ctb_mode->value && !level.control_zone)
 	{
 		// kernel: check if fraglimit changed its value to update need_kills properties
 		for (i = 0; i < MAX_TEAMS; ++i)
