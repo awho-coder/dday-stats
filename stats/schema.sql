@@ -78,6 +78,15 @@ CREATE TABLE IF NOT EXISTS match_players (
     classes      jsonb   NOT NULL DEFAULT '{}'::jsonb,  -- segundos por clase
     main_class   text,
     result       char(1),                    -- W, L, D o NULL (sin ganador)
+    -- rachas de la partida: veces que llego a cada anuncio de KillingSpree()
+    -- (umbrales en streak_base()) y rachas ajenas que corto. Las calcula
+    -- apply_rollups a partir de la tabla kills.
+    sprees       integer NOT NULL DEFAULT 0, -- KILLING SPREE
+    rampages     integer NOT NULL DEFAULT 0, -- RAMPAGE
+    dominatings  integer NOT NULL DEFAULT 0, -- DOMINATING
+    unstoppables integer NOT NULL DEFAULT 0, -- UNSTOPPABLE
+    godlikes     integer NOT NULL DEFAULT 0, -- GODLIKE
+    streaks_ended integer NOT NULL DEFAULT 0, -- "has ENDED <x> streak"
     PRIMARY KEY (match_id, player_id)
 );
 CREATE INDEX IF NOT EXISTS match_players_player_idx ON match_players (player_id);
@@ -136,6 +145,22 @@ ALTER TABLE match_players ADD COLUMN IF NOT EXISTS best_streak  integer NOT NULL
 ALTER TABLE match_players ADD COLUMN IF NOT EXISTS helmet_saves integer NOT NULL DEFAULT 0;
 ALTER TABLE match_players ADD COLUMN IF NOT EXISTS foot_saves   integer NOT NULL DEFAULT 0;
 ALTER TABLE match_players ADD COLUMN IF NOT EXISTS deflected    integer NOT NULL DEFAULT 0;
+
+-- conteo de rachas por nivel: si la base no lo tenia, se agregan las columnas y
+-- al final se recalculan los resumenes (rebuild_rollups) para rellenar el historial
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'match_players' AND column_name = 'godlikes') THEN
+        CREATE TEMP TABLE streak_backfill_needed () ON COMMIT DROP;
+    END IF;
+END $$;
+ALTER TABLE match_players ADD COLUMN IF NOT EXISTS sprees        integer NOT NULL DEFAULT 0;
+ALTER TABLE match_players ADD COLUMN IF NOT EXISTS rampages      integer NOT NULL DEFAULT 0;
+ALTER TABLE match_players ADD COLUMN IF NOT EXISTS dominatings   integer NOT NULL DEFAULT 0;
+ALTER TABLE match_players ADD COLUMN IF NOT EXISTS unstoppables  integer NOT NULL DEFAULT 0;
+ALTER TABLE match_players ADD COLUMN IF NOT EXISTS godlikes      integer NOT NULL DEFAULT 0;
+ALTER TABLE match_players ADD COLUMN IF NOT EXISTS streaks_ended integer NOT NULL DEFAULT 0;
 
 -- rellena las columnas nuevas en filas cargadas antes de que existieran
 UPDATE match_players mp SET
@@ -229,6 +254,12 @@ CREATE TABLE IF NOT EXISTS player_stats (
     helmet_saves  integer NOT NULL DEFAULT 0,
     foot_saves    integer NOT NULL DEFAULT 0,
     deflected     integer NOT NULL DEFAULT 0,
+    sprees        integer NOT NULL DEFAULT 0,
+    rampages      integer NOT NULL DEFAULT 0,
+    dominatings   integer NOT NULL DEFAULT 0,
+    unstoppables  integer NOT NULL DEFAULT 0,
+    godlikes      integer NOT NULL DEFAULT 0,
+    streaks_ended integer NOT NULL DEFAULT 0,
     longest_kill  integer,
     last_match    timestamptz,
     PRIMARY KEY (player_id, season_id, kind, event)
@@ -303,6 +334,12 @@ CREATE TABLE IF NOT EXISTS map_weapon_stats (
 ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS helmet_saves integer NOT NULL DEFAULT 0;
 ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS foot_saves   integer NOT NULL DEFAULT 0;
 ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS deflected    integer NOT NULL DEFAULT 0;
+ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS sprees        integer NOT NULL DEFAULT 0;
+ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS rampages      integer NOT NULL DEFAULT 0;
+ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS dominatings   integer NOT NULL DEFAULT 0;
+ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS unstoppables  integer NOT NULL DEFAULT 0;
+ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS godlikes      integer NOT NULL DEFAULT 0;
+ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS streaks_ended integer NOT NULL DEFAULT 0;
 
 -- actividad por dia (hora de Chile)
 CREATE TABLE IF NOT EXISTS daily_stats (
@@ -338,15 +375,80 @@ LANGUAGE sql STABLE AS $$
     END;
 $$;
 
+-- Kills seguidas para el primer anuncio de racha: igual al cvar exbattleinfo
+-- del servidor (server.cfg: set exbattleinfo 3). Los niveles siguen cada 3:
+-- KILLING SPREE = base, RAMPAGE = base+3, DOMINATING = base+6,
+-- UNSTOPPABLE = base+9, GODLIKE = base+12. Si se cambia, ejecutar
+-- SELECT rebuild_rollups(); para recalcular el historial.
+CREATE OR REPLACE FUNCTION streak_base() RETURNS integer
+LANGUAGE sql IMMUTABLE AS $$ SELECT 3 $$;
+
 -- Suma las partidas indicadas a las tablas de resumen. Cada partida debe
 -- sumarse una sola vez (ingest.py lo hace en la misma transaccion del insert).
 CREATE OR REPLACE FUNCTION apply_rollups(ids text[]) RETURNS void
 LANGUAGE plpgsql AS $$
 BEGIN
+    -- Rachas por nivel, reconstruidas desde kills con las reglas de
+    -- KillingSpree() / StatsLog_Streak(): suma una kill a un enemigo hecha por
+    -- el atacante directo (el desangrado no cuenta), el fuego amigo la corta y
+    -- morir la reinicia. Cada racha cuenta en todos los niveles que alcanzo.
+    -- streaks_ended: rachas ajenas (>= base) que el jugador corto matando.
+    WITH ev AS (
+        SELECT k.match_id, k.killer_id AS player_id, k.t, k.id, 0 AS ord,
+               k.friendly_fire::int AS reset,
+               (NOT k.friendly_fire AND NOT k.suicide AND k.killer_id <> k.victim_id
+                AND k.mod <> 'wound')::int AS kill,
+               NULL::integer AS ender
+        FROM kills k
+        WHERE k.match_id = ANY (ids) AND k.killer_id IS NOT NULL
+        UNION ALL
+        SELECT k.match_id, k.victim_id, k.t, k.id, 1, 1, 0,
+               CASE WHEN k.killer_id <> k.victim_id AND k.mod <> 'wound' THEN k.killer_id END
+        FROM kills k
+        WHERE k.match_id = ANY (ids)
+    ),
+    runs AS (
+        SELECT ev.*, sum(ev.reset) OVER (PARTITION BY ev.match_id, ev.player_id
+                                         ORDER BY ev.t, ev.id, ev.ord
+                                         ROWS UNBOUNDED PRECEDING) AS run
+        FROM ev
+    ),
+    lens AS (
+        SELECT match_id, player_id, run, sum(kill) AS len
+        FROM runs GROUP BY match_id, player_id, run
+    ),
+    tiers AS (
+        SELECT l.match_id, l.player_id,
+               count(*) FILTER (WHERE l.len >= b.v)      AS sprees,
+               count(*) FILTER (WHERE l.len >= b.v + 3)  AS rampages,
+               count(*) FILTER (WHERE l.len >= b.v + 6)  AS dominatings,
+               count(*) FILTER (WHERE l.len >= b.v + 9)  AS unstoppables,
+               count(*) FILTER (WHERE l.len >= b.v + 12) AS godlikes
+        FROM lens l, (SELECT streak_base() AS v) b
+        GROUP BY l.match_id, l.player_id
+    ),
+    ended AS (
+        -- la muerte que abre la racha n cierra la racha n-1 de la victima
+        SELECT r.match_id, r.ender AS player_id, count(*) AS n
+        FROM runs r
+        JOIN lens l ON l.match_id = r.match_id AND l.player_id = r.player_id AND l.run = r.run - 1
+        WHERE r.ord = 1 AND r.ender IS NOT NULL AND l.len >= streak_base()
+        GROUP BY r.match_id, r.ender
+    )
+    UPDATE match_players mp SET
+        sprees = coalesce(t.sprees, 0), rampages = coalesce(t.rampages, 0),
+        dominatings = coalesce(t.dominatings, 0), unstoppables = coalesce(t.unstoppables, 0),
+        godlikes = coalesce(t.godlikes, 0), streaks_ended = coalesce(e.n, 0)
+    FROM match_players m2
+    LEFT JOIN tiers t ON t.match_id = m2.match_id AND t.player_id = m2.player_id
+    LEFT JOIN ended e ON e.match_id = m2.match_id AND e.player_id = m2.player_id
+    WHERE m2.match_id = mp.match_id AND m2.player_id = mp.player_id AND mp.match_id = ANY (ids);
+
     INSERT INTO player_stats AS s (player_id, season_id, kind, event, matches, wins, losses, draws,
         kills, deaths, human_kills, human_deaths, headshots, hits, misses, teamkills, suicides,
         objectives, seconds, best_streak, max_kills, longest_kill, last_match,
-        helmet_saves, foot_saves, deflected)
+        helmet_saves, foot_saves, deflected,
+        sprees, rampages, dominatings, unstoppables, godlikes, streaks_ended)
     SELECT mp.player_id, m.season_id, match_category(m.kind, m.event), m.event, count(*),
            count(*) FILTER (WHERE mp.result = 'W'), count(*) FILTER (WHERE mp.result = 'L'),
            count(*) FILTER (WHERE mp.result = 'D'),
@@ -354,7 +456,9 @@ BEGIN
            sum(mp.headshots), sum(mp.hits), sum(mp.misses), sum(mp.teamkills), sum(mp.suicides),
            sum(mp.objectives), sum(mp.time_team0 + mp.time_team1), max(mp.best_streak),
            max(mp.kills), max(lk.longest), max(m.started_at),
-           sum(mp.helmet_saves), sum(mp.foot_saves), sum(mp.deflected)
+           sum(mp.helmet_saves), sum(mp.foot_saves), sum(mp.deflected),
+           sum(mp.sprees), sum(mp.rampages), sum(mp.dominatings), sum(mp.unstoppables),
+           sum(mp.godlikes), sum(mp.streaks_ended)
     FROM match_players mp
     JOIN matches m ON m.id = mp.match_id
     JOIN players p ON p.id = mp.player_id
@@ -381,7 +485,12 @@ BEGIN
         last_match = greatest(s.last_match, EXCLUDED.last_match),
         helmet_saves = s.helmet_saves + EXCLUDED.helmet_saves,
         foot_saves = s.foot_saves + EXCLUDED.foot_saves,
-        deflected = s.deflected + EXCLUDED.deflected;
+        deflected = s.deflected + EXCLUDED.deflected,
+        sprees = s.sprees + EXCLUDED.sprees, rampages = s.rampages + EXCLUDED.rampages,
+        dominatings = s.dominatings + EXCLUDED.dominatings,
+        unstoppables = s.unstoppables + EXCLUDED.unstoppables,
+        godlikes = s.godlikes + EXCLUDED.godlikes,
+        streaks_ended = s.streaks_ended + EXCLUDED.streaks_ended;
 
     INSERT INTO player_map_stats AS s (player_id, map, kind, matches, wins, kills, deaths, seconds, best_streak)
     SELECT mp.player_id, m.map, m.kind, count(*), count(*) FILTER (WHERE mp.result = 'W'),
@@ -502,7 +611,8 @@ DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM matches)
        AND (NOT EXISTS (SELECT 1 FROM player_stats) OR NOT EXISTS (SELECT 1 FROM map_stats)
-            OR NOT EXISTS (SELECT 1 FROM daily_stats)) THEN
+            OR NOT EXISTS (SELECT 1 FROM daily_stats)
+            OR to_regclass('pg_temp.streak_backfill_needed') IS NOT NULL) THEN
         PERFORM rebuild_rollups();
     END IF;
 END $$;
@@ -527,6 +637,7 @@ DROP FUNCTION IF EXISTS ladder_streak(text, integer, text);
 DROP FUNCTION IF EXISTS player_totals(text, text, text) CASCADE;
 DROP FUNCTION IF EXISTS ladder_luck(integer, text, text);
 DROP FUNCTION IF EXISTS ladder_unlucky(integer, text, text);
+DROP FUNCTION IF EXISTS ladder_streak_tiers(integer, text, text);
 
 -- Totales por jugador para una temporada, categoria y torneo:
 --   season: 'current' (la vigente), 'all' (historico) o el nombre de una temporada
@@ -542,7 +653,9 @@ RETURNS TABLE (player_id integer, name text, matches bigint, wins bigint, losses
                suicides bigint, objectives bigint, best_streak integer, hours_played numeric,
                kills_per_min numeric, win_pct numeric, most_kills_match integer,
                longest_kill integer, last_match timestamptz,
-               helmet_saves bigint, foot_saves bigint, luck bigint, deflected bigint)
+               helmet_saves bigint, foot_saves bigint, luck bigint, deflected bigint,
+               sprees bigint, rampages bigint, dominatings bigint, unstoppables bigint,
+               godlikes bigint, streaks_ended bigint)
 LANGUAGE sql STABLE AS $$
     WITH sid AS (SELECT season_lookup(season) AS id),
     s AS (
@@ -554,7 +667,10 @@ LANGUAGE sql STABLE AS $$
                sum(ps.seconds) AS seconds, max(ps.best_streak) AS best_streak,
                max(ps.max_kills) AS max_kills, max(ps.longest_kill) AS longest_kill,
                max(ps.last_match) AS last_match, sum(ps.helmet_saves) AS helmet_saves,
-               sum(ps.foot_saves) AS foot_saves, sum(ps.deflected) AS deflected
+               sum(ps.foot_saves) AS foot_saves, sum(ps.deflected) AS deflected,
+               sum(ps.sprees) AS sprees, sum(ps.rampages) AS rampages,
+               sum(ps.dominatings) AS dominatings, sum(ps.unstoppables) AS unstoppables,
+               sum(ps.godlikes) AS godlikes, sum(ps.streaks_ended) AS streaks_ended
         FROM player_stats ps, sid
         WHERE (season = 'all' OR ps.season_id = sid.id)
           AND (match_kind = 'all' OR ps.kind = match_kind)
@@ -569,7 +685,8 @@ LANGUAGE sql STABLE AS $$
            round(s.seconds / 3600.0, 1), round(s.hk * 60.0 / greatest(s.seconds, 1), 2),
            round(100.0 * s.wins / greatest(s.wins + s.losses + s.draws, 1), 1),
            s.max_kills, s.longest_kill, s.last_match,
-           s.helmet_saves, s.foot_saves, s.helmet_saves + s.foot_saves, s.deflected
+           s.helmet_saves, s.foot_saves, s.helmet_saves + s.foot_saves, s.deflected,
+           s.sprees, s.rampages, s.dominatings, s.unstoppables, s.godlikes, s.streaks_ended
     FROM s
     JOIN players p ON p.id = s.player_id;
 $$;
@@ -660,6 +777,22 @@ LANGUAGE sql STABLE AS $$
     FROM player_totals(season, match_kind) t
     WHERE t.matches >= min_matches AND t.deflected > 0
     ORDER BY t.deflected DESC, t.name;
+$$;
+
+-- Rachas por nivel: quien mas veces llego a GODLIKE, UNSTOPPABLE, etc.
+CREATE FUNCTION ladder_streak_tiers(min_matches integer DEFAULT 1, match_kind text DEFAULT 'all',
+                                    season text DEFAULT 'current')
+RETURNS TABLE (pos bigint, name text, matches bigint, godlikes bigint, unstoppables bigint,
+               dominatings bigint, rampages bigint, sprees bigint, streaks_ended bigint,
+               best_streak integer)
+LANGUAGE sql STABLE AS $$
+    SELECT rank() OVER (ORDER BY t.godlikes DESC, t.unstoppables DESC, t.dominatings DESC,
+                                 t.rampages DESC, t.sprees DESC),
+           t.name, t.matches, t.godlikes, t.unstoppables, t.dominatings, t.rampages, t.sprees,
+           t.streaks_ended, t.best_streak
+    FROM player_totals(season, match_kind) t
+    WHERE t.matches >= min_matches AND (t.sprees > 0 OR t.streaks_ended > 0)
+    ORDER BY 1, t.name;
 $$;
 
 -- Temporadas y torneos
