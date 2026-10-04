@@ -69,7 +69,8 @@ typedef struct
 typedef struct
 {
 	qboolean	active;
-	char		name[STATS_NAME_LEN];
+	char		name[STATS_NAME_LEN];		// nombre registrado (unico entre los conectados)
+	char		netname[STATS_NAME_LEN];	// nombre limpio del jugador, para detectar cambios
 	qboolean	bot;
 	int			last_team;			// -2 desconocido, -1 observador, 0/1 equipo
 	int			team_time[MAX_TEAMS];	// segundos jugados en cada equipo
@@ -403,11 +404,25 @@ static void StatsLog_FlushPlayer (int slot, const char *reason)
 	memset (p, 0, sizeof(*p));
 }
 
+// el nombre ya lo usa otro jugador registrado en esta partida
+static qboolean StatsLog_NameTaken (const char *name, int except_slot)
+{
+	int i;
+
+	for (i = 0; i < MAX_CLIENTS; i++)
+	{
+		if (i != except_slot && sl.players[i].active && !strcmp (sl.players[i].name, name))
+			return true;
+	}
+	return false;
+}
+
 static stats_player_t *StatsLog_GetPlayer (edict_t *ent)
 {
-	int				slot;
+	int				slot, n;
 	stats_player_t	*p;
 	char			name[STATS_NAME_LEN];
+	char			suffix[8];
 
 	slot = StatsLog_SlotOf (ent);
 	if (slot < 0)
@@ -417,7 +432,7 @@ static stats_player_t *StatsLog_GetPlayer (edict_t *ent)
 	StatsLog_CleanName (ent->client->pers.netname, name, sizeof(name));
 
 	// la identidad es el nombre: si cambia, se cierra el registro anterior
-	if (p->active && strcmp (p->name, name))
+	if (p->active && strcmp (p->netname, name))
 		StatsLog_FlushPlayer (slot, "rename");
 
 	if (!p->active)
@@ -426,7 +441,16 @@ static stats_player_t *StatsLog_GetPlayer (edict_t *ent)
 		p->active = true;
 		p->bot = ent->ai ? true : false;
 		p->last_team = -2;
+		StatsLog_Copy (p->netname, name, sizeof(p->netname));
 		StatsLog_Copy (p->name, name, sizeof(p->name));
+
+		// dos conectados con el mismo nombre: el segundo queda como "nombre (2)"
+		for (n = 2; StatsLog_NameTaken (p->name, slot) && n < 100; n++)
+		{
+			Com_sprintf (suffix, sizeof(suffix), " (%d)", n);
+			Com_sprintf (p->name, sizeof(p->name), "%.*s%s",
+				(int)(sizeof(p->name) - 1 - strlen (suffix)), name, suffix);
+		}
 	}
 
 	return p;
@@ -484,6 +508,7 @@ static void StatsLog_ResetCounters (void)
 		p->bot = saved.bot;
 		p->last_team = saved.last_team;
 		memcpy (p->name, saved.name, sizeof(p->name));
+		memcpy (p->netname, saved.netname, sizeof(p->netname));
 
 		// los contadores del juego no se reinician: se toma su valor actual
 		// como punto de partida
