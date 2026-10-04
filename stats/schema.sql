@@ -928,4 +928,255 @@ GROUP BY weapon;
 CREATE VIEW v_daily_activity AS
 SELECT day, matches, players FROM daily_stats;
 
+------------------------------------------------------------------------------
+-- Comentarios del esquema (se ven en psql con \d+ y en clientes como
+-- Beekeeper/DBeaver/pgAdmin). Idempotente: se pueden reaplicar.
+------------------------------------------------------------------------------
+
+COMMENT ON TABLE players IS 'Jugador o bot. La identidad es el nombre (sin colores).';
+COMMENT ON COLUMN players.id IS 'Clave interna del jugador.';
+COMMENT ON COLUMN players.name IS 'Nombre del jugador (sin colores ni sufijos).';
+COMMENT ON COLUMN players.is_bot IS 'true si es un bot.';
+COMMENT ON COLUMN players.first_seen IS 'Primera vez visto.';
+COMMENT ON COLUMN players.last_seen IS 'Ultima vez visto.';
+
+COMMENT ON TABLE seasons IS 'Temporadas del ladder (se crean con "ingest.py --new-season NOMBRE").';
+COMMENT ON COLUMN seasons.id IS 'Clave interna de la temporada.';
+COMMENT ON COLUMN seasons.name IS 'Nombre de la temporada (unico).';
+COMMENT ON COLUMN seasons.starts_at IS 'Cuando empieza; dura hasta que empieza la siguiente.';
+
+COMMENT ON TABLE matches IS 'Una partida (un mapa jugado en un servidor).';
+COMMENT ON COLUMN matches.id IS 'Id de partida: <fecha>-<servidor>-<random>. Clave primaria.';
+COMMENT ON COLUMN matches.server IS 'Id del servidor (cvar stats_server).';
+COMMENT ON COLUMN matches.map IS 'Mapa jugado.';
+COMMENT ON COLUMN matches.mode IS 'Modo del juego: dm, ctb o campaign.';
+COMMENT ON COLUMN matches.kind IS 'Tipo de partida: public o duel (cvar stats_mode).';
+COMMENT ON COLUMN matches.event IS 'Torneo (cvar stats_event); cadena vacia = casual.';
+COMMENT ON COLUMN matches.season_id IS 'Temporada a la que pertenece la partida.';
+COMMENT ON COLUMN matches.tournament IS 'true si el servidor estaba en modo torneo.';
+COMMENT ON COLUMN matches.started_at IS 'Inicio de la partida.';
+COMMENT ON COLUMN matches.ended_at IS 'Fin de la partida (NULL si no se cerro).';
+COMMENT ON COLUMN matches.duration_s IS 'Duracion de la partida en segundos.';
+COMMENT ON COLUMN matches.winner IS 'Ganador: 0 aliados, 1 eje, -1 empate, NULL sin ganador.';
+COMMENT ON COLUMN matches.end_reason IS 'Como termino: normal, forced, other o aborted.';
+COMMENT ON COLUMN matches.team0_army IS 'Ejercito del equipo 0 (aliados).';
+COMMENT ON COLUMN matches.team1_army IS 'Ejercito del equipo 1 (eje).';
+COMMENT ON COLUMN matches.team0_score IS 'Puntaje final del equipo 0.';
+COMMENT ON COLUMN matches.team1_score IS 'Puntaje final del equipo 1.';
+COMMENT ON COLUMN matches.team0_kills IS 'Kills del equipo 0.';
+COMMENT ON COLUMN matches.team1_kills IS 'Kills del equipo 1.';
+COMMENT ON COLUMN matches.humans IS 'Cantidad de jugadores humanos en la partida.';
+COMMENT ON COLUMN matches.ranked IS 'true si la partida cuenta para el Elo.';
+COMMENT ON COLUMN matches.ingested_at IS 'Cuando se cargo en la base.';
+
+COMMENT ON TABLE match_players IS 'Resumen de un jugador en una partida (suma de sus tramos/reconexiones).';
+COMMENT ON COLUMN match_players.match_id IS 'Partida.';
+COMMENT ON COLUMN match_players.player_id IS 'Jugador.';
+COMMENT ON COLUMN match_players.team IS 'Equipo donde jugo mas tiempo: 0 aliados, 1 eje, -1 observador.';
+COMMENT ON COLUMN match_players.time_team0 IS 'Segundos jugados en el equipo 0.';
+COMMENT ON COLUMN match_players.time_team1 IS 'Segundos jugados en el equipo 1.';
+COMMENT ON COLUMN match_players.kills IS 'Kills a enemigos (humanos o bots).';
+COMMENT ON COLUMN match_players.deaths IS 'Todas las muertes.';
+COMMENT ON COLUMN match_players.human_kills IS 'Kills a enemigos humanos (lo que cuenta el ladder).';
+COMMENT ON COLUMN match_players.human_deaths IS 'Muertes por humanos, suicidio o entorno (lo que cuenta el ladder).';
+COMMENT ON COLUMN match_players.suicides IS 'Suicidios.';
+COMMENT ON COLUMN match_players.teamkills IS 'Fuego amigo.';
+COMMENT ON COLUMN match_players.headshots IS 'Kills con tiro a la cabeza.';
+COMMENT ON COLUMN match_players.objectives IS 'Objetivos completados (banderas, maletin, etc.).';
+COMMENT ON COLUMN match_players.best_streak IS 'Mejor racha de kills en la partida.';
+COMMENT ON COLUMN match_players.helmet_saves IS 'El casco le desvio un tiro a la cabeza.';
+COMMENT ON COLUMN match_players.foot_saves IS 'Sobrevivio con "almost lost a foot".';
+COMMENT ON COLUMN match_players.deflected IS 'Tiros suyos desviados por el casco de otro.';
+COMMENT ON COLUMN match_players.hits IS 'Disparos acertados.';
+COMMENT ON COLUMN match_players.misses IS 'Disparos fallados.';
+COMMENT ON COLUMN match_players.score IS 'Puntaje del juego.';
+COMMENT ON COLUMN match_players.points IS 'Puntos del juego.';
+COMMENT ON COLUMN match_players.classes IS 'Segundos jugados por clase (JSON: {"clase": segundos}).';
+COMMENT ON COLUMN match_players.main_class IS 'Clase en la que jugo mas tiempo.';
+COMMENT ON COLUMN match_players.result IS 'Resultado: W (gano), L (perdio), D (empate) o NULL (sin ganador).';
+COMMENT ON COLUMN match_players.sprees IS 'Veces que alcanzo KILLING SPREE.';
+COMMENT ON COLUMN match_players.rampages IS 'Veces que alcanzo RAMPAGE.';
+COMMENT ON COLUMN match_players.dominatings IS 'Veces que alcanzo DOMINATING.';
+COMMENT ON COLUMN match_players.unstoppables IS 'Veces que alcanzo UNSTOPPABLE.';
+COMMENT ON COLUMN match_players.godlikes IS 'Veces que alcanzo GODLIKE.';
+COMMENT ON COLUMN match_players.streaks_ended IS 'Rachas ajenas (>= base) que corto matando.';
+
+COMMENT ON TABLE kills IS 'Una kill (o suicidio/muerte por entorno). Tabla de detalle, la mas grande.';
+COMMENT ON COLUMN kills.id IS 'Clave interna.';
+COMMENT ON COLUMN kills.match_id IS 'Partida.';
+COMMENT ON COLUMN kills.t IS 'Segundos desde el inicio del mapa.';
+COMMENT ON COLUMN kills.killer_id IS 'Quien mato; NULL en suicidio o muerte por entorno.';
+COMMENT ON COLUMN kills.victim_id IS 'Quien murio.';
+COMMENT ON COLUMN kills.killer_team IS 'Equipo del killer (0 aliados, 1 eje).';
+COMMENT ON COLUMN kills.victim_team IS 'Equipo de la victima.';
+COMMENT ON COLUMN kills.killer_class IS 'Clase del killer.';
+COMMENT ON COLUMN kills.victim_class IS 'Clase de la victima.';
+COMMENT ON COLUMN kills.mod IS 'Causa de la muerte: rifle, sniper, grenade, wound, ...';
+COMMENT ON COLUMN kills.weapon IS 'Arma en mano (solo armas de fuego o cuchillo).';
+COMMENT ON COLUMN kills.headshot IS 'true si fue tiro a la cabeza.';
+COMMENT ON COLUMN kills.friendly_fire IS 'true si fue fuego amigo.';
+COMMENT ON COLUMN kills.suicide IS 'true si fue suicidio.';
+COMMENT ON COLUMN kills.distance IS 'Distancia killer-victima en unidades de Quake 2 (~3 cm).';
+COMMENT ON COLUMN kills.killer_x IS 'Posicion X del killer (unidades de Quake 2).';
+COMMENT ON COLUMN kills.killer_y IS 'Posicion Y del killer.';
+COMMENT ON COLUMN kills.killer_z IS 'Posicion Z del killer (altura).';
+COMMENT ON COLUMN kills.victim_x IS 'Posicion X de la victima.';
+COMMENT ON COLUMN kills.victim_y IS 'Posicion Y de la victima.';
+COMMENT ON COLUMN kills.victim_z IS 'Posicion Z de la victima.';
+
+COMMENT ON TABLE objectives IS 'Eventos de objetivo de una partida (banderas, maletin, zonas, etc.).';
+COMMENT ON COLUMN objectives.id IS 'Clave interna.';
+COMMENT ON COLUMN objectives.match_id IS 'Partida.';
+COMMENT ON COLUMN objectives.t IS 'Segundos desde el inicio del mapa.';
+COMMENT ON COLUMN objectives.type IS 'Tipo: touch, area, timed, timed_held, explosive, bc_pickup/bc_drop/bc_capture.';
+COMMENT ON COLUMN objectives.name IS 'Nombre del objetivo.';
+COMMENT ON COLUMN objectives.team IS 'Equipo que lo completo.';
+COMMENT ON COLUMN objectives.player_id IS 'Jugador que lo hizo (NULL si no aplica).';
+
+COMMENT ON TABLE ratings IS 'Elo por equipos, por jugador, categoria (public/duel/official) y temporada.';
+COMMENT ON COLUMN ratings.player_id IS 'Jugador.';
+COMMENT ON COLUMN ratings.kind IS 'Categoria: public, duel u official.';
+COMMENT ON COLUMN ratings.season_id IS 'Temporada; 0 = historico (todas).';
+COMMENT ON COLUMN ratings.rating IS 'Elo actual (arranca en 1500).';
+COMMENT ON COLUMN ratings.peak IS 'Elo maximo alcanzado.';
+COMMENT ON COLUMN ratings.games IS 'Partidas rankeadas jugadas.';
+COMMENT ON COLUMN ratings.wins IS 'Partidas ganadas.';
+COMMENT ON COLUMN ratings.losses IS 'Partidas perdidas.';
+COMMENT ON COLUMN ratings.draws IS 'Partidas empatadas.';
+COMMENT ON COLUMN ratings.updated_at IS 'Ultima actualizacion.';
+
+COMMENT ON TABLE rating_history IS 'Elo antes/despues de cada partida (para graficos de evolucion).';
+COMMENT ON COLUMN rating_history.match_id IS 'Partida.';
+COMMENT ON COLUMN rating_history.player_id IS 'Jugador.';
+COMMENT ON COLUMN rating_history.season_id IS 'Temporada; 0 = historico.';
+COMMENT ON COLUMN rating_history.rating_before IS 'Elo antes de la partida.';
+COMMENT ON COLUMN rating_history.rating_after IS 'Elo despues de la partida.';
+
+COMMENT ON TABLE player_stats IS 'Resumen por jugador, temporada, categoria y torneo (lo mantiene apply_rollups).';
+COMMENT ON COLUMN player_stats.player_id IS 'Jugador.';
+COMMENT ON COLUMN player_stats.season_id IS 'Temporada.';
+COMMENT ON COLUMN player_stats.kind IS 'Categoria: public, duel u official.';
+COMMENT ON COLUMN player_stats.event IS 'Torneo; cadena vacia = casual.';
+COMMENT ON COLUMN player_stats.matches IS 'Partidas jugadas.';
+COMMENT ON COLUMN player_stats.wins IS 'Partidas ganadas.';
+COMMENT ON COLUMN player_stats.losses IS 'Partidas perdidas.';
+COMMENT ON COLUMN player_stats.draws IS 'Partidas empatadas.';
+COMMENT ON COLUMN player_stats.kills IS 'Kills a enemigos (humanos o bots).';
+COMMENT ON COLUMN player_stats.deaths IS 'Todas las muertes.';
+COMMENT ON COLUMN player_stats.human_kills IS 'Kills a humanos (lo que cuenta el ladder).';
+COMMENT ON COLUMN player_stats.human_deaths IS 'Muertes por humanos/suicidio/entorno.';
+COMMENT ON COLUMN player_stats.headshots IS 'Kills con tiro a la cabeza.';
+COMMENT ON COLUMN player_stats.hits IS 'Disparos acertados.';
+COMMENT ON COLUMN player_stats.misses IS 'Disparos fallados.';
+COMMENT ON COLUMN player_stats.teamkills IS 'Fuego amigo.';
+COMMENT ON COLUMN player_stats.suicides IS 'Suicidios.';
+COMMENT ON COLUMN player_stats.objectives IS 'Objetivos completados.';
+COMMENT ON COLUMN player_stats.seconds IS 'Segundos jugados.';
+COMMENT ON COLUMN player_stats.best_streak IS 'Mejor racha de kills.';
+COMMENT ON COLUMN player_stats.max_kills IS 'Mas kills en una sola partida.';
+COMMENT ON COLUMN player_stats.helmet_saves IS 'Cascos que desviaron un tiro a la cabeza.';
+COMMENT ON COLUMN player_stats.foot_saves IS 'Veces que sobrevivio con el pie herido.';
+COMMENT ON COLUMN player_stats.deflected IS 'Tiros desviados por cascos ajenos.';
+COMMENT ON COLUMN player_stats.sprees IS 'Veces que alcanzo KILLING SPREE.';
+COMMENT ON COLUMN player_stats.rampages IS 'Veces que alcanzo RAMPAGE.';
+COMMENT ON COLUMN player_stats.dominatings IS 'Veces que alcanzo DOMINATING.';
+COMMENT ON COLUMN player_stats.unstoppables IS 'Veces que alcanzo UNSTOPPABLE.';
+COMMENT ON COLUMN player_stats.godlikes IS 'Veces que alcanzo GODLIKE.';
+COMMENT ON COLUMN player_stats.streaks_ended IS 'Rachas ajenas que corto.';
+COMMENT ON COLUMN player_stats.longest_kill IS 'Kill mas larga (distancia en unidades de Quake 2).';
+COMMENT ON COLUMN player_stats.last_match IS 'Fecha de la ultima partida.';
+
+COMMENT ON TABLE player_map_stats IS 'Resumen por jugador y mapa (todas las temporadas).';
+COMMENT ON COLUMN player_map_stats.player_id IS 'Jugador.';
+COMMENT ON COLUMN player_map_stats.map IS 'Mapa.';
+COMMENT ON COLUMN player_map_stats.kind IS 'Categoria: public o duel.';
+COMMENT ON COLUMN player_map_stats.matches IS 'Partidas jugadas en ese mapa.';
+COMMENT ON COLUMN player_map_stats.wins IS 'Partidas ganadas.';
+COMMENT ON COLUMN player_map_stats.kills IS 'Kills.';
+COMMENT ON COLUMN player_map_stats.deaths IS 'Muertes.';
+COMMENT ON COLUMN player_map_stats.seconds IS 'Segundos jugados.';
+COMMENT ON COLUMN player_map_stats.best_streak IS 'Mejor racha en ese mapa.';
+
+COMMENT ON TABLE player_class_stats IS 'Segundos jugados por clase y jugador.';
+COMMENT ON COLUMN player_class_stats.player_id IS 'Jugador.';
+COMMENT ON COLUMN player_class_stats.class IS 'Clase (sniper, medic, engineer, ...).';
+COMMENT ON COLUMN player_class_stats.seconds IS 'Segundos jugados con esa clase.';
+
+COMMENT ON TABLE player_weapon_stats IS 'Kills por arma y jugador (arma en mano o, si no aplica, la causa).';
+COMMENT ON COLUMN player_weapon_stats.player_id IS 'Jugador.';
+COMMENT ON COLUMN player_weapon_stats.weapon IS 'Arma o causa (rifle, sniper, grenade, ...).';
+COMMENT ON COLUMN player_weapon_stats.kills IS 'Kills con esa arma.';
+COMMENT ON COLUMN player_weapon_stats.headshots IS 'Kills a la cabeza con esa arma.';
+COMMENT ON COLUMN player_weapon_stats.distance_sum IS 'Suma de distancias (para el promedio).';
+COMMENT ON COLUMN player_weapon_stats.distance_n IS 'Cantidad de kills con distancia conocida.';
+
+COMMENT ON TABLE player_duel_stats IS 'Kills entre humanos (nemesis / victima favorita).';
+COMMENT ON COLUMN player_duel_stats.killer_id IS 'Quien mata.';
+COMMENT ON COLUMN player_duel_stats.victim_id IS 'A quien mata.';
+COMMENT ON COLUMN player_duel_stats.kills IS 'Veces que lo mato.';
+
+COMMENT ON TABLE map_stats IS 'Resumen por mapa y categoria (balance, duracion, letalidad).';
+COMMENT ON COLUMN map_stats.map IS 'Mapa.';
+COMMENT ON COLUMN map_stats.kind IS 'Categoria: public o duel.';
+COMMENT ON COLUMN map_stats.matches IS 'Partidas jugadas.';
+COMMENT ON COLUMN map_stats.allied_wins IS 'Victorias de aliados.';
+COMMENT ON COLUMN map_stats.axis_wins IS 'Victorias del eje.';
+COMMENT ON COLUMN map_stats.draws IS 'Empates.';
+COMMENT ON COLUMN map_stats.seconds IS 'Segundos totales jugados.';
+COMMENT ON COLUMN map_stats.humans IS 'Suma de humanos por partida.';
+COMMENT ON COLUMN map_stats.kills IS 'Kills totales.';
+COMMENT ON COLUMN map_stats.best_streak IS 'Mejor racha en ese mapa.';
+COMMENT ON COLUMN map_stats.last_played IS 'Ultima vez jugado.';
+
+COMMENT ON TABLE map_weapon_stats IS 'Kills por mapa, categoria y arma.';
+COMMENT ON COLUMN map_weapon_stats.map IS 'Mapa.';
+COMMENT ON COLUMN map_weapon_stats.kind IS 'Categoria: public o duel.';
+COMMENT ON COLUMN map_weapon_stats.weapon IS 'Arma o causa.';
+COMMENT ON COLUMN map_weapon_stats.kills IS 'Kills.';
+COMMENT ON COLUMN map_weapon_stats.headshots IS 'Kills a la cabeza.';
+COMMENT ON COLUMN map_weapon_stats.distance_sum IS 'Suma de distancias.';
+COMMENT ON COLUMN map_weapon_stats.distance_n IS 'Cantidad de kills con distancia conocida.';
+COMMENT ON COLUMN map_weapon_stats.max_distance IS 'Kill mas larga con esa arma.';
+
+COMMENT ON TABLE daily_stats IS 'Actividad por dia (hora de Chile): partidas y jugadores nuevos.';
+COMMENT ON COLUMN daily_stats.day IS 'Dia.';
+COMMENT ON COLUMN daily_stats.matches IS 'Partidas jugadas ese dia.';
+COMMENT ON COLUMN daily_stats.players IS 'Jugadores humanos distintos ese dia.';
+
+COMMENT ON TABLE daily_players IS 'Que jugador jugo cada dia (para no contarlo dos veces en daily_stats.players).';
+COMMENT ON COLUMN daily_players.day IS 'Dia.';
+COMMENT ON COLUMN daily_players.player_id IS 'Jugador.';
+
+COMMENT ON VIEW v_player_totals IS 'Totales historicos por jugador (una fila por jugador).';
+COMMENT ON VIEW v_player_totals_by_kind IS 'Totales historicos por jugador y categoria (public/duel/official).';
+COMMENT ON VIEW v_player_profile IS 'Perfil completo de un jugador (totales + Elo + favoritos + nemesis).';
+COMMENT ON VIEW v_player_maps IS 'Estadisticas de un jugador por mapa.';
+COMMENT ON VIEW v_player_fav_map IS 'Mapa favorito de cada jugador (el mas jugado).';
+COMMENT ON VIEW v_player_weapons IS 'Kills de un jugador por arma.';
+COMMENT ON VIEW v_player_fav_weapon IS 'Arma favorita de cada jugador.';
+COMMENT ON VIEW v_player_classes IS 'Segundos por clase y jugador.';
+COMMENT ON VIEW v_player_fav_class IS 'Clase favorita de cada jugador.';
+COMMENT ON VIEW v_player_duels IS 'Kills entre pares de jugadores.';
+COMMENT ON VIEW v_player_nemesis IS 'Quien mas mata a cada jugador (su nemesis).';
+COMMENT ON VIEW v_player_favorite_victim IS 'A quien mas mata cada jugador (su victima favorita).';
+COMMENT ON VIEW v_map_stats IS 'Estadisticas por mapa: balance aliados/eje, duracion, kills.';
+COMMENT ON VIEW v_map_weapons IS 'Armas mas letales por mapa.';
+COMMENT ON VIEW v_weapon_stats IS 'Armas globales: kills, headshots y distancia media.';
+COMMENT ON VIEW v_daily_activity IS 'Actividad diaria (partidas y jugadores por dia).';
+COMMENT ON VIEW v_seasons IS 'Temporadas con su fecha de fin y cantidad de partidas.';
+COMMENT ON VIEW v_events IS 'Torneos jugados (partidas y mapas).';
+
+COMMENT ON FUNCTION match_category(text, text) IS 'Categoria de ladder de una partida: official si tiene torneo, si no el modo (public/duel).';
+COMMENT ON FUNCTION season_lookup(text) IS 'Resuelve una temporada: current (la vigente), all (NULL) o el nombre.';
+COMMENT ON FUNCTION streak_base() IS 'Kills seguidas para el primer anuncio de racha (igual al cvar exbattleinfo).';
+COMMENT ON FUNCTION apply_rollups(text[]) IS 'Suma las partidas indicadas a las tablas de resumen (una sola vez por partida).';
+COMMENT ON FUNCTION rebuild_rollups() IS 'Recalcula todas las tablas de resumen desde las tablas de detalle.';
+COMMENT ON FUNCTION player_totals(text, text, text) IS 'Totales por jugador para una temporada, categoria y torneo (base de los ladders).';
+COMMENT ON FUNCTION ladder_kd(integer, text, text, text) IS 'Ladder por K/D (humano vs humano).';
+COMMENT ON FUNCTION ladder_elo(integer, text, text) IS 'Ladder por rating Elo, por categoria.';
+COMMENT ON FUNCTION ladder_streak(text, integer, text) IS 'Mejores rachas de kills (una fila por partida).';
+COMMENT ON FUNCTION ladder_luck(integer, text, text) IS 'Los mas suertudos (casco que desvia + pie salvado).';
+COMMENT ON FUNCTION ladder_unlucky(integer, text, text) IS 'Los tiradores mas desafortunados (tiros desviados por cascos).';
+COMMENT ON FUNCTION ladder_streak_tiers(integer, text, text) IS 'Rachas por nivel: quien mas llego a GODLIKE, UNSTOPPABLE, etc.';
+
 COMMIT;
