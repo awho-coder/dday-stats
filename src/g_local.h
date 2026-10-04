@@ -51,7 +51,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 // the "gameversion" client command will print this plus compile date
 #define	GAMEVERSION	"dday"
-#define DEVVERSION	"5.067" // ddaychile
+#define DEVVERSION	"5.068" // ddaychile
 //#define	DEBUG		1
 
 // protocol bytes that can be directly added to messages
@@ -2267,5 +2267,7 @@ void SP_objective_flag (edict_t *self);
 void briefcase_warn (edict_t *ent);//faf;  ctb code
 qboolean Pickup_Briefcase (edict_t *ent, edict_t *other); 
 void Drop_Briefcase (edict_t *ent, gitem_t *item);
+
+#include "g_statslog.h"
 
 #endif /* __G_LOCAL_H__ */

@@ -1,3 +1,46 @@
+Versión 5.068
+-------------
+
+- Agrega el nuevo módulo g_statslog.c para registrar estadísticas de las
+  partidas. Se activa con la variable "stats_log" y escribe un archivo
+  JSONL por partida en dday/stats/events/ (o en "stats_log_dir"), sin
+  conectarse a ninguna base de datos ni bloquear el juego. Registra
+  kills (arma, distancia, headshot, fuego amigo, posiciones), objetivos,
+  maletín, cambios de equipo, tiempo por equipo y clase, y el resultado.
+
+- Agrega la variable "stats_mode". Con "duel" solo se registra lo jugado
+  después de la cuenta de `sv startcount`: el calentamiento no cuenta,
+  las pausas de `sv freeze` no suman tiempo, `sv resetcount` descarta el
+  duelo y un mapa sin cuenta no se guarda.
+
+- Agrega la variable "stats_event" para marcar partidas oficiales de un
+  torneo. La variable se mantiene entre mapas, por lo que debe borrarse
+  al terminar el torneo.
+
+- Agrega un contador de rachas con las mismas reglas que
+  `KillingSpree()` de p_client.c, y registra los golpes de suerte de
+  `T_Damage()` en g_combat.c: casco que desvía un tiro a la cabeza y
+  sobrevivir con un pie herido.
+
+- Agrega la variable "stats_server" para identificar al servidor. Los
+  jugadores conectados con el mismo nombre se registran como
+  "nombre (2)".
+
+- Agrega la carpeta stats/ con el esquema PostgreSQL (ladders de K/D,
+  Elo, rachas y suerte por temporada, categoría y torneo) y el ingestor
+  ingest.py que carga los archivos JSONL. Ver stats/README.md.
+
+- Corrige `ClientDisconnect()` de p_client.c que escribía las
+  estadísticas antiguas aunque "stats" estuviera en 0, y
+  `Write_Player_Stats()` que botaba el servidor con `gi.error()` si no
+  existía la carpeta dday/stats.
+
+- Corrige el conteo de suicidios en `Killed()` de g_combat.c, que usaba
+  `targ->client->aim` en vez de `targ->ai` y restaba en vez de sumar.
+
+- Agrega -std=gnu99 al Makefile para compilar con GCC 15, que usa C23
+  por defecto.
+
 Versión 5.067
 -------------
 

@@ -642,6 +642,7 @@ void StartCount(int seconds)
 // kernel: reset timelimit and countdown
 void Svcmd_ResetCountdown_f()
 {
+	StatsLog_CountdownReset ();
 	ResetCountTimer();
 	centerprintall("The running timelimit has been reset.");
 }
@@ -828,6 +829,7 @@ void Svcmd_FreezeMode_f()
 void Svcmd_NextMap(void)
 {
 	disable_mapvoting = true;
+	StatsLog_MarkForcedEnd ();
 	EndDMLevel();
 	safe_bprintf(PRINT_HIGH, "Changing to next map.\n");
 }

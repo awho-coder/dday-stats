@@ -265,6 +265,8 @@ void ShutdownGame (void)
 	}
 	gi.dprintf ("==== ShutdownGame ====\n");
 
+	StatsLog_Shutdown ();
+
 	CleanUpCmds();
 	//ClearUserDLLs();
 
@@ -609,6 +611,8 @@ void EndDMLevel (void)
 	edict_t	*ent = NULL;
 	
 	i = 0;
+
+	StatsLog_EndDMLevel ();
 
 	mapname = level.mapname;
 
@@ -1643,11 +1647,14 @@ void G_RunFrame (void)
 			{
 				centerprintall("Que comience el juego!");
 				gameStartTime = level.time;
+				StatsLog_CountdownDone ();
 				timelimit->value = countdownTimeLimit / 60.0; // kernel: now in seconds
 				countdownActive = 0;
 			}
 		}
 	}
+
+	StatsLog_RunFrame ();
 
 	// see if it is time to end a deathmatch
 	CheckDMRules ();

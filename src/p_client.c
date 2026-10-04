@@ -3028,9 +3028,9 @@ void ClientDisconnect (edict_t *ent)
 	if (!ent->client)
 		return;
 
+	StatsLog_ClientDisconnect (ent);
 
-
-	if (!level.intermissiontime)
+	if (stats->value && !level.intermissiontime)
 		Write_Player_Stats(ent);
 
 
@@ -4821,7 +4821,9 @@ void Write_Player_Stats (edict_t *ent)
 
 	if (!fn)
 	{
-		gi.error ("Couldn't open %s, you may need to create a 'dday/stats' folder.", filename);
+		// no botar el servidor por un archivo de estadisticas
+		gi.dprintf ("Couldn't open %s, you may need to create a 'dday/stats' folder.\n", filename);
+		return;
 	}
 
 	fprintf (fn, "%s\n", ent->client->pers.netname);

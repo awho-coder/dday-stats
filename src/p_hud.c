@@ -151,6 +151,8 @@ void BeginIntermission (edict_t *targ)
 	if (level.intermissiontime)
 		return;		// already activated
 
+	StatsLog_MatchEnd ();
+
 	game.autosaved = false;
 
 	// respawn any dead clients
