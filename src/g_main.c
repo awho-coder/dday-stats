@@ -1647,6 +1647,7 @@ void G_RunFrame (void)
 			{
 				centerprintall("Que comience el juego!");
 				gameStartTime = level.time;
+				StatsLog_CountdownDone ();
 				timelimit->value = countdownTimeLimit / 60.0; // kernel: now in seconds
 				countdownActive = 0;
 			}

@@ -43,9 +43,12 @@ ELO_NEW_GAMES = 10
 
 @dataclass
 class Config:
-    min_humans: int = 2          # humanos minimos por equipo para rankear
-    min_duration: float = 300.0  # segundos minimos para rankear
+    min_humans: int = 2          # humanos minimos por equipo para rankear (publico)
+    min_duration: float = 300.0  # segundos minimos para rankear (publico)
+    duel_min_humans: int = 1     # idem para duelos (stats_mode duel)
+    duel_min_duration: float = 120.0
     min_participation: float = 0.2  # fraccion minima del tiempo para contar en el Elo
+    bots_as_humans: bool = False    # solo para pruebas: los bots cuentan como humanos
 
 
 @dataclass
@@ -64,6 +67,9 @@ class PlayerAgg:
     misses: int = 0
     score: int = 0
     points: int = 0
+    human_kills: int = 0     # kills a enemigos humanos
+    best_streak: int = 0     # la mejor de todos los tramos (no se suma)
+    human_deaths: int = 0    # muertes por humanos, suicidio o entorno
 
     def add(self, ev):
         t = ev.get("time") or [0, 0]
@@ -75,6 +81,7 @@ class PlayerAgg:
                           ("tk", "tk"), ("hs", "hs"), ("objs", "objs"), ("hits", "hits"),
                           ("misses", "misses"), ("score", "score"), ("points", "points")):
             setattr(self, attr, getattr(self, attr) + int(ev.get(key) or 0))
+        self.best_streak = max(self.best_streak, int(ev.get("best_streak") or 0))
 
     @property
     def total_time(self):
@@ -123,10 +130,15 @@ class Match:
     players: dict          # (name, bot) -> PlayerAgg
     kills: list
     objectives: list
+    event: str = ""        # torneo; '' = casual
 
     @property
     def id(self):
         return self.start["match"]
+
+    @property
+    def kind(self):
+        return "duel" if self.start.get("kind") == "duel" else "public"
 
     @property
     def duration(self):
@@ -138,6 +150,20 @@ class Match:
         return w if w in (0, 1, -1) else None
 
 
+class SkipMatch(Exception):
+    """Archivo valido que no se debe cargar."""
+
+
+def strip_bot_flags(events):
+    """Modo prueba: marca a todos los jugadores como humanos."""
+    for e in events:
+        if "bot" in e:
+            e["bot"] = 0
+        for role in ("killer", "victim"):
+            if isinstance(e.get(role), dict):
+                e[role]["bot"] = 0
+
+
 def build_match(events, path):
     start = next((e for e in events if e["ev"] == "match_start"), None)
     if not start or not start.get("match"):
@@ -145,11 +171,25 @@ def build_match(events, path):
     if start.get("v") != 1:
         raise ValueError(f"version de formato no soportada: {start.get('v')}")
 
+    # duelo: solo cuenta lo que viene despues de la ultima cuenta regresiva
+    # (lo anterior es calentamiento o un duelo cancelado con sv resetcount)
+    first_t = 0.0
+    event = start.get("event") or ""
+    if start.get("kind") == "duel":
+        lives = [i for i, e in enumerate(events) if e["ev"] == "live"]
+        if not lives:
+            raise SkipMatch("duelo sin cuenta regresiva")
+        live = events[lives[-1]]
+        first_t = float(live.get("t") or 0)
+        # el torneo vale el que tenia la cvar al empezar el duelo
+        event = live.get("event", event) or ""
+        events = [start] + events[lives[-1] + 1:]
+
     end = next((e for e in events if e["ev"] == "match_end"), None)
     if end is None:
         # partida cortada (servidor caido): se cierra como abortada
         last_t = max((float(e.get("t") or 0) for e in events), default=0.0)
-        end = {"ev": "match_end", "t": last_t, "dur": last_t, "winner": None,
+        end = {"ev": "match_end", "t": last_t, "dur": max(0.0, last_t - first_t), "winner": None,
                "reason": "aborted", "teams": [],
                "ts": int(path.stat().st_mtime)}
 
@@ -165,7 +205,14 @@ def build_match(events, path):
     # si el servidor se cayo no hay eventos "player": se reconstruye lo
     # posible (kills / muertes) a partir de las kills
     summarized = set(players)
-    for k in kills:
+    streak = {}
+    for k in events:
+        if k["ev"] == "team":
+            # el juego reinicia la racha al cambiar de equipo u observar
+            streak[(k.get("name"), bool(k.get("bot")))] = 0
+            continue
+        if k["ev"] != "kill":
+            continue
         victim, killer = k.get("victim"), k.get("killer")
         actors = [("victim", victim)] + ([("killer", killer)] if killer else [])
         for role, actor in actors:
@@ -176,12 +223,28 @@ def build_match(events, path):
             if role == "victim":
                 p.deaths += 1
                 p.suicides += 1 if k.get("suicide") else 0
+                streak[key] = 0
             elif k.get("ff"):
                 p.tk += 1
+                streak[key] = 0
             else:
                 p.kills += 1
                 p.hs += 1 if k.get("hs") else 0
-    return Match(start, end, players, kills, objectives)
+                # como en el juego, la kill por desangrado no suma a la racha
+                if k.get("mod") != "wound":
+                    streak[key] = streak.get(key, 0) + 1
+                    p.best_streak = max(p.best_streak, streak[key])
+
+    # enfrentamientos entre humanos (para el ladder): no cuentan las kills a
+    # bots ni las muertes causadas por bots
+    for k in kills:
+        victim, killer = k["victim"], k.get("killer")
+        vkey = (victim["name"], bool(victim.get("bot")))
+        if killer is None or not killer.get("bot"):
+            players[vkey].human_deaths += 1
+        if killer and not k.get("ff") and not victim.get("bot"):
+            players[(killer["name"], bool(killer.get("bot")))].human_kills += 1
+    return Match(start, end, players, kills, objectives, event.strip()[:64])
 
 
 def team_humans(match, team):
@@ -190,11 +253,15 @@ def team_humans(match, team):
 
 
 def is_ranked(match, cfg):
+    if match.kind == "duel":
+        min_humans, min_duration = cfg.duel_min_humans, cfg.duel_min_duration
+    else:
+        min_humans, min_duration = cfg.min_humans, cfg.min_duration
     return (match.end.get("reason") == "normal"
             and match.winner is not None
-            and match.duration >= cfg.min_duration
-            and team_humans(match, 0) >= cfg.min_humans
-            and team_humans(match, 1) >= cfg.min_humans)
+            and match.duration >= min_duration
+            and team_humans(match, 0) >= min_humans
+            and team_humans(match, 1) >= min_humans)
 
 
 class Ingestor:
@@ -217,6 +284,8 @@ class Ingestor:
     def ingest_file(self, path):
         """Inserta la partida de un archivo. No hace nada si ya existe."""
         events = read_events(path)
+        if self.cfg.bots_as_humans:
+            strip_bot_flags(events)
         match = build_match(events, path)
         ranked = is_ranked(match, self.cfg)
         started = ts(match.start["ts"])
@@ -228,13 +297,16 @@ class Ingestor:
 
         with self.conn.transaction(), self.conn.cursor() as cur:
             cur.execute(
-                """INSERT INTO matches (id, server, map, mode, tournament, started_at, ended_at,
-                       duration_s, winner, end_reason, team0_army, team1_army,
+                """INSERT INTO matches (id, server, map, mode, kind, event, season_id, tournament,
+                       started_at, ended_at, duration_s, winner, end_reason, team0_army, team1_army,
                        team0_score, team1_score, team0_kills, team1_kills, humans, ranked)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                   VALUES (%s,%s,%s,%s,%s,%s,
+                           (SELECT id FROM seasons WHERE starts_at <= %s ORDER BY starts_at DESC LIMIT 1),
+                           %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                    ON CONFLICT (id) DO NOTHING""",
                 (match.id, match.start.get("server", ""), match.start.get("map", ""),
-                 match.start.get("mode", "dm"), bool(match.start.get("tournament")),
+                 match.start.get("mode", "dm"), match.kind, match.event, started,
+                 bool(match.start.get("tournament")),
                  started, ended, match.duration, winner, match.end.get("reason", "other"),
                  teams_start.get(0, {}).get("army"), teams_start.get(1, {}).get("army"),
                  teams_end.get(0, {}).get("score"), teams_end.get(1, {}).get("score"),
@@ -257,11 +329,12 @@ class Ingestor:
                     result = "W" if p.team == winner else "L"
                 cur.execute(
                     """INSERT INTO match_players (match_id, player_id, team, time_team0, time_team1,
-                           kills, deaths, suicides, teamkills, headshots, objectives, hits, misses,
-                           score, points, classes, main_class, result)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                           kills, deaths, human_kills, human_deaths, suicides, teamkills, headshots,
+                           objectives, best_streak, hits, misses, score, points, classes, main_class, result)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (match.id, pid, p.team, p.time[0], p.time[1], p.kills, p.deaths,
-                     p.suicides, p.tk, p.hs, p.objs, p.hits, p.misses, p.score, p.points,
+                     p.human_kills, p.human_deaths,
+                     p.suicides, p.tk, p.hs, p.objs, p.best_streak, p.hits, p.misses, p.score, p.points,
                      json.dumps(p.classes), p.main_class, result))
 
             def actor_id(name, bot):
@@ -309,29 +382,43 @@ class Ingestor:
                     "INSERT INTO objectives (match_id, t, type, name, team, player_id)"
                     " VALUES (%s,%s,%s,%s,%s,%s)", rows)
 
+            # tablas de resumen del ladder (en la misma transaccion)
+            cur.execute("SELECT apply_rollups(%s)", ([match.id],))
+
             if ranked:
                 apply_elo(cur, match.id, self.cfg.min_participation)
 
-        log.info("%s: %s, %d jugadores, %d kills%s", match.id, match.start.get("map"),
+        log.info("%s: %s (%s%s), %d jugadores, %d kills%s", match.id, match.start.get("map"),
+                 match.kind, f", torneo {match.event}" if match.event else "",
                  len(match.players), len(match.kills), ", rankeada" if ranked else "")
 
 
 def apply_elo(cur, match_id, min_participation):
-    """Elo por equipos. Usa match_players de la partida ya insertada."""
-    cur.execute("SELECT duration_s, winner FROM matches WHERE id = %s", (match_id,))
-    duration, winner = cur.fetchone()
+    """Elo por equipos. Usa match_players de la partida ya insertada.
+
+    Se actualizan dos ratings: el de la temporada de la partida y el historico
+    (season_id = 0), ambos de su categoria (public, duel u official).
+    """
+    cur.execute("SELECT duration_s, winner, match_category(kind, event), season_id"
+                " FROM matches WHERE id = %s", (match_id,))
+    duration, winner, kind, season_id = cur.fetchone()
     if winner not in (0, 1, -1) or not duration:
         return
+    for scope in (season_id, 0):
+        _apply_elo_scope(cur, match_id, duration, winner, kind, scope, min_participation)
 
+
+def _apply_elo_scope(cur, match_id, duration, winner, kind, season_id, min_participation):
     cur.execute(
         """SELECT mp.player_id, mp.team, mp.time_team0, mp.time_team1,
                   coalesce(r.rating, %s), coalesce(r.games, 0)
            FROM match_players mp
            JOIN players p ON p.id = mp.player_id
-           LEFT JOIN ratings r ON r.player_id = mp.player_id
+           LEFT JOIN ratings r ON r.player_id = mp.player_id AND r.kind = %s
+                              AND r.season_id = %s
            WHERE mp.match_id = %s AND NOT p.is_bot AND mp.team IS NOT NULL
            ORDER BY mp.player_id""",
-        (ELO_START, match_id))
+        (ELO_START, kind, season_id, match_id))
     rows = cur.fetchall()
 
     parts = []
@@ -361,9 +448,10 @@ def apply_elo(cur, match_id, min_participation):
         loss = 1 if score == 0.0 else 0
         draw = 1 if score == 0.5 else 0
         cur.execute(
-            """INSERT INTO ratings (player_id, rating, peak, games, wins, losses, draws, updated_at)
-               VALUES (%s, %s, greatest(%s, %s), 1, %s, %s, %s, now())
-               ON CONFLICT (player_id) DO UPDATE SET
+            """INSERT INTO ratings (player_id, kind, season_id, rating, peak, games, wins, losses,
+                                   draws, updated_at)
+               VALUES (%s, %s, %s, %s, greatest(%s, %s), 1, %s, %s, %s, now())
+               ON CONFLICT (player_id, kind, season_id) DO UPDATE SET
                  rating = EXCLUDED.rating,
                  peak = greatest(ratings.peak, EXCLUDED.rating),
                  games = ratings.games + 1,
@@ -371,11 +459,11 @@ def apply_elo(cur, match_id, min_participation):
                  losses = ratings.losses + EXCLUDED.losses,
                  draws = ratings.draws + EXCLUDED.draws,
                  updated_at = now()""",
-            (pid, new_rating, ELO_START, new_rating, win, loss, draw))
+            (pid, kind, season_id, new_rating, ELO_START, new_rating, win, loss, draw))
         cur.execute(
-            """INSERT INTO rating_history (match_id, player_id, rating_before, rating_after)
-               VALUES (%s, %s, %s, %s)""",
-            (match_id, pid, rating, new_rating))
+            """INSERT INTO rating_history (match_id, player_id, season_id, rating_before, rating_after)
+               VALUES (%s, %s, %s, %s, %s)""",
+            (match_id, pid, season_id, rating, new_rating))
 
 
 def rebuild_ratings(conn, cfg):
@@ -387,6 +475,29 @@ def rebuild_ratings(conn, cfg):
         for mid in ids:
             apply_elo(cur, mid, cfg.min_participation)
     log.info("rating recalculado con %d partidas rankeadas", len(ids))
+
+
+def new_season(conn, name, start):
+    """Las partidas que empiecen desde 'start' (por defecto, ahora) cuentan para
+    la temporada nueva. Si ya hay partidas cargadas despues de esa fecha, se
+    reasignan y se recalculan resumenes y ratings."""
+    with conn.transaction():
+        row = conn.execute(
+            "INSERT INTO seasons (name, starts_at) VALUES (%s, coalesce(%s::timestamptz, now()))"
+            " RETURNING id, starts_at", (name, start)).fetchone()
+        moved = conn.execute(
+            """UPDATE matches m SET season_id = (SELECT s.id FROM seasons s
+                   WHERE s.starts_at <= m.started_at ORDER BY s.starts_at DESC LIMIT 1)
+               WHERE m.started_at >= %s""", (row[1],)).rowcount
+    log.info("temporada '%s' iniciada el %s", name, row[1])
+    return moved
+
+
+def set_event(conn, match_id, event):
+    cur = conn.execute("UPDATE matches SET event = %s WHERE id = %s", (event.strip()[:64], match_id))
+    if cur.rowcount == 0:
+        raise SystemExit(f"no existe la partida {match_id}")
+    log.info("partida %s marcada como %s", match_id, f"torneo '{event}'" if event else "casual")
 
 
 def pending_files(events_dir, stale_hours):
@@ -408,14 +519,17 @@ def finish_file(path, delete):
     path.rename(dest_dir / name)
 
 
-def run_once(conn, args, cfg):
+def run_once(conn, args, cfg, files):
     ingestor = Ingestor(conn, cfg)
     ok = failed = 0
-    for path in pending_files(args.events, args.stale_hours):
+    for path in files:
         try:
             ingestor.ingest_file(path)
             finish_file(path, args.delete)
             ok += 1
+        except SkipMatch as e:
+            log.info("%s: %s, se omite", path.name, e)
+            finish_file(path, args.delete)
         except (ValueError, KeyError, TypeError) as e:
             # archivo malformado: se aparta para revisarlo a mano
             log.error("%s: %s", path.name, e)
@@ -440,9 +554,21 @@ def main():
                     help="procesar .part sin cambios hace mas de N horas como partida abortada (0 = nunca)")
     ap.add_argument("--min-humans", type=int, default=Config.min_humans)
     ap.add_argument("--min-duration", type=float, default=Config.min_duration)
+    ap.add_argument("--duel-min-humans", type=int, default=Config.duel_min_humans)
+    ap.add_argument("--duel-min-duration", type=float, default=Config.duel_min_duration)
     ap.add_argument("--min-participation", type=float, default=Config.min_participation)
+    ap.add_argument("--bots-as-humans", action="store_true",
+                    help="SOLO PRUEBAS: cargar a los bots como si fueran humanos")
     ap.add_argument("--init-schema", action="store_true", help="crear / actualizar tablas y vistas")
     ap.add_argument("--rebuild-ratings", action="store_true", help="recalcular el Elo desde cero")
+    ap.add_argument("--rebuild-stats", action="store_true",
+                    help="recalcular las tablas de resumen del ladder desde cero")
+    ap.add_argument("--new-season", metavar="NOMBRE",
+                    help="iniciar una temporada nueva (desde ahora, o desde --season-start)")
+    ap.add_argument("--season-start", metavar="FECHA",
+                    help="inicio de la temporada nueva, ej. '2026-11-01 00:00-03'")
+    ap.add_argument("--set-event", nargs=2, metavar=("PARTIDA", "TORNEO"),
+                    help="marcar una partida como de un torneo ('' para casual) y recalcular")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -452,29 +578,50 @@ def main():
     if not args.dsn:
         ap.error("falta --dsn o DDAY_STATS_DSN")
 
-    cfg = Config(args.min_humans, args.min_duration, args.min_participation)
+    cfg = Config(min_humans=args.min_humans, min_duration=args.min_duration,
+                 duel_min_humans=args.duel_min_humans, duel_min_duration=args.duel_min_duration,
+                 min_participation=args.min_participation, bots_as_humans=args.bots_as_humans)
 
-    if args.events is None and not (args.init_schema or args.rebuild_ratings):
+    maintenance = (args.init_schema or args.rebuild_ratings or args.rebuild_stats
+                   or args.new_season or args.set_event)
+    if args.events is None and not maintenance:
         ap.error("falta --events o DDAY_STATS_EVENTS")
     if args.events is not None and not args.events.is_dir():
         ap.error(f"no existe la carpeta {args.events}")
 
-    if args.init_schema or args.rebuild_ratings:
+    if maintenance:
         with psycopg.connect(args.dsn, autocommit=True) as conn:
+            rebuild_elo = args.rebuild_ratings
             if args.init_schema:
                 conn.execute(SCHEMA_FILE.read_text(encoding="utf-8"))
                 log.info("esquema actualizado")
-            if args.rebuild_ratings:
+                # ratings recreada por una migracion: se recalcula sola
+                if conn.execute("SELECT EXISTS (SELECT 1 FROM matches WHERE ranked)"
+                                " AND NOT EXISTS (SELECT 1 FROM ratings)").fetchone()[0]:
+                    rebuild_elo = True
+            if args.new_season:
+                if new_season(conn, args.new_season, args.season_start):
+                    args.rebuild_stats = rebuild_elo = True
+            if args.set_event:
+                set_event(conn, *args.set_event)
+                args.rebuild_stats = rebuild_elo = True
+            if args.rebuild_stats:
+                conn.execute("SELECT rebuild_rollups()")
+                log.info("tablas de resumen recalculadas")
+            if rebuild_elo:
                 rebuild_ratings(conn, cfg)
 
     if args.events is None:
         return 0
 
     while True:
+        files = pending_files(args.events, args.stale_hours)
         try:
-            # conexion nueva en cada vuelta: sobrevive a reinicios de PostgreSQL
-            with psycopg.connect(args.dsn, autocommit=True) as conn:
-                run_once(conn, args, cfg)
+            # solo se conecta si hay algo que cargar; conexion nueva en cada
+            # vuelta para sobrevivir a reinicios de PostgreSQL
+            if files:
+                with psycopg.connect(args.dsn, autocommit=True) as conn:
+                    run_once(conn, args, cfg, files)
         except psycopg.Error as e:
             # el archivo queda donde estaba y se reintenta en la proxima vuelta
             log.error("error de base de datos: %s", e)

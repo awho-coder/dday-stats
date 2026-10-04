@@ -642,6 +642,7 @@ void StartCount(int seconds)
 // kernel: reset timelimit and countdown
 void Svcmd_ResetCountdown_f()
 {
+	StatsLog_CountdownReset ();
 	ResetCountTimer();
 	centerprintall("The running timelimit has been reset.");
 }

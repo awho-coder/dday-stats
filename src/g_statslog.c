@@ -10,6 +10,15 @@
  *   stats_log      0/1  activa el registro (se lee al iniciar cada mapa)
  *   stats_server   ""   identificador del servidor (por defecto: hostname)
  *   stats_log_dir  ""   carpeta de salida (por defecto: <gamedir>/stats/events)
+ *   stats_mode     "public" | "duel"
+ *       public: se registra el mapa completo.
+ *       duel:   solo cuenta lo jugado despues de "sv startcount" (al llegar la
+ *               cuenta a 0). Las pausas (sv freeze) no suman tiempo; "sv
+ *               resetcount" descarta lo registrado; si el mapa termina sin una
+ *               cuenta iniciada, la partida no se guarda.
+ *   stats_event    ""   nombre del torneo (ej. "copa-verano"). Si tiene valor, la
+ *                       partida cuenta como oficial y se agrupa por torneo. En
+ *                       duelos se toma el valor que tenga al terminar la cuenta.
  *
  * Cualquier error de E/S solo se informa por consola; nunca detiene el juego.
  */
@@ -21,9 +30,13 @@
 
 #ifdef _WIN32
 #include <direct.h>
+#include <process.h>
 #define stats_mkdir(p)	_mkdir(p)
+#define stats_getpid()	_getpid()
 #else
+#include <unistd.h>
 #define stats_mkdir(p)	mkdir((p), 0755)
+#define stats_getpid()	getpid()
 #endif
 
 #define STATS_FORMAT_VERSION	1
@@ -34,10 +47,16 @@
 
 #define STATS_WINNER_UNSET		99
 
+// g_main.c
+extern int		countdownActive;
+extern qboolean	freeze_mode;
+
 
 static cvar_t *stats_log;
 static cvar_t *stats_server;
 static cvar_t *stats_log_dir;
+static cvar_t *stats_mode;
+static cvar_t *stats_event;
 
 // contador que nunca retrocede aunque el valor original se reinicie
 // (por ejemplo resp.accuracy_hits vuelve a 0 con InitClientResp)
@@ -62,11 +81,14 @@ typedef struct
 	int			teamkills;
 	int			headshots;
 	int			objectives;
+	int			streak;			// racha actual (mismas reglas que KillingSpree)
+	int			best_streak;
 
 	stats_counter_t	hits;
 	stats_counter_t	misses;
 	stats_counter_t	points;
 	int				score;			// puede bajar (penalizaciones), se guarda el ultimo valor
+	int				score_base;		// valor de resp.score al empezar a contar (duelos)
 } stats_player_t;
 
 static struct
@@ -79,8 +101,25 @@ static struct
 	float		last_time;		// ultimo level.time visto (para partidas abortadas)
 	int			winner;
 	qboolean	forced_end;
+	qboolean	duel;			// stats_mode duel al iniciar el mapa
+	qboolean	live;			// duel: la cuenta ya llego a 0
+	int			live_seconds;	// duel: segundos jugados (sin pausas ni cuentas)
 	stats_player_t	players[MAX_CLIENTS];
 } sl;
+
+// generador propio para el id de partida (no se toca el rand() del juego)
+static unsigned int stats_random_state;
+
+static unsigned int StatsLog_Random (void)
+{
+	unsigned int x = stats_random_state;
+
+	x ^= x << 13;
+	x ^= x >> 17;
+	x ^= x << 5;
+	stats_random_state = x;
+	return x;
+}
 
 static const char *class_names[STATS_NUM_CLASSES] =
 {
@@ -268,6 +307,14 @@ static int StatsLog_CounterGet (const stats_counter_t *c)
 	return c->base + c->last;
 }
 
+// en modo duelo solo cuenta lo jugado con la cuenta ya terminada y sin pausa
+static qboolean StatsLog_Counting (void)
+{
+	if (!sl.duel)
+		return true;
+	return sl.live && !freeze_mode && !countdownActive;
+}
+
 static int StatsLog_TeamOf (edict_t *ent)
 {
 	if (!ent->client || !ent->client->resp.team_on || ent->flyingnun)
@@ -329,8 +376,8 @@ static void StatsLog_WritePlayer (stats_player_t *p, const char *reason)
 	}
 	fputc ('}', sl.file);
 
-	fprintf (sl.file, ",\"kills\":%d,\"deaths\":%d,\"suicides\":%d,\"tk\":%d,\"hs\":%d,\"objs\":%d",
-		p->kills, p->deaths, p->suicides, p->teamkills, p->headshots, p->objectives);
+	fprintf (sl.file, ",\"kills\":%d,\"deaths\":%d,\"suicides\":%d,\"tk\":%d,\"hs\":%d,\"objs\":%d,\"best_streak\":%d",
+		p->kills, p->deaths, p->suicides, p->teamkills, p->headshots, p->objectives, p->best_streak);
 	fprintf (sl.file, ",\"hits\":%d,\"misses\":%d,\"score\":%d,\"points\":%d",
 		StatsLog_CounterGet (&p->hits), StatsLog_CounterGet (&p->misses),
 		p->score, StatsLog_CounterGet (&p->points));
@@ -347,8 +394,10 @@ static void StatsLog_FlushPlayer (int slot, const char *reason)
 	if (!p->active)
 		return;
 
-	// no registrar a quien nunca entro a un equipo ni hizo nada
-	if (p->team_time[0] || p->team_time[1] || p->kills || p->deaths)
+	// no registrar a quien nunca entro a un equipo ni hizo nada, ni el
+	// calentamiento de un duelo
+	if ((!sl.duel || sl.live) &&
+		(p->team_time[0] || p->team_time[1] || p->kills || p->deaths))
 		StatsLog_WritePlayer (p, reason);
 
 	memset (p, 0, sizeof(*p));
@@ -402,9 +451,10 @@ static void StatsLog_SamplePlayer (edict_t *ent, qboolean add_time)
 		fprintf (sl.file, ",\"bot\":%d,\"team\":%d", p->bot ? 1 : 0, team);
 		StatsLog_EndEvent ();
 		p->last_team = team;
+		p->streak = 0;		// el juego reinicia la racha al cambiar de equipo u observar
 	}
 
-	if (add_time && team >= 0)
+	if (add_time && team >= 0 && StatsLog_Counting ())
 	{
 		p->team_time[team]++;
 		p->class_time[StatsLog_ClassOf (ent)]++;
@@ -412,8 +462,44 @@ static void StatsLog_SamplePlayer (edict_t *ent, qboolean add_time)
 
 	StatsLog_CounterSet (&p->hits, ent->client->resp.accuracy_hits);
 	StatsLog_CounterSet (&p->misses, ent->client->resp.accuracy_misses);
-	p->score = ent->client->resp.score;
+	p->score = ent->client->resp.score - p->score_base;
 	StatsLog_CounterSet (&p->points, ent->client->resp.points);
+}
+
+// descarta lo acumulado (por ejemplo el calentamiento de un duelo)
+// manteniendo la identidad y el equipo de cada jugador
+static void StatsLog_ResetCounters (void)
+{
+	int				i;
+	edict_t			*ent;
+	stats_player_t	*p, saved;
+
+	for (i = 0; i < MAX_CLIENTS; i++)
+	{
+		p = &sl.players[i];
+		saved = *p;
+
+		memset (p, 0, sizeof(*p));
+		p->active = saved.active;
+		p->bot = saved.bot;
+		p->last_team = saved.last_team;
+		memcpy (p->name, saved.name, sizeof(p->name));
+
+		// los contadores del juego no se reinician: se toma su valor actual
+		// como punto de partida
+		if (!p->active || i >= game.maxclients)
+			continue;
+		ent = g_edicts + 1 + i;
+		if (!ent->inuse || !ent->client)
+			continue;
+		p->hits.base = -ent->client->resp.accuracy_hits;
+		p->hits.last = ent->client->resp.accuracy_hits;
+		p->misses.base = -ent->client->resp.accuracy_misses;
+		p->misses.last = ent->client->resp.accuracy_misses;
+		p->points.base = -ent->client->resp.points;
+		p->points.last = ent->client->resp.points;
+		p->score_base = ent->client->resp.score;
+	}
 }
 
 static void StatsLog_SampleAll (qboolean add_time)
@@ -544,6 +630,19 @@ static void StatsLog_CloseFile (void)
 		gi.dprintf ("StatsLog: no se pudo renombrar %s (%s)\n", sl.part_path, strerror (errno));
 }
 
+// borra el archivo de una partida que no se debe guardar
+static void StatsLog_Discard (void)
+{
+	if (sl.file)
+	{
+		fclose (sl.file);
+		sl.file = NULL;
+		if (remove (sl.part_path))
+			gi.dprintf ("StatsLog: no se pudo borrar %s (%s)\n", sl.part_path, strerror (errno));
+	}
+	sl.open = false;
+}
+
 /*
 =================
 Ciclo de vida
@@ -555,9 +654,18 @@ void StatsLog_Init (void)
 	stats_log = gi.cvar ("stats_log", "0", 0);
 	stats_server = gi.cvar ("stats_server", "", 0);
 	stats_log_dir = gi.cvar ("stats_log_dir", "", 0);
+	stats_mode = gi.cvar ("stats_mode", "public", 0);
+	stats_event = gi.cvar ("stats_event", "", 0);
 
 	memset (&sl, 0, sizeof(sl));
 	sl.winner = STATS_WINNER_UNSET;
+
+	// distinto en cada arranque y en cada proceso
+	stats_random_state = (unsigned int)time (NULL) * 2654435761u
+		^ (unsigned int)stats_getpid () * 40503u
+		^ (unsigned int)(size_t)&sl ^ (unsigned int)clock ();
+	if (!stats_random_state)
+		stats_random_state = 1;
 }
 
 // cierra una partida que no llego a la intermision (cambio de mapa por consola,
@@ -569,11 +677,17 @@ static void StatsLog_Abort (void)
 	if (!sl.open)
 		return;
 
+	if (sl.duel && !sl.live)
+	{
+		StatsLog_Discard ();
+		return;
+	}
+
 	for (i = 0; i < MAX_CLIENTS; i++)
 		StatsLog_FlushPlayer (i, "aborted");
 
 	fprintf (sl.file, "{\"ev\":\"match_end\",\"t\":%.1f,\"ts\":%ld,\"dur\":%.1f,\"winner\":null,\"reason\":\"aborted\",\"teams\":[]}\n",
-		sl.last_time, (long)time (NULL), sl.last_time);
+		sl.last_time, (long)time (NULL), sl.duel ? (float)sl.live_seconds : sl.last_time);
 
 	StatsLog_CloseFile ();
 	sl.open = false;
@@ -606,6 +720,9 @@ void StatsLog_MatchBegin (void)
 	sl.winner = STATS_WINNER_UNSET;
 	sl.forced_end = false;
 	sl.last_time = 0;
+	sl.duel = !Q_stricmp (stats_mode->string, "duel");
+	sl.live = false;
+	sl.live_seconds = 0;
 
 	if (!stats_log->value || !deathmatch->value)
 		return;
@@ -616,7 +733,7 @@ void StatsLog_MatchBegin (void)
 		StatsLog_Copy (stamp, "00000000-000000", sizeof(stamp));
 
 	StatsLog_ServerId (server, sizeof(server));
-	Com_sprintf (sl.match_id, sizeof(sl.match_id), "%s-%s-%04x", stamp, server, rand () & 0xffff);
+	Com_sprintf (sl.match_id, sizeof(sl.match_id), "%s-%s-%08x", stamp, server, StatsLog_Random ());
 
 	if (!StatsLog_OpenFile ())
 		return;
@@ -640,6 +757,10 @@ void StatsLog_MatchBegin (void)
 	StatsLog_WriteString (level.mapname);
 	StatsLog_WriteKey ("mode");
 	StatsLog_WriteString (mode);
+	StatsLog_WriteKey ("kind");
+	StatsLog_WriteString (sl.duel ? "duel" : "public");
+	StatsLog_WriteKey ("event");
+	StatsLog_WriteString (stats_event->string);
 	fprintf (sl.file, ",\"tournament\":%d,\"ts\":%ld,\"teams\":[", tournament->value ? 1 : 0, (long)now);
 	first = true;
 	for (i = 0; i < MAX_TEAMS; i++)
@@ -667,7 +788,11 @@ void StatsLog_RunFrame (void)
 
 	// tiempo por equipo y clase, con resolucion de 1 segundo
 	if (level.framenum % 10 == 0)
+	{
 		StatsLog_SampleAll (true);
+		if (sl.duel && StatsLog_Counting ())
+			sl.live_seconds++;
+	}
 
 	if (level.framenum % STATS_FLUSH_FRAMES == 0)
 		fflush (sl.file);
@@ -701,6 +826,13 @@ void StatsLog_MatchEnd (void)
 	if (!sl.open)
 		return;
 
+	// duelo sin cuenta iniciada: no se jugo un duelo, no se guarda
+	if (sl.duel && !sl.live)
+	{
+		StatsLog_Discard ();
+		return;
+	}
+
 	StatsLog_SampleAll (false);
 
 	for (i = 0; i < MAX_CLIENTS; i++)
@@ -714,7 +846,8 @@ void StatsLog_MatchEnd (void)
 		reason = "other";
 
 	StatsLog_BeginEvent ("match_end");
-	fprintf (sl.file, ",\"ts\":%ld,\"dur\":%.1f", (long)time (NULL), level.time);
+	fprintf (sl.file, ",\"ts\":%ld,\"dur\":%.1f", (long)time (NULL),
+		sl.duel ? (float)sl.live_seconds : level.time);
 	if (sl.winner == STATS_WINNER_UNSET)
 		fputs (",\"winner\":null", sl.file);
 	else
@@ -769,6 +902,27 @@ static void StatsLog_WriteActor (const char *key, edict_t *ent, stats_player_t *
 		(int)ent->s.origin[0], (int)ent->s.origin[1], (int)ent->s.origin[2]);
 }
 
+// racha con las mismas reglas que KillingSpree() en p_client.c: usa el
+// atacante directo (sin el credito por desangrado), suma una kill a un
+// enemigo, el fuego amigo la corta y morir la reinicia
+static void StatsLog_Streak (edict_t *targ, edict_t *attacker, stats_player_t *victim)
+{
+	stats_player_t	*a;
+	int				ateam;
+
+	if (attacker && attacker != targ && attacker->inuse && attacker->client &&
+		(a = StatsLog_GetPlayer (attacker)) != NULL)
+	{
+		ateam = StatsLog_TeamOf (attacker);
+		if (ateam >= 0 && ateam == StatsLog_TeamOf (targ))
+			a->streak = 0;
+		else if (++a->streak > a->best_streak)
+			a->best_streak = a->streak;
+	}
+
+	victim->streak = 0;
+}
+
 // llamado desde Killed() cuando muere un jugador (targ->deadflag aun en 0)
 void StatsLog_Kill (edict_t *targ, edict_t *inflictor, edict_t *attacker)
 {
@@ -779,14 +933,19 @@ void StatsLog_Kill (edict_t *targ, edict_t *inflictor, edict_t *attacker)
 	const char		*weapon = NULL;
 	vec3_t			d;
 
-	if (!sl.open || level.intermissiontime || !targ || !targ->client)
+	if (!sl.open || level.intermissiontime || !targ || !targ->client || !StatsLog_Counting ())
 		return;
 
 	mod = meansOfDeath & ~MOD_FRIENDLY_FIRE;
 
-	// cambiar de equipo no es una muerte real
+	// cambiar de equipo no es una muerte real, pero corta la racha
 	if (mod == MOD_CHANGETEAM || mod == MOD_CHANGETEAM_WOUNDED)
+	{
+		victim = StatsLog_GetPlayer (targ);
+		if (victim)
+			victim->streak = 0;
 		return;
+	}
 
 	// igual que Killed(): si murio desangrado, el credito es de quien lo hirio
 	killer = attacker;
@@ -813,6 +972,8 @@ void StatsLog_Kill (edict_t *targ, edict_t *inflictor, edict_t *attacker)
 
 	suicide = (killer == NULL);
 	victim->deaths++;
+
+	StatsLog_Streak (targ, attacker, victim);
 
 	if (suicide)
 		victim->suicides++;
@@ -857,7 +1018,7 @@ void StatsLog_Objective (const char *type, const char *name, int team, edict_t *
 {
 	stats_player_t *p = NULL;
 
-	if (!sl.open || level.intermissiontime)
+	if (!sl.open || level.intermissiontime || !StatsLog_Counting ())
 		return;
 
 	if (player && player->client)
@@ -875,5 +1036,49 @@ void StatsLog_Objective (const char *type, const char *name, int team, edict_t *
 	fprintf (sl.file, ",\"team\":%d", (team >= 0 && team < MAX_TEAMS) ? team : -1);
 	StatsLog_WriteKey ("player");
 	StatsLog_WriteString (p ? p->name : NULL);
+	StatsLog_EndEvent ();
+}
+
+/*
+=================
+Duelos (stats_mode duel)
+=================
+*/
+
+// la cuenta de "sv startcount" llego a 0. Tambien se llama al reanudar
+// despues de una pausa (sv freeze): en ese caso solo se sigue sumando.
+void StatsLog_CountdownDone (void)
+{
+	if (!sl.open || !sl.duel || level.intermissiontime)
+		return;
+
+	if (sl.live)
+	{
+		StatsLog_BeginEvent ("resume");
+		StatsLog_EndEvent ();
+		return;
+	}
+
+	// lo anterior era calentamiento
+	StatsLog_ResetCounters ();
+	sl.live = true;
+	sl.live_seconds = 0;
+	StatsLog_BeginEvent ("live");
+	StatsLog_WriteKey ("event");
+	StatsLog_WriteString (stats_event->string);
+	StatsLog_EndEvent ();
+	fflush (sl.file);
+}
+
+// "sv resetcount": se cancela el duelo en curso y se descarta lo registrado
+void StatsLog_CountdownReset (void)
+{
+	if (!sl.open || !sl.duel || !sl.live)
+		return;
+
+	StatsLog_ResetCounters ();
+	sl.live = false;
+	sl.live_seconds = 0;
+	StatsLog_BeginEvent ("live_cancel");
 	StatsLog_EndEvent ();
 }

@@ -64,7 +64,12 @@ implementa autenticación.
    dependencia). Calcula Elo incremental al insertar cada partida.
 5. **Documentación** (`stats/README.md`): instalación, cvars, ejemplos de
    consultas.
-6. (Siguiente iteración) Web / API del ladder sobre las vistas.
+6. **Modo duelo** (`stats_mode duel`): solo cuenta lo jugado tras `sv
+   startcount`; ladders y Elo separados de los del público.
+7. **Temporadas** manuales (`--new-season`) y **duelos oficiales** por torneo
+   (cvar `stats_event`): categorías `public` / `duel` / `official`, cada una
+   con su Elo por temporada y uno histórico.
+8. (Siguiente iteración) Web / API del ladder sobre las vistas.
 
 ## Formato de eventos (v1)
 
@@ -72,9 +77,10 @@ Todos llevan `ev` y `t` (segundos desde el inicio del mapa).
 
 | ev | campos |
 |---|---|
-| `match_start` | `v`, `match`, `server`, `map`, `mode` (`dm`/`ctb`/`campaign`/`coop`), `tournament`, `ts` (unix), `teams[]` (`idx`,`army`,`name`) |
+| `match_start` | `v`, `match`, `server`, `map`, `mode` (`dm`/`ctb`/`campaign`/`coop`), `kind` (`public`/`duel`), `event` (torneo), `tournament`, `ts` (unix), `teams[]` (`idx`,`army`,`name`) |
+| `live` / `resume` / `live_cancel` | solo duelos: la cuenta llegó a 0 (con `event`) / se reanudó tras una pausa / `sv resetcount` |
 | `team` | `slot`, `name`, `bot`, `team` (-1 = observador) |
-| `kill` | `killer`/`victim` (`name`,`bot`,`team`,`class`,`pos`), `mod`, `weapon`, `hs`, `ff`, `suicide`, `dist`, `live` |
+| `kill` | `killer`/`victim` (`name`,`bot`,`team`,`class`,`pos`), `mod`, `weapon`, `hs`, `ff`, `suicide`, `dist` |
 | `obj` | `type` (`touch`,`area`,`timed`,`timed_held`,`explosive`,`bc_pickup`,`bc_drop`,`bc_capture`), `name`, `team`, `player` |
 | `leave` | resumen del jugador (igual que en `match_end.players[]`) |
 | `match_end` | `ts`, `dur`, `winner` (0/1, -1 empate, null = sin ganador), `reason` (`normal`/`forced`), `teams[]` (`score`,`kills`,`losses`), `players[]` |

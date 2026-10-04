@@ -34,4 +34,7 @@ void StatsLog_ClientDisconnect (edict_t *ent);
 void StatsLog_Kill (edict_t *targ, edict_t *inflictor, edict_t *attacker);
 void StatsLog_Objective (const char *type, const char *name, int team, edict_t *player);
 
+void StatsLog_CountdownDone (void);
+void StatsLog_CountdownReset (void);
+
 #endif
