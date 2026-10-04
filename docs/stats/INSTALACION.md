@@ -6,6 +6,27 @@ D-Day: Normandy 5.068 o superior. Para el detalle de consultas y reglas, ver
 [`PLAN.md`](PLAN.md). Índice general de la documentación en
 [`docs/README.md`](../README.md).
 
+## Índice
+
+1. [Servidor de juego](#1-servidor-de-juego)
+2. [PostgreSQL](#2-postgresql)
+3. [Ingestor](#3-ingestor)
+4. [Comprobar que funciona](#4-comprobar-que-funciona)
+5. [Operación diaria](#5-operación-diaria)
+6. [Actualizar a una versión nueva](#6-actualizar-a-una-versión-nueva)
+7. [Problemas comunes](#7-problemas-comunes)
+
+## Requisitos
+
+| Pieza | Necesita |
+|---|---|
+| Servidor de juego | Q2PRO (o R1Q2) y la DLL del mod compilada (sección 1). |
+| Base de datos | PostgreSQL 13 o superior (probado con 16) (sección 2). |
+| Ingestor | Python 3.9 o superior con `psycopg` (sección 3). |
+
+Las tres piezas pueden estar en la **misma máquina** (lo más simple) o
+repartidas; ver abajo.
+
 ## Las tres piezas
 
 ```
