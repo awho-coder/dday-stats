@@ -22,6 +22,9 @@ Versión 5.068
   `T_Damage()` en g_combat.c: casco que desvía un tiro a la cabeza y
   sobrevivir con un pie herido.
 
+- El contador de rachas cuenta por nivel (KILLING SPREE … GODLIKE) y
+  registra además las rachas cortadas, igual que los anuncios del juego.
+
 - Agrega la variable "stats_server" para identificar al servidor. Los
   jugadores conectados con el mismo nombre se registran como
   "nombre (2)".

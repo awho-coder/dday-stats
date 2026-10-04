@@ -3,7 +3,8 @@
 Guía paso a paso para dejar funcionando las estadísticas y el ladder de
 D-Day: Normandy 5.068 o superior. Para el detalle de consultas y reglas, ver
 [`stats/README.md`](../../stats/README.md); para el diseño,
-[`PLAN.md`](PLAN.md).
+[`PLAN.md`](PLAN.md). Índice general de la documentación en
+[`docs/README.md`](../README.md).
 
 ## Las tres piezas
 
