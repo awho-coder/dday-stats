@@ -1,8 +1,8 @@
 ---
 type: PostgreSQL View
-title: v_player_totals_by_kind
-description: Totales historicos por jugador y categoria (public/duel/official).
-resource: postgresql://dday/public/v_player_totals_by_kind
+title: v_player_totals_by_mode
+description: 'Totales historicos por jugador y modo de juego (dm, ctb, control...).'
+resource: postgresql://dday/public/v_player_totals_by_mode
 tags: [postgresql, view, ladder]
 status: stable
 generated: { by: process:okf-export, at: 2026-10-05T01:21:03Z }
@@ -15,7 +15,7 @@ sources:
 
 | Columna | Tipo | Nulo | Descripción |
 |---|---|---|---|
-| `kind` | text | sí |  |
+| `mode` | text | sí |  |
 | `player_id` | integer | sí |  |
 | `name` | text | sí |  |
 | `matches` | bigint | sí |  |
@@ -57,3 +57,4 @@ sources:
 - Referencia a [kills](../tables/kills.md).
 - Referencia a [matches](../tables/matches.md).
 - Referencia a [objectives](../tables/objectives.md).
+- Referencia a [player_stats](../tables/player_stats.md).

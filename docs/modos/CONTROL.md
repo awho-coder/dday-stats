@@ -46,6 +46,21 @@ el único explosivo de área del modo.
 - El borde de la zona se marca con chispas cada segundo; el color cambia según
   el dueño (neutral, Aliados o Eje).
 
+## Estadísticas
+
+Con las estadísticas activadas (`stats_log 1`, ver `stats/README.md`) la partida
+de control queda registrada con `mode` `control`, y cuenta con su propio Elo y
+K/D (separados de los de deathmatch). Además se guarda por jugador:
+
+- **Segundos en zona** (`zone_time`): tiempo vivo dentro de la zona con la zona
+  ya abierta.
+- **Capturas**: cuando un equipo captura la zona, cada jugador de ese equipo que
+  estaba dentro suma una captura (evento `obj` de tipo `zone_capture`, que
+  también cuenta como objetivo del jugador).
+
+Se consultan con `ladder_zone()` (capturas, minutos en la zona y capturas por
+partida) y el Elo del modo con `ladder_elo(10, 'public', 'current', 'control')`.
+
 ## Cvars del servidor
 
 | Cvar | Por defecto | Descripción |

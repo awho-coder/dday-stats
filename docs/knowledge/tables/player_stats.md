@@ -1,11 +1,11 @@
 ---
 type: PostgreSQL Table
 title: player_stats
-description: 'Resumen por jugador, temporada, categoria y torneo (lo mantiene apply_rollups).'
+description: 'Resumen por jugador, temporada, categoria, modo de juego y torneo (lo mantiene apply_rollups).'
 resource: postgresql://dday/public/player_stats
 tags: [postgresql, table, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-04T18:33:53Z }
+generated: { by: process:okf-export, at: 2026-10-05T01:21:03Z }
 sources: 
   - id: schema
     resource: /references/schema.sql
@@ -18,6 +18,7 @@ sources:
 | `player_id` | integer | no | Jugador. (PK; FK → [players](players.md)) |
 | `season_id` | integer | no | Temporada. (PK; FK → [seasons](seasons.md)) |
 | `kind` | text | no | Categoria: public, duel u official. (PK) |
+| `mode` | text | no | Modo de juego de las partidas: dm, ctb, campaign, control... (PK) |
 | `event` | text | no | Torneo; cadena vacia = casual. (PK) |
 | `matches` | integer | no | Partidas jugadas. |
 | `wins` | integer | no | Partidas ganadas. |
@@ -39,14 +40,16 @@ sources:
 | `helmet_saves` | integer | no | Cascos que desviaron un tiro a la cabeza. |
 | `foot_saves` | integer | no | Veces que sobrevivio con el pie herido. |
 | `deflected` | integer | no | Tiros desviados por cascos ajenos. |
-| `longest_kill` | integer | sí | Kill mas larga (distancia en unidades de Quake 2). |
-| `last_match` | timestamp with time zone | sí | Fecha de la ultima partida. |
 | `sprees` | integer | no | Veces que alcanzo KILLING SPREE. |
 | `rampages` | integer | no | Veces que alcanzo RAMPAGE. |
 | `dominatings` | integer | no | Veces que alcanzo DOMINATING. |
 | `unstoppables` | integer | no | Veces que alcanzo UNSTOPPABLE. |
 | `godlikes` | integer | no | Veces que alcanzo GODLIKE. |
 | `streaks_ended` | integer | no | Rachas ajenas que corto. |
+| `longest_kill` | integer | sí | Kill mas larga (distancia en unidades de Quake 2). |
+| `last_match` | timestamp with time zone | sí | Fecha de la ultima partida. |
+| `zone_seconds` | integer | no | Modo control: segundos dentro de la zona. |
+| `zone_captures` | integer | no | Modo control: capturas de la zona en las que participo (estaba dentro). |
 
 # Relaciones
 

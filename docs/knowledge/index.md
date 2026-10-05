@@ -26,8 +26,8 @@ cualquier navegador.
 # Esquema
 
 * [Tablas](tables/) - 17 tablas del esquema.
-* [Vistas](views/) - 18 vistas del ladder.
-* [Funciones](functions/) - 12 funciones del ladder.
+* [Vistas](views/) - 19 vistas del ladder.
+* [Funciones](functions/) - 13 funciones del ladder.
 
 # Material de origen
 

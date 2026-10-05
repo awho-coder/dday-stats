@@ -179,7 +179,10 @@ duró lo suficiente y cada equipo tuvo suficientes humanos. Los bots nunca cuent
 | humanos mínimos por equipo | 2 (`--min-humans`) | 1 (`--duel-min-humans`) |
 
 Hay tres categorías con **ratings separados**: `public`, `duel` (casual) y
-`official` (cualquier partida con `stats_event`). En el ladder K/D, las
+`official` (cualquier partida con `stats_event`). Cada categoría tiene además un
+Elo **general** (`mode = 'all'`, todas las partidas) y un Elo **por modo** (`dm`,
+`ctb`, `campaign`, `control`...): cada partida rankeada actualiza los dos, así
+ganar una partida de control no mueve el Elo de kills de `dm`. En el ladder K/D, las
 kills a bots y las muertes causadas por bots no cuentan (se ven aparte en
 `bot_kills`).
 
@@ -213,6 +216,9 @@ reasignan y se recalcula todo solo.
 -- Parámetros comunes:
 --   categoría: 'public', 'duel', 'official' o 'all'
 --   temporada: 'current' (por defecto), 'all' (histórico) o el nombre de una temporada
+--   modo (último parámetro de ladder_kd / ladder_elo / ladder_streak / ladder_luck /
+--   ladder_unlucky / ladder_streak_tiers, y 4.º de player_totals): 'dm', 'ctb',
+--   'campaign', 'control'... o 'all' (por defecto). En ladder_elo 'all' es el Elo general.
 
 SELECT * FROM ladder_kd(10);                         -- K/D, temporada actual, mínimo 10 partidas
 SELECT * FROM ladder_kd(10, 'public');               -- solo público
@@ -221,13 +227,19 @@ SELECT * FROM ladder_kd(1, 'official');              -- solo duelos oficiales
 SELECT * FROM ladder_kd(1, 'official', 'all', 'copa-verano');  -- un torneo, histórico
 SELECT * FROM ladder_kd(10, 'all', 'Temporada 1');   -- una temporada anterior
 SELECT * FROM ladder_kd(10, 'all', 'all');           -- histórico
+SELECT * FROM ladder_kd(10, 'all', 'current', NULL, 'dm');  -- K/D solo en deathmatch
 
 SELECT * FROM ladder_elo(10);                        -- Elo público, temporada actual
 SELECT * FROM ladder_elo(5, 'official');             -- Elo de duelos oficiales
 SELECT * FROM ladder_elo(10, 'public', 'all');       -- Elo histórico
+SELECT * FROM ladder_elo(10, 'public', 'current', 'control');  -- Elo solo del modo control
+SELECT * FROM ladder_elo(10, 'public', 'current', 'dm');       -- Elo solo de deathmatch
 
 SELECT * FROM ladder_streak();                       -- 20 mejores rachas, temporada actual
 SELECT * FROM ladder_streak('duel', 10, 'all');      -- 10 mejores rachas en duelos, histórico
+
+SELECT * FROM ladder_zone();                         -- modo control: capturas y minutos en la zona
+SELECT * FROM ladder_zone(1, 'all', 'all');          -- idem, sin mínimo de partidas, histórico
 
 SELECT * FROM ladder_luck();                         -- los más suertudos (casco + pie), mín. 5 partidas
 SELECT * FROM ladder_unlucky();                      -- tiradores con más tiros desviados por cascos
@@ -238,6 +250,7 @@ SELECT * FROM player_totals('current', 'official');  -- totales completos con cu
 
 SELECT * FROM v_player_totals;                    -- una fila por jugador (histórico)
 SELECT * FROM v_player_totals_by_kind;            -- una fila por jugador y categoría (histórico)
+SELECT * FROM v_player_totals_by_mode;            -- una fila por jugador y modo de juego (histórico)
 
 SELECT * FROM v_player_profile WHERE name = 'Pato';
 -- partidas, victorias, K/D, KPM, % headshots, precisión, horas jugadas,
@@ -246,7 +259,7 @@ SELECT * FROM v_player_profile WHERE name = 'Pato';
 SELECT * FROM v_player_maps WHERE player_id = 1 ORDER BY matches DESC;
 SELECT * FROM v_player_weapons WHERE player_id = 1 ORDER BY kills DESC;
 
-SELECT * FROM v_map_stats ORDER BY matches DESC;   -- balance aliados / eje por mapa y tipo
+SELECT * FROM v_map_stats ORDER BY matches DESC;   -- balance aliados / eje por mapa, tipo y modo
 SELECT * FROM v_map_weapons WHERE map = 'dday1' ORDER BY kills DESC;
 SELECT * FROM v_weapon_stats ORDER BY kills DESC;
 SELECT * FROM v_daily_activity ORDER BY day DESC;

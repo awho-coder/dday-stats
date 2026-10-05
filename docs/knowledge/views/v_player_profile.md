@@ -1,11 +1,11 @@
 ---
 type: PostgreSQL View
 title: v_player_profile
-description: Perfil completo de un jugador (totales + Elo + favoritos + nemesis).
+description: Perfil completo de un jugador (totales + Elo general + favoritos + nemesis).
 resource: postgresql://dday/public/v_player_profile
 tags: [postgresql, view, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-04T18:33:53Z }
+generated: { by: process:okf-export, at: 2026-10-05T01:21:03Z }
 sources: 
   - id: schema
     resource: /references/schema.sql
@@ -48,6 +48,8 @@ sources:
 | `unstoppables` | bigint | sí |  |
 | `godlikes` | bigint | sí |  |
 | `streaks_ended` | bigint | sí |  |
+| `zone_captures` | bigint | sí |  |
+| `zone_minutes` | numeric | sí |  |
 | `rating` | integer | sí |  |
 | `ranked_games` | integer | sí |  |
 | `duel_rating` | integer | sí |  |

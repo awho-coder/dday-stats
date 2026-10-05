@@ -5,7 +5,7 @@ description: Resumen de un jugador en una partida (suma de sus tramos/reconexion
 resource: postgresql://dday/public/match_players
 tags: [postgresql, table, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-04T18:33:53Z }
+generated: { by: process:okf-export, at: 2026-10-05T01:21:03Z }
 sources: 
   - id: schema
     resource: /references/schema.sql
@@ -45,6 +45,7 @@ sources:
 | `unstoppables` | integer | no | Veces que alcanzo UNSTOPPABLE. |
 | `godlikes` | integer | no | Veces que alcanzo GODLIKE. |
 | `streaks_ended` | integer | no | Rachas ajenas (>= base) que corto matando. |
+| `zone_seconds` | integer | no | Modo control: segundos que paso dentro de la zona (vivo y con la zona abierta). |
 
 # Relaciones
 

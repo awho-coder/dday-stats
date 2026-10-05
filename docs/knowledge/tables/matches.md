@@ -5,7 +5,7 @@ description: Una partida (un mapa jugado en un servidor).
 resource: postgresql://dday/public/matches
 tags: [postgresql, table, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-04T18:33:53Z }
+generated: { by: process:okf-export, at: 2026-10-05T01:21:03Z }
 sources: 
   - id: schema
     resource: /references/schema.sql
@@ -18,7 +18,7 @@ sources:
 | `id` | text | no | Id de partida: <fecha>-<servidor>-<random>. Clave primaria. (PK) |
 | `server` | text | no | Id del servidor (cvar stats_server). |
 | `map` | text | no | Mapa jugado. |
-| `mode` | text | no | Modo del juego: dm, ctb o campaign. |
+| `mode` | text | no | Modo del juego: dm, ctb, campaign, control (o el que mande la DLL). |
 | `kind` | text | no | Tipo de partida: public o duel (cvar stats_mode). |
 | `event` | text | no | Torneo (cvar stats_event); cadena vacia = casual. |
 | `season_id` | integer | sí | Temporada a la que pertenece la partida. (FK → [seasons](seasons.md)) |

@@ -1,11 +1,11 @@
 ---
 type: PostgreSQL View
 title: v_map_stats
-description: 'Estadisticas por mapa: balance aliados/eje, duracion, kills.'
+description: 'Estadisticas por mapa y modo: balance aliados/eje, duracion, kills.'
 resource: postgresql://dday/public/v_map_stats
 tags: [postgresql, view, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-04T18:33:53Z }
+generated: { by: process:okf-export, at: 2026-10-05T01:21:03Z }
 sources: 
   - id: schema
     resource: /references/schema.sql
@@ -17,6 +17,7 @@ sources:
 |---|---|---|---|
 | `map` | text | sí |  |
 | `kind` | text | sí |  |
+| `mode` | text | sí |  |
 | `matches` | integer | sí |  |
 | `allied_wins` | integer | sí |  |
 | `axis_wins` | integer | sí |  |

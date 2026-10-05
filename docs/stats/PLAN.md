@@ -77,19 +77,20 @@ Todos llevan `ev` y `t` (segundos desde el inicio del mapa).
 
 | ev | campos |
 |---|---|
-| `match_start` | `v`, `match`, `server`, `map`, `mode` (`dm`/`ctb`/`campaign`/`coop`), `kind` (`public`/`duel`), `event` (torneo), `tournament`, `ts` (unix), `teams[]` (`idx`,`army`,`name`) |
+| `match_start` | `v`, `match`, `server`, `map`, `mode` (`dm`/`ctb`/`campaign`/`coop`/`control`), `kind` (`public`/`duel`), `event` (torneo), `tournament`, `ts` (unix), `teams[]` (`idx`,`army`,`name`) |
 | `live` / `resume` / `live_cancel` | solo duelos: la cuenta llegó a 0 (con `event`) / se reanudó tras una pausa / `sv resetcount` |
 | `team` | `slot`, `name`, `bot`, `team` (-1 = observador) |
 | `kill` | `killer`/`victim` (`name`,`bot`,`team`,`class`,`pos`), `mod`, `weapon`, `hs`, `ff`, `suicide`, `dist` |
 | `luck` | `type` (`helmet`/`foot`), `player`, `by` (quien disparó), `mod` |
-| `obj` | `type` (`touch`,`area`,`timed`,`timed_held`,`explosive`,`bc_pickup`,`bc_drop`,`bc_capture`), `name`, `team`, `player` |
+| `obj` | `type` (`touch`,`area`,`timed`,`timed_held`,`explosive`,`bc_pickup`,`bc_drop`,`bc_capture`,`zone_capture`), `name`, `team`, `player` (en `zone_capture`, un evento por cada jugador del equipo que estaba en la zona) |
 | `leave` | resumen del jugador (igual que en `match_end.players[]`) |
 | `match_end` | `ts`, `dur`, `winner` (0/1, -1 empate, null = sin ganador), `reason` (`normal`/`forced`), `teams[]` (`score`,`kills`,`losses`), `players[]` |
 
 Resumen por jugador: `name`, `bot`, `team` (último), `time` (`[s_aliados, s_eje]`),
 `classes` (segundos por clase), `kills`, `deaths`, `suicides`, `tk`, `hs`,
 `best_streak`, `helmet_saves`, `foot_saves`, `deflected`, `hits`, `misses`,
-`score`, `points`.
+`score`, `points`; en mapas con zona de control también `zone_time` (segundos
+dentro de la zona; no aparece en los otros modos).
 
 ## Reglas del ladder
 
@@ -100,3 +101,14 @@ Resumen por jugador: `name`, `bot`, `team` (último), `time` (`[s_aliados, s_eje
   `delta = K * (S - E) * participación`, con `E` calculado con el promedio
   de rating de cada equipo, `K = 40` en las primeras 10 partidas y luego 24,
   y `participación` = fracción del tiempo de la partida jugado en ese equipo.
+- **Elo general y Elo por modo**: cada categoría (`public`, `duel`, `official`)
+  se calcula dos veces por partida rankeada: el rating **general**
+  (`ratings.mode = 'all'`, todos los modos) y el del **modo** de la partida
+  (`ratings.mode = 'dm'`, `'ctb'`, `'control'`...). Las reglas de "rankeada" son
+  las mismas; solo cambia en qué fila se acumula el resultado. Los totales
+  (`player_stats`, `map_stats`) también llevan el modo, y los ladders reciben
+  un parámetro opcional `match_mode` (por defecto `'all'`).
+- **Modo control** (`mode = 'control'`): además del Elo y el K/D del modo, se
+  registran los segundos dentro de la zona (`zone_time`) y las capturas
+  (`obj.type = 'zone_capture'`, una por cada jugador del equipo capturador que
+  estaba en la zona). Se consultan con `ladder_zone()`.
