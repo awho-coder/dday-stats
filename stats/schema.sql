@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS matches (
     id           text PRIMARY KEY,           -- <fecha>-<servidor>-<random>
     server       text        NOT NULL,
     map          text        NOT NULL,
-    mode         text        NOT NULL,       -- dm, ctb, campaign
+    mode         text        NOT NULL,       -- dm, ctb, campaign, control
     kind         text        NOT NULL DEFAULT 'public',  -- public o duel (cvar stats_mode)
     event        text        NOT NULL DEFAULT '',        -- torneo (cvar stats_event); '' = casual
     season_id    integer     REFERENCES seasons (id),
@@ -173,14 +173,18 @@ UPDATE match_players mp SET
 WHERE mp.human_kills = 0 AND mp.human_deaths = 0 AND (mp.kills > 0 OR mp.deaths > 0);
 
 -- Rating Elo por equipos (lo calcula ingest.py), separado por categoria
--- (public, duel, official) y por temporada. season_id = 0 es el historico de
--- todas las temporadas. Es un dato derivado: si la tabla es de una version
--- anterior se recrea y ingest.py --init-schema la recalcula.
+-- (public, duel, official), por modo de juego y por temporada. mode = 'all' es
+-- el Elo general (todos los modos); mode = 'dm', 'ctb', 'control'... es el Elo
+-- solo de las partidas de ese modo. season_id = 0 es el historico de todas las
+-- temporadas. Es un dato derivado: si la tabla es de una version anterior se
+-- recrea y ingest.py --init-schema la recalcula.
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'ratings')
-       AND NOT EXISTS (SELECT 1 FROM information_schema.columns
-                       WHERE table_name = 'ratings' AND column_name = 'season_id') THEN
+       AND (NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'ratings' AND column_name = 'season_id')
+            OR NOT EXISTS (SELECT 1 FROM information_schema.columns
+                           WHERE table_name = 'ratings' AND column_name = 'mode')) THEN
         DROP TABLE rating_history CASCADE;
         DROP TABLE ratings CASCADE;  -- las vistas se recrean mas abajo
         RAISE NOTICE 'ratings recreada: ejecute ingest.py --rebuild-ratings';
@@ -190,6 +194,7 @@ END $$;
 CREATE TABLE IF NOT EXISTS ratings (
     player_id   integer     NOT NULL REFERENCES players (id),
     kind        text        NOT NULL,       -- public, duel u official
+    mode        text        NOT NULL,       -- all (general), dm, ctb, control...
     season_id   integer     NOT NULL,       -- 0 = historico
     rating      real        NOT NULL DEFAULT 1500,
     peak        real        NOT NULL DEFAULT 1500,
@@ -198,16 +203,17 @@ CREATE TABLE IF NOT EXISTS ratings (
     losses      integer     NOT NULL DEFAULT 0,
     draws       integer     NOT NULL DEFAULT 0,
     updated_at  timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (player_id, kind, season_id)
+    PRIMARY KEY (player_id, kind, mode, season_id)
 );
 
 CREATE TABLE IF NOT EXISTS rating_history (
     match_id       text    NOT NULL REFERENCES matches (id) ON DELETE CASCADE,
     player_id      integer NOT NULL REFERENCES players (id),
+    mode           text    NOT NULL,        -- all (general), dm, ctb, control...
     season_id      integer NOT NULL,        -- 0 = historico
     rating_before  real    NOT NULL,
     rating_after   real    NOT NULL,
-    PRIMARY KEY (match_id, player_id, season_id)
+    PRIMARY KEY (match_id, player_id, mode, season_id)
 );
 
 ------------------------------------------------------------------------------
@@ -218,7 +224,8 @@ CREATE TABLE IF NOT EXISTS rating_history (
 -- Si se borran o corrigen partidas a mano: SELECT rebuild_rollups();
 ------------------------------------------------------------------------------
 
--- version anterior sin temporadas: se recrea (rebuild_rollups la vuelve a llenar)
+-- version anterior sin temporadas o sin modo: se recrea (rebuild_rollups la
+-- vuelve a llenar)
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'player_stats')
@@ -226,13 +233,25 @@ BEGIN
                        WHERE table_name = 'player_stats' AND column_name = 'season_id') THEN
         DROP TABLE player_stats CASCADE;
     END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'player_stats')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                       WHERE table_name = 'player_stats' AND column_name = 'mode') THEN
+        DROP TABLE player_stats CASCADE;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'map_stats')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                       WHERE table_name = 'map_stats' AND column_name = 'mode') THEN
+        DROP TABLE map_stats CASCADE;
+    END IF;
 END $$;
 
--- por jugador humano, temporada, categoria (public / duel / official) y torneo
+-- por jugador humano, temporada, categoria (public / duel / official), modo
+-- de juego y torneo
 CREATE TABLE IF NOT EXISTS player_stats (
     player_id     integer NOT NULL REFERENCES players (id),
     season_id     integer NOT NULL REFERENCES seasons (id),
     kind          text    NOT NULL,             -- public, duel u official
+    mode          text    NOT NULL,             -- dm, ctb, campaign, control...
     event         text    NOT NULL DEFAULT '',  -- torneo; '' = casual
     matches       integer NOT NULL DEFAULT 0,
     wins          integer NOT NULL DEFAULT 0,
@@ -262,7 +281,7 @@ CREATE TABLE IF NOT EXISTS player_stats (
     streaks_ended integer NOT NULL DEFAULT 0,
     longest_kill  integer,
     last_match    timestamptz,
-    PRIMARY KEY (player_id, season_id, kind, event)
+    PRIMARY KEY (player_id, season_id, kind, mode, event)
 );
 
 CREATE TABLE IF NOT EXISTS player_map_stats (
@@ -307,6 +326,7 @@ CREATE INDEX IF NOT EXISTS player_duel_stats_victim_idx ON player_duel_stats (vi
 CREATE TABLE IF NOT EXISTS map_stats (
     map           text    NOT NULL,
     kind          text    NOT NULL,
+    mode          text    NOT NULL,
     matches       integer NOT NULL DEFAULT 0,
     allied_wins   integer NOT NULL DEFAULT 0,
     axis_wins     integer NOT NULL DEFAULT 0,
@@ -316,7 +336,7 @@ CREATE TABLE IF NOT EXISTS map_stats (
     kills         integer NOT NULL DEFAULT 0,
     best_streak   integer NOT NULL DEFAULT 0,
     last_played   timestamptz,
-    PRIMARY KEY (map, kind)
+    PRIMARY KEY (map, kind, mode)
 );
 
 CREATE TABLE IF NOT EXISTS map_weapon_stats (
@@ -444,12 +464,12 @@ BEGIN
     LEFT JOIN ended e ON e.match_id = m2.match_id AND e.player_id = m2.player_id
     WHERE m2.match_id = mp.match_id AND m2.player_id = mp.player_id AND mp.match_id = ANY (ids);
 
-    INSERT INTO player_stats AS s (player_id, season_id, kind, event, matches, wins, losses, draws,
+    INSERT INTO player_stats AS s (player_id, season_id, kind, mode, event, matches, wins, losses, draws,
         kills, deaths, human_kills, human_deaths, headshots, hits, misses, teamkills, suicides,
         objectives, seconds, best_streak, max_kills, longest_kill, last_match,
         helmet_saves, foot_saves, deflected,
         sprees, rampages, dominatings, unstoppables, godlikes, streaks_ended)
-    SELECT mp.player_id, m.season_id, match_category(m.kind, m.event), m.event, count(*),
+    SELECT mp.player_id, m.season_id, match_category(m.kind, m.event), m.mode, m.event, count(*),
            count(*) FILTER (WHERE mp.result = 'W'), count(*) FILTER (WHERE mp.result = 'L'),
            count(*) FILTER (WHERE mp.result = 'D'),
            sum(mp.kills), sum(mp.deaths), sum(mp.human_kills), sum(mp.human_deaths),
@@ -468,8 +488,8 @@ BEGIN
                GROUP BY k.match_id, k.killer_id) lk
            ON lk.match_id = mp.match_id AND lk.killer_id = mp.player_id
     WHERE mp.match_id = ANY (ids) AND NOT p.is_bot
-    GROUP BY mp.player_id, m.season_id, match_category(m.kind, m.event), m.event
-    ON CONFLICT (player_id, season_id, kind, event) DO UPDATE SET
+    GROUP BY mp.player_id, m.season_id, match_category(m.kind, m.event), m.mode, m.event
+    ON CONFLICT (player_id, season_id, kind, mode, event) DO UPDATE SET
         matches = s.matches + EXCLUDED.matches, wins = s.wins + EXCLUDED.wins,
         losses = s.losses + EXCLUDED.losses, draws = s.draws + EXCLUDED.draws,
         kills = s.kills + EXCLUDED.kills, deaths = s.deaths + EXCLUDED.deaths,
@@ -537,9 +557,9 @@ BEGIN
     GROUP BY k.killer_id, k.victim_id
     ON CONFLICT (killer_id, victim_id) DO UPDATE SET kills = s.kills + EXCLUDED.kills;
 
-    INSERT INTO map_stats AS s (map, kind, matches, allied_wins, axis_wins, draws, seconds, humans,
+    INSERT INTO map_stats AS s (map, kind, mode, matches, allied_wins, axis_wins, draws, seconds, humans,
         kills, best_streak, last_played)
-    SELECT m.map, m.kind, count(*), count(*) FILTER (WHERE m.winner = 0),
+    SELECT m.map, m.kind, m.mode, count(*), count(*) FILTER (WHERE m.winner = 0),
            count(*) FILTER (WHERE m.winner = 1), count(*) FILTER (WHERE m.winner = -1),
            sum(m.duration_s)::bigint, sum(m.humans),
            coalesce(sum(mk.kills), 0), coalesce(max(ms.best_streak), 0), max(m.started_at)
@@ -550,8 +570,8 @@ BEGIN
                FROM match_players mp JOIN players p ON p.id = mp.player_id
                WHERE mp.match_id = ANY (ids) AND NOT p.is_bot GROUP BY mp.match_id) ms ON ms.match_id = m.id
     WHERE m.id = ANY (ids)
-    GROUP BY m.map, m.kind
-    ON CONFLICT (map, kind) DO UPDATE SET
+    GROUP BY m.map, m.kind, m.mode
+    ON CONFLICT (map, kind, mode) DO UPDATE SET
         matches = s.matches + EXCLUDED.matches, allied_wins = s.allied_wins + EXCLUDED.allied_wins,
         axis_wins = s.axis_wins + EXCLUDED.axis_wins, draws = s.draws + EXCLUDED.draws,
         seconds = s.seconds + EXCLUDED.seconds, humans = s.humans + EXCLUDED.humans,
@@ -622,7 +642,7 @@ END $$;
 ------------------------------------------------------------------------------
 
 DROP VIEW IF EXISTS v_player_profile, v_player_totals, v_player_totals_by_kind,
-    player_totals_base, v_player_maps, v_player_fav_map, v_player_weapons,
+    v_player_totals_by_mode, player_totals_base, v_player_maps, v_player_fav_map, v_player_weapons,
     v_player_fav_weapon, v_player_classes, v_player_fav_class, v_player_duels,
     v_player_nemesis, v_player_favorite_victim, v_player_records, v_map_stats,
     v_map_weapons, v_weapon_stats, v_daily_activity, v_seasons, v_events CASCADE;
@@ -638,15 +658,24 @@ DROP FUNCTION IF EXISTS player_totals(text, text, text) CASCADE;
 DROP FUNCTION IF EXISTS ladder_luck(integer, text, text);
 DROP FUNCTION IF EXISTS ladder_unlucky(integer, text, text);
 DROP FUNCTION IF EXISTS ladder_streak_tiers(integer, text, text);
+-- firmas actuales (se recrean en cada ejecucion; CREATE FUNCTION no reemplaza)
+DROP FUNCTION IF EXISTS player_totals(text, text, text, text) CASCADE;
+DROP FUNCTION IF EXISTS ladder_kd(integer, text, text, text, text);
+DROP FUNCTION IF EXISTS ladder_elo(integer, text, text, text);
+DROP FUNCTION IF EXISTS ladder_streak(text, integer, text, text);
+DROP FUNCTION IF EXISTS ladder_luck(integer, text, text, text);
+DROP FUNCTION IF EXISTS ladder_unlucky(integer, text, text, text);
+DROP FUNCTION IF EXISTS ladder_streak_tiers(integer, text, text, text);
 
 -- Totales por jugador para una temporada, categoria y torneo:
 --   season: 'current' (la vigente), 'all' (historico) o el nombre de una temporada
 --   kind:   'public', 'duel', 'official' o 'all'
 --   event:  nombre de un torneo, o NULL para no filtrar
+--   mode:   modo de juego ('dm', 'ctb', 'campaign', 'control'...) o 'all'
 -- kills / deaths / kd / kills_per_min cuentan solo enfrentamientos con humanos;
 -- las kills a bots se muestran aparte en bot_kills.
 CREATE FUNCTION player_totals(season text DEFAULT 'all', match_kind text DEFAULT 'all',
-                              match_event text DEFAULT NULL)
+                              match_event text DEFAULT NULL, match_mode text DEFAULT 'all')
 RETURNS TABLE (player_id integer, name text, matches bigint, wins bigint, losses bigint,
                draws bigint, kills bigint, deaths bigint, kd numeric, bot_kills bigint,
                headshots bigint, hs_pct numeric, accuracy_pct numeric, teamkills bigint,
@@ -675,6 +704,7 @@ LANGUAGE sql STABLE AS $$
         WHERE (season = 'all' OR ps.season_id = sid.id)
           AND (match_kind = 'all' OR ps.kind = match_kind)
           AND (match_event IS NULL OR ps.event = match_event)
+          AND (match_mode = 'all' OR ps.mode = match_mode)
         GROUP BY ps.player_id
     )
     SELECT s.player_id, p.name, s.matches, s.wins, s.losses, s.draws,
@@ -701,23 +731,32 @@ SELECT k.kind, t.*
 FROM (VALUES ('public'), ('duel'), ('official')) k(kind),
      LATERAL player_totals('all', k.kind) t;
 
--- Ladder por K/D (por defecto: temporada actual, todas las categorias)
+-- Totales historicos por jugador y modo de juego (dm, ctb, control...)
+CREATE VIEW v_player_totals_by_mode AS
+SELECT m.mode, t.*
+FROM (SELECT DISTINCT mode FROM player_stats) m,
+     LATERAL player_totals('all', 'all', NULL, m.mode) t;
+
+-- Ladder por K/D (por defecto: temporada actual, todas las categorias y modos)
 CREATE FUNCTION ladder_kd(min_matches integer DEFAULT 10, match_kind text DEFAULT 'all',
-                          season text DEFAULT 'current', match_event text DEFAULT NULL)
+                          season text DEFAULT 'current', match_event text DEFAULT NULL,
+                          match_mode text DEFAULT 'all')
 RETURNS TABLE (pos bigint, name text, matches bigint, kills bigint, deaths bigint,
                kd numeric, kills_per_min numeric, win_pct numeric, hs_pct numeric)
 LANGUAGE sql STABLE AS $$
     SELECT rank() OVER (ORDER BY t.kd DESC, t.kills DESC),
            t.name, t.matches, t.kills, t.deaths, t.kd, t.kills_per_min, t.win_pct, t.hs_pct
-    FROM player_totals(season, match_kind, match_event) t
+    FROM player_totals(season, match_kind, match_event, match_mode) t
     WHERE t.matches >= min_matches
     ORDER BY 1, t.name;
 $$;
 
 -- Ladder por rating Elo. kind: 'public', 'duel' u 'official' (cada uno con su
 -- rating). season: 'current', el nombre de una temporada o 'all' (historico).
+-- mode: 'all' = Elo general (todos los modos) o un modo ('dm', 'ctb', 'control'...)
+-- con su Elo propio.
 CREATE FUNCTION ladder_elo(min_games integer DEFAULT 10, match_kind text DEFAULT 'public',
-                           season text DEFAULT 'current')
+                           season text DEFAULT 'current', match_mode text DEFAULT 'all')
 RETURNS TABLE (pos bigint, name text, rating integer, peak integer,
                games integer, wins integer, losses integer, draws integer, win_pct numeric)
 LANGUAGE sql STABLE AS $$
@@ -727,14 +766,14 @@ LANGUAGE sql STABLE AS $$
            round(100.0 * r.wins / greatest(r.games, 1), 1)
     FROM ratings r
     JOIN players p ON p.id = r.player_id
-    WHERE r.games >= min_games AND r.kind = match_kind AND NOT p.is_bot
+    WHERE r.games >= min_games AND r.kind = match_kind AND r.mode = match_mode AND NOT p.is_bot
       AND r.season_id = coalesce(season_lookup(season), 0)
     ORDER BY 1, p.name;
 $$;
 
 -- Mejores rachas de kills (una fila por partida)
 CREATE FUNCTION ladder_streak(match_kind text DEFAULT 'all', max_rows integer DEFAULT 20,
-                              season text DEFAULT 'current')
+                              season text DEFAULT 'current', match_mode text DEFAULT 'all')
 RETURNS TABLE (pos bigint, name text, best_streak integer, map text, kind text,
                event text, played_at timestamptz)
 LANGUAGE sql STABLE AS $$
@@ -747,6 +786,7 @@ LANGUAGE sql STABLE AS $$
           JOIN matches m ON m.id = mp.match_id
           WHERE NOT p.is_bot AND mp.best_streak > 0
             AND (match_kind = 'all' OR match_category(m.kind, m.event) = match_kind)
+            AND (match_mode = 'all' OR m.mode = match_mode)
             AND (season = 'all' OR m.season_id = (SELECT season_lookup(season)))
           ORDER BY mp.best_streak DESC, m.started_at
           LIMIT max_rows) t
@@ -756,32 +796,32 @@ $$;
 -- Los mas suertudos: casco que desvia un tiro a la cabeza + sobrevivir con
 -- "almost lost a foot". luck_per_match permite comparar a quien juega poco.
 CREATE FUNCTION ladder_luck(min_matches integer DEFAULT 5, match_kind text DEFAULT 'all',
-                            season text DEFAULT 'current')
+                            season text DEFAULT 'current', match_mode text DEFAULT 'all')
 RETURNS TABLE (pos bigint, name text, luck bigint, helmet_saves bigint, foot_saves bigint,
                matches bigint, luck_per_match numeric)
 LANGUAGE sql STABLE AS $$
     SELECT rank() OVER (ORDER BY t.luck DESC), t.name, t.luck, t.helmet_saves, t.foot_saves,
            t.matches, round(t.luck::numeric / greatest(t.matches, 1), 2)
-    FROM player_totals(season, match_kind) t
+    FROM player_totals(season, match_kind, NULL, match_mode) t
     WHERE t.matches >= min_matches AND t.luck > 0
     ORDER BY t.luck DESC, t.name;
 $$;
 
 -- Los tiradores mas desafortunados: mas tiros desviados por cascos ajenos
 CREATE FUNCTION ladder_unlucky(min_matches integer DEFAULT 5, match_kind text DEFAULT 'all',
-                               season text DEFAULT 'current')
+                               season text DEFAULT 'current', match_mode text DEFAULT 'all')
 RETURNS TABLE (pos bigint, name text, deflected bigint, matches bigint, deflected_per_match numeric)
 LANGUAGE sql STABLE AS $$
     SELECT rank() OVER (ORDER BY t.deflected DESC), t.name, t.deflected, t.matches,
            round(t.deflected::numeric / greatest(t.matches, 1), 2)
-    FROM player_totals(season, match_kind) t
+    FROM player_totals(season, match_kind, NULL, match_mode) t
     WHERE t.matches >= min_matches AND t.deflected > 0
     ORDER BY t.deflected DESC, t.name;
 $$;
 
 -- Rachas por nivel: quien mas veces llego a GODLIKE, UNSTOPPABLE, etc.
 CREATE FUNCTION ladder_streak_tiers(min_matches integer DEFAULT 1, match_kind text DEFAULT 'all',
-                                    season text DEFAULT 'current')
+                                    season text DEFAULT 'current', match_mode text DEFAULT 'all')
 RETURNS TABLE (pos bigint, name text, matches bigint, godlikes bigint, unstoppables bigint,
                dominatings bigint, rampages bigint, sprees bigint, streaks_ended bigint,
                best_streak integer)
@@ -790,7 +830,7 @@ LANGUAGE sql STABLE AS $$
                                  t.rampages DESC, t.sprees DESC),
            t.name, t.matches, t.godlikes, t.unstoppables, t.dominatings, t.rampages, t.sprees,
            t.streaks_ended, t.best_streak
-    FROM player_totals(season, match_kind) t
+    FROM player_totals(season, match_kind, NULL, match_mode) t
     WHERE t.matches >= min_matches AND (t.sprees > 0 OR t.streaks_ended > 0)
     ORDER BY 1, t.name;
 $$;
@@ -868,7 +908,7 @@ ORDER BY d.killer_id, d.kills DESC, p.name;
 -- Perfil completo (una fila por jugador)
 CREATE VIEW v_player_profile AS
 SELECT t.*,
-       round(r.rating)::integer  AS rating,          -- Elo de la temporada actual
+       round(r.rating)::integer  AS rating,          -- Elo general de la temporada actual
        r.games                   AS ranked_games,
        round(rd.rating)::integer AS duel_rating,
        rd.games                  AS duel_games,
@@ -881,21 +921,22 @@ SELECT t.*,
        fv.victim                 AS favorite_victim
 FROM v_player_totals t
 LEFT JOIN ratings r                   ON r.player_id = t.player_id AND r.kind = 'public'
-                                     AND r.season_id = season_lookup('current')
+                                     AND r.mode = 'all' AND r.season_id = season_lookup('current')
 LEFT JOIN ratings rd                  ON rd.player_id = t.player_id AND rd.kind = 'duel'
-                                     AND rd.season_id = season_lookup('current')
+                                     AND rd.mode = 'all' AND rd.season_id = season_lookup('current')
 LEFT JOIN ratings ro                  ON ro.player_id = t.player_id AND ro.kind = 'official'
-                                     AND ro.season_id = season_lookup('current')
+                                     AND ro.mode = 'all' AND ro.season_id = season_lookup('current')
 LEFT JOIN v_player_fav_map fm         ON fm.player_id = t.player_id
 LEFT JOIN v_player_fav_weapon fw      ON fw.player_id = t.player_id
 LEFT JOIN v_player_fav_class fc       ON fc.player_id = t.player_id
 LEFT JOIN v_player_nemesis ne         ON ne.player_id = t.player_id
 LEFT JOIN v_player_favorite_victim fv ON fv.player_id = t.player_id;
 
--- Estadisticas por mapa y tipo (balance aliados / eje, duracion, letalidad)
+-- Estadisticas por mapa, tipo y modo (balance aliados / eje, duracion, letalidad)
 CREATE VIEW v_map_stats AS
 SELECT map,
        kind,
+       mode,
        matches,
        allied_wins,
        axis_wins,
@@ -949,7 +990,7 @@ COMMENT ON TABLE matches IS 'Una partida (un mapa jugado en un servidor).';
 COMMENT ON COLUMN matches.id IS 'Id de partida: <fecha>-<servidor>-<random>. Clave primaria.';
 COMMENT ON COLUMN matches.server IS 'Id del servidor (cvar stats_server).';
 COMMENT ON COLUMN matches.map IS 'Mapa jugado.';
-COMMENT ON COLUMN matches.mode IS 'Modo del juego: dm, ctb o campaign.';
+COMMENT ON COLUMN matches.mode IS 'Modo del juego: dm, ctb, campaign, control (o el que mande la DLL).';
 COMMENT ON COLUMN matches.kind IS 'Tipo de partida: public o duel (cvar stats_mode).';
 COMMENT ON COLUMN matches.event IS 'Torneo (cvar stats_event); cadena vacia = casual.';
 COMMENT ON COLUMN matches.season_id IS 'Temporada a la que pertenece la partida.';
@@ -1033,9 +1074,10 @@ COMMENT ON COLUMN objectives.name IS 'Nombre del objetivo.';
 COMMENT ON COLUMN objectives.team IS 'Equipo que lo completo.';
 COMMENT ON COLUMN objectives.player_id IS 'Jugador que lo hizo (NULL si no aplica).';
 
-COMMENT ON TABLE ratings IS 'Elo por equipos, por jugador, categoria (public/duel/official) y temporada.';
+COMMENT ON TABLE ratings IS 'Elo por equipos, por jugador, categoria (public/duel/official), modo de juego y temporada.';
 COMMENT ON COLUMN ratings.player_id IS 'Jugador.';
 COMMENT ON COLUMN ratings.kind IS 'Categoria: public, duel u official.';
+COMMENT ON COLUMN ratings.mode IS 'Modo del Elo: all = general (todos los modos) o dm, ctb, control... solo de ese modo.';
 COMMENT ON COLUMN ratings.season_id IS 'Temporada; 0 = historico (todas).';
 COMMENT ON COLUMN ratings.rating IS 'Elo actual (arranca en 1500).';
 COMMENT ON COLUMN ratings.peak IS 'Elo maximo alcanzado.';
@@ -1048,14 +1090,16 @@ COMMENT ON COLUMN ratings.updated_at IS 'Ultima actualizacion.';
 COMMENT ON TABLE rating_history IS 'Elo antes/despues de cada partida (para graficos de evolucion).';
 COMMENT ON COLUMN rating_history.match_id IS 'Partida.';
 COMMENT ON COLUMN rating_history.player_id IS 'Jugador.';
+COMMENT ON COLUMN rating_history.mode IS 'Modo del Elo: all = general o el modo de la partida.';
 COMMENT ON COLUMN rating_history.season_id IS 'Temporada; 0 = historico.';
 COMMENT ON COLUMN rating_history.rating_before IS 'Elo antes de la partida.';
 COMMENT ON COLUMN rating_history.rating_after IS 'Elo despues de la partida.';
 
-COMMENT ON TABLE player_stats IS 'Resumen por jugador, temporada, categoria y torneo (lo mantiene apply_rollups).';
+COMMENT ON TABLE player_stats IS 'Resumen por jugador, temporada, categoria, modo de juego y torneo (lo mantiene apply_rollups).';
 COMMENT ON COLUMN player_stats.player_id IS 'Jugador.';
 COMMENT ON COLUMN player_stats.season_id IS 'Temporada.';
 COMMENT ON COLUMN player_stats.kind IS 'Categoria: public, duel u official.';
+COMMENT ON COLUMN player_stats.mode IS 'Modo de juego de las partidas: dm, ctb, campaign, control...';
 COMMENT ON COLUMN player_stats.event IS 'Torneo; cadena vacia = casual.';
 COMMENT ON COLUMN player_stats.matches IS 'Partidas jugadas.';
 COMMENT ON COLUMN player_stats.wins IS 'Partidas ganadas.';
@@ -1115,9 +1159,10 @@ COMMENT ON COLUMN player_duel_stats.killer_id IS 'Quien mata.';
 COMMENT ON COLUMN player_duel_stats.victim_id IS 'A quien mata.';
 COMMENT ON COLUMN player_duel_stats.kills IS 'Veces que lo mato.';
 
-COMMENT ON TABLE map_stats IS 'Resumen por mapa y categoria (balance, duracion, letalidad).';
+COMMENT ON TABLE map_stats IS 'Resumen por mapa, categoria y modo de juego (balance, duracion, letalidad).';
 COMMENT ON COLUMN map_stats.map IS 'Mapa.';
 COMMENT ON COLUMN map_stats.kind IS 'Categoria: public o duel.';
+COMMENT ON COLUMN map_stats.mode IS 'Modo de juego: dm, ctb, campaign, control...';
 COMMENT ON COLUMN map_stats.matches IS 'Partidas jugadas.';
 COMMENT ON COLUMN map_stats.allied_wins IS 'Victorias de aliados.';
 COMMENT ON COLUMN map_stats.axis_wins IS 'Victorias del eje.';
@@ -1149,7 +1194,8 @@ COMMENT ON COLUMN daily_players.player_id IS 'Jugador.';
 
 COMMENT ON VIEW v_player_totals IS 'Totales historicos por jugador (una fila por jugador).';
 COMMENT ON VIEW v_player_totals_by_kind IS 'Totales historicos por jugador y categoria (public/duel/official).';
-COMMENT ON VIEW v_player_profile IS 'Perfil completo de un jugador (totales + Elo + favoritos + nemesis).';
+COMMENT ON VIEW v_player_totals_by_mode IS 'Totales historicos por jugador y modo de juego (dm, ctb, control...).';
+COMMENT ON VIEW v_player_profile IS 'Perfil completo de un jugador (totales + Elo general + favoritos + nemesis).';
 COMMENT ON VIEW v_player_maps IS 'Estadisticas de un jugador por mapa.';
 COMMENT ON VIEW v_player_fav_map IS 'Mapa favorito de cada jugador (el mas jugado).';
 COMMENT ON VIEW v_player_weapons IS 'Kills de un jugador por arma.';
@@ -1159,7 +1205,7 @@ COMMENT ON VIEW v_player_fav_class IS 'Clase favorita de cada jugador.';
 COMMENT ON VIEW v_player_duels IS 'Kills entre pares de jugadores.';
 COMMENT ON VIEW v_player_nemesis IS 'Quien mas mata a cada jugador (su nemesis).';
 COMMENT ON VIEW v_player_favorite_victim IS 'A quien mas mata cada jugador (su victima favorita).';
-COMMENT ON VIEW v_map_stats IS 'Estadisticas por mapa: balance aliados/eje, duracion, kills.';
+COMMENT ON VIEW v_map_stats IS 'Estadisticas por mapa y modo: balance aliados/eje, duracion, kills.';
 COMMENT ON VIEW v_map_weapons IS 'Armas mas letales por mapa.';
 COMMENT ON VIEW v_weapon_stats IS 'Armas globales: kills, headshots y distancia media.';
 COMMENT ON VIEW v_daily_activity IS 'Actividad diaria (partidas y jugadores por dia).';
@@ -1171,12 +1217,12 @@ COMMENT ON FUNCTION season_lookup(text) IS 'Resuelve una temporada: current (la 
 COMMENT ON FUNCTION streak_base() IS 'Kills seguidas para el primer anuncio de racha (igual al cvar exbattleinfo).';
 COMMENT ON FUNCTION apply_rollups(text[]) IS 'Suma las partidas indicadas a las tablas de resumen (una sola vez por partida).';
 COMMENT ON FUNCTION rebuild_rollups() IS 'Recalcula todas las tablas de resumen desde las tablas de detalle.';
-COMMENT ON FUNCTION player_totals(text, text, text) IS 'Totales por jugador para una temporada, categoria y torneo (base de los ladders).';
-COMMENT ON FUNCTION ladder_kd(integer, text, text, text) IS 'Ladder por K/D (humano vs humano).';
-COMMENT ON FUNCTION ladder_elo(integer, text, text) IS 'Ladder por rating Elo, por categoria.';
-COMMENT ON FUNCTION ladder_streak(text, integer, text) IS 'Mejores rachas de kills (una fila por partida).';
-COMMENT ON FUNCTION ladder_luck(integer, text, text) IS 'Los mas suertudos (casco que desvia + pie salvado).';
-COMMENT ON FUNCTION ladder_unlucky(integer, text, text) IS 'Los tiradores mas desafortunados (tiros desviados por cascos).';
-COMMENT ON FUNCTION ladder_streak_tiers(integer, text, text) IS 'Rachas por nivel: quien mas llego a GODLIKE, UNSTOPPABLE, etc.';
+COMMENT ON FUNCTION player_totals(text, text, text, text) IS 'Totales por jugador para una temporada, categoria, torneo y modo (base de los ladders).';
+COMMENT ON FUNCTION ladder_kd(integer, text, text, text, text) IS 'Ladder por K/D (humano vs humano), opcionalmente de un modo.';
+COMMENT ON FUNCTION ladder_elo(integer, text, text, text) IS 'Ladder por rating Elo, por categoria y modo (all = general).';
+COMMENT ON FUNCTION ladder_streak(text, integer, text, text) IS 'Mejores rachas de kills (una fila por partida), opcionalmente de un modo.';
+COMMENT ON FUNCTION ladder_luck(integer, text, text, text) IS 'Los mas suertudos (casco que desvia + pie salvado).';
+COMMENT ON FUNCTION ladder_unlucky(integer, text, text, text) IS 'Los tiradores mas desafortunados (tiros desviados por cascos).';
+COMMENT ON FUNCTION ladder_streak_tiers(integer, text, text, text) IS 'Rachas por nivel: quien mas llego a GODLIKE, UNSTOPPABLE, etc.';
 
 COMMIT;
