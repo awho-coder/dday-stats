@@ -1070,6 +1070,18 @@ static qboolean Control_InZone (edict_t *zone, edict_t *ent)
 	return (tr.fraction == 1.0);
 }
 
+// jugador que puede disputar la zona: vivo y en un equipo
+static qboolean Control_CanContest (edict_t *ent)
+{
+	if (!ent->inuse || !IsValidPlayer(ent))
+		return false;
+	if (ent->deadflag || ent->health <= 0)
+		return false;
+	if (ent->client->resp.team_on->index >= MAX_TEAMS)
+		return false;
+	return true;
+}
+
 static void Control_CountPlayers (edict_t *zone)
 {
 	edict_t	*ent;
@@ -1081,16 +1093,22 @@ static void Control_CountPlayers (edict_t *zone)
 	{
 		ent = &g_edicts[i];
 
-		if (!ent->inuse || !IsValidPlayer(ent))
-			continue;
-		if (ent->deadflag || ent->health <= 0)
-			continue;
-		if (ent->client->resp.team_on->index >= MAX_TEAMS)
+		if (!Control_CanContest (ent))
 			continue;
 
 		if (Control_InZone (zone, ent))
 			level.control_inzone[ent->client->resp.team_on->index]++;
 	}
+}
+
+// el jugador esta disputando la zona ahora mismo (para las estadisticas)
+qboolean Control_PlayerInZone (edict_t *ent)
+{
+	if (!level.control_zone || !level.control_unlocked)
+		return false;
+	if (!Control_CanContest (ent))
+		return false;
+	return Control_InZone (level.control_zone, ent);
 }
 
 static void Control_Reset (edict_t *zone)
@@ -1133,12 +1151,22 @@ static void Control_Announce (char *msg)
 
 static void Control_Capture (edict_t *zone, int team)
 {
+	edict_t	*ent;
+	int		i;
+
 	level.control_owner = team + 1;
 	level.control_capteam = 0;
 	level.control_capture = 0;
 	level.control_overtime = false;
 
-	StatsLog_Objective (STATS_OBJ_AREA, zone->obj_name, team, NULL);
+	// cada jugador del equipo que esta en la zona suma la captura
+	for (i = 1; i <= game.maxclients; i++)
+	{
+		ent = &g_edicts[i];
+
+		if (Control_PlayerInZone (ent) && ent->client->resp.team_on->index == team)
+			StatsLog_Objective (STATS_OBJ_ZONE_CAPTURE, zone->obj_name, team, ent);
+	}
 
 	// bandera del equipo dueno en el centro de la zona
 	zone->s.modelindex = gi.modelindex (va("models/objects/%sflag/tris.md2", team_list[team]->teamid));

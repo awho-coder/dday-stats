@@ -87,6 +87,7 @@ typedef struct
 	int			helmet_saves;	// el casco le desvio un tiro a la cabeza
 	int			foot_saves;		// sobrevivio a un tiro con "almost lost a foot"
 	int			deflected;		// tiros suyos que desvio el casco de otro
+	int			zone_time;		// modo control: segundos dentro de la zona
 
 	stats_counter_t	hits;
 	stats_counter_t	misses;
@@ -387,6 +388,9 @@ static void StatsLog_WritePlayer (stats_player_t *p, const char *reason)
 	fprintf (sl.file, ",\"hits\":%d,\"misses\":%d,\"score\":%d,\"points\":%d",
 		StatsLog_CounterGet (&p->hits), StatsLog_CounterGet (&p->misses),
 		p->score, StatsLog_CounterGet (&p->points));
+	// solo en mapas con zona de control, para no ensuciar los logs de otros modos
+	if (level.control_zone)
+		fprintf (sl.file, ",\"zone_time\":%d", p->zone_time);
 	StatsLog_WriteKey ("reason");
 	StatsLog_WriteString (reason);
 	StatsLog_EndEvent ();
@@ -488,6 +492,8 @@ static void StatsLog_SamplePlayer (edict_t *ent, qboolean add_time)
 	{
 		p->team_time[team]++;
 		p->class_time[StatsLog_ClassOf (ent)]++;
+		if (Control_PlayerInZone (ent))
+			p->zone_time++;
 	}
 
 	StatsLog_CounterSet (&p->hits, ent->client->resp.accuracy_hits);

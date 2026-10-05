@@ -20,6 +20,7 @@
 #define STATS_OBJ_BC_PICKUP		"bc_pickup"
 #define STATS_OBJ_BC_DROP		"bc_drop"
 #define STATS_OBJ_BC_CAPTURE	"bc_capture"
+#define STATS_OBJ_ZONE_CAPTURE	"zone_capture"
 
 void StatsLog_Init (void);
 void StatsLog_Shutdown (void);

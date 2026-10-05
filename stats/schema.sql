@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS match_players (
     unstoppables integer NOT NULL DEFAULT 0, -- UNSTOPPABLE
     godlikes     integer NOT NULL DEFAULT 0, -- GODLIKE
     streaks_ended integer NOT NULL DEFAULT 0, -- "has ENDED <x> streak"
+    zone_seconds integer NOT NULL DEFAULT 0, -- modo control: segundos dentro de la zona
     PRIMARY KEY (match_id, player_id)
 );
 CREATE INDEX IF NOT EXISTS match_players_player_idx ON match_players (player_id);
@@ -119,7 +120,7 @@ CREATE TABLE IF NOT EXISTS objectives (
     id         bigserial PRIMARY KEY,
     match_id   text     NOT NULL REFERENCES matches (id) ON DELETE CASCADE,
     t          real     NOT NULL,
-    type       text     NOT NULL,            -- touch, area, timed, timed_held, explosive, bc_*
+    type       text     NOT NULL,            -- touch, area, timed, timed_held, explosive, bc_*, zone_capture
     name       text,
     team       smallint,
     player_id  integer  REFERENCES players (id)
@@ -161,6 +162,7 @@ ALTER TABLE match_players ADD COLUMN IF NOT EXISTS dominatings   integer NOT NUL
 ALTER TABLE match_players ADD COLUMN IF NOT EXISTS unstoppables  integer NOT NULL DEFAULT 0;
 ALTER TABLE match_players ADD COLUMN IF NOT EXISTS godlikes      integer NOT NULL DEFAULT 0;
 ALTER TABLE match_players ADD COLUMN IF NOT EXISTS streaks_ended integer NOT NULL DEFAULT 0;
+ALTER TABLE match_players ADD COLUMN IF NOT EXISTS zone_seconds  integer NOT NULL DEFAULT 0;
 
 -- rellena las columnas nuevas en filas cargadas antes de que existieran
 UPDATE match_players mp SET
@@ -224,7 +226,7 @@ CREATE TABLE IF NOT EXISTS rating_history (
 -- Si se borran o corrigen partidas a mano: SELECT rebuild_rollups();
 ------------------------------------------------------------------------------
 
--- version anterior sin temporadas o sin modo: se recrea (rebuild_rollups la
+-- version anterior sin temporadas, modo o stats de zona: se recrea (rebuild_rollups la
 -- vuelve a llenar)
 DO $$
 BEGIN
@@ -237,6 +239,11 @@ BEGIN
        AND NOT EXISTS (SELECT 1 FROM information_schema.columns
                        WHERE table_name = 'player_stats' AND column_name = 'mode') THEN
         DROP TABLE player_stats CASCADE;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'player_stats')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                       WHERE table_name = 'player_stats' AND column_name = 'zone_captures') THEN
+        DROP TABLE player_stats CASCADE;  -- las capturas por jugador salen de objectives
     END IF;
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'map_stats')
        AND NOT EXISTS (SELECT 1 FROM information_schema.columns
@@ -281,6 +288,8 @@ CREATE TABLE IF NOT EXISTS player_stats (
     streaks_ended integer NOT NULL DEFAULT 0,
     longest_kill  integer,
     last_match    timestamptz,
+    zone_seconds  integer NOT NULL DEFAULT 0,  -- modo control: segundos dentro de la zona
+    zone_captures integer NOT NULL DEFAULT 0,  -- modo control: capturas en las que participo
     PRIMARY KEY (player_id, season_id, kind, mode, event)
 );
 
@@ -360,6 +369,8 @@ ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS dominatings   integer NOT NULL
 ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS unstoppables  integer NOT NULL DEFAULT 0;
 ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS godlikes      integer NOT NULL DEFAULT 0;
 ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS streaks_ended integer NOT NULL DEFAULT 0;
+ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS zone_seconds  integer NOT NULL DEFAULT 0;
+ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS zone_captures integer NOT NULL DEFAULT 0;
 
 -- actividad por dia (hora de Chile)
 CREATE TABLE IF NOT EXISTS daily_stats (
@@ -468,7 +479,8 @@ BEGIN
         kills, deaths, human_kills, human_deaths, headshots, hits, misses, teamkills, suicides,
         objectives, seconds, best_streak, max_kills, longest_kill, last_match,
         helmet_saves, foot_saves, deflected,
-        sprees, rampages, dominatings, unstoppables, godlikes, streaks_ended)
+        sprees, rampages, dominatings, unstoppables, godlikes, streaks_ended,
+        zone_seconds, zone_captures)
     SELECT mp.player_id, m.season_id, match_category(m.kind, m.event), m.mode, m.event, count(*),
            count(*) FILTER (WHERE mp.result = 'W'), count(*) FILTER (WHERE mp.result = 'L'),
            count(*) FILTER (WHERE mp.result = 'D'),
@@ -478,7 +490,8 @@ BEGIN
            max(mp.kills), max(lk.longest), max(m.started_at),
            sum(mp.helmet_saves), sum(mp.foot_saves), sum(mp.deflected),
            sum(mp.sprees), sum(mp.rampages), sum(mp.dominatings), sum(mp.unstoppables),
-           sum(mp.godlikes), sum(mp.streaks_ended)
+           sum(mp.godlikes), sum(mp.streaks_ended),
+           sum(mp.zone_seconds), coalesce(sum(zc.n), 0)
     FROM match_players mp
     JOIN matches m ON m.id = mp.match_id
     JOIN players p ON p.id = mp.player_id
@@ -487,6 +500,11 @@ BEGIN
                WHERE k.match_id = ANY (ids) AND NOT k.friendly_fire AND k.killer_id IS NOT NULL
                GROUP BY k.match_id, k.killer_id) lk
            ON lk.match_id = mp.match_id AND lk.killer_id = mp.player_id
+    LEFT JOIN (SELECT o.match_id, o.player_id, count(*) AS n
+               FROM objectives o
+               WHERE o.match_id = ANY (ids) AND o.type = 'zone_capture' AND o.player_id IS NOT NULL
+               GROUP BY o.match_id, o.player_id) zc
+           ON zc.match_id = mp.match_id AND zc.player_id = mp.player_id
     WHERE mp.match_id = ANY (ids) AND NOT p.is_bot
     GROUP BY mp.player_id, m.season_id, match_category(m.kind, m.event), m.mode, m.event
     ON CONFLICT (player_id, season_id, kind, mode, event) DO UPDATE SET
@@ -510,7 +528,9 @@ BEGIN
         dominatings = s.dominatings + EXCLUDED.dominatings,
         unstoppables = s.unstoppables + EXCLUDED.unstoppables,
         godlikes = s.godlikes + EXCLUDED.godlikes,
-        streaks_ended = s.streaks_ended + EXCLUDED.streaks_ended;
+        streaks_ended = s.streaks_ended + EXCLUDED.streaks_ended,
+        zone_seconds = s.zone_seconds + EXCLUDED.zone_seconds,
+        zone_captures = s.zone_captures + EXCLUDED.zone_captures;
 
     INSERT INTO player_map_stats AS s (player_id, map, kind, matches, wins, kills, deaths, seconds, best_streak)
     SELECT mp.player_id, m.map, m.kind, count(*), count(*) FILTER (WHERE mp.result = 'W'),
@@ -666,6 +686,7 @@ DROP FUNCTION IF EXISTS ladder_streak(text, integer, text, text);
 DROP FUNCTION IF EXISTS ladder_luck(integer, text, text, text);
 DROP FUNCTION IF EXISTS ladder_unlucky(integer, text, text, text);
 DROP FUNCTION IF EXISTS ladder_streak_tiers(integer, text, text, text);
+DROP FUNCTION IF EXISTS ladder_zone(integer, text, text);
 
 -- Totales por jugador para una temporada, categoria y torneo:
 --   season: 'current' (la vigente), 'all' (historico) o el nombre de una temporada
@@ -684,7 +705,8 @@ RETURNS TABLE (player_id integer, name text, matches bigint, wins bigint, losses
                longest_kill integer, last_match timestamptz,
                helmet_saves bigint, foot_saves bigint, luck bigint, deflected bigint,
                sprees bigint, rampages bigint, dominatings bigint, unstoppables bigint,
-               godlikes bigint, streaks_ended bigint)
+               godlikes bigint, streaks_ended bigint,
+               zone_captures bigint, zone_minutes numeric)
 LANGUAGE sql STABLE AS $$
     WITH sid AS (SELECT season_lookup(season) AS id),
     s AS (
@@ -699,7 +721,8 @@ LANGUAGE sql STABLE AS $$
                sum(ps.foot_saves) AS foot_saves, sum(ps.deflected) AS deflected,
                sum(ps.sprees) AS sprees, sum(ps.rampages) AS rampages,
                sum(ps.dominatings) AS dominatings, sum(ps.unstoppables) AS unstoppables,
-               sum(ps.godlikes) AS godlikes, sum(ps.streaks_ended) AS streaks_ended
+               sum(ps.godlikes) AS godlikes, sum(ps.streaks_ended) AS streaks_ended,
+               sum(ps.zone_captures) AS zone_captures, sum(ps.zone_seconds) AS zone_seconds
         FROM player_stats ps, sid
         WHERE (season = 'all' OR ps.season_id = sid.id)
           AND (match_kind = 'all' OR ps.kind = match_kind)
@@ -716,7 +739,8 @@ LANGUAGE sql STABLE AS $$
            round(100.0 * s.wins / greatest(s.wins + s.losses + s.draws, 1), 1),
            s.max_kills, s.longest_kill, s.last_match,
            s.helmet_saves, s.foot_saves, s.helmet_saves + s.foot_saves, s.deflected,
-           s.sprees, s.rampages, s.dominatings, s.unstoppables, s.godlikes, s.streaks_ended
+           s.sprees, s.rampages, s.dominatings, s.unstoppables, s.godlikes, s.streaks_ended,
+           s.zone_captures, round(s.zone_seconds / 60.0, 1)
     FROM s
     JOIN players p ON p.id = s.player_id;
 $$;
@@ -832,6 +856,21 @@ LANGUAGE sql STABLE AS $$
            t.streaks_ended, t.best_streak
     FROM player_totals(season, match_kind, NULL, match_mode) t
     WHERE t.matches >= min_matches AND (t.sprees > 0 OR t.streaks_ended > 0)
+    ORDER BY 1, t.name;
+$$;
+
+-- Modo control de zona: quien mas capturas hizo (cuenta cada jugador que estaba
+-- en la zona cuando su equipo la capturo) y cuanto tiempo paso dentro de ella
+CREATE FUNCTION ladder_zone(min_matches integer DEFAULT 5, match_kind text DEFAULT 'all',
+                            season text DEFAULT 'current')
+RETURNS TABLE (pos bigint, name text, matches bigint, wins bigint, win_pct numeric,
+               zone_captures bigint, zone_minutes numeric, captures_per_match numeric)
+LANGUAGE sql STABLE AS $$
+    SELECT rank() OVER (ORDER BY t.zone_captures DESC, t.zone_minutes DESC),
+           t.name, t.matches, t.wins, t.win_pct, t.zone_captures, t.zone_minutes,
+           round(t.zone_captures::numeric / greatest(t.matches, 1), 2)
+    FROM player_totals(season, match_kind, NULL, 'control') t
+    WHERE t.matches >= min_matches
     ORDER BY 1, t.name;
 $$;
 
@@ -1041,6 +1080,7 @@ COMMENT ON COLUMN match_players.dominatings IS 'Veces que alcanzo DOMINATING.';
 COMMENT ON COLUMN match_players.unstoppables IS 'Veces que alcanzo UNSTOPPABLE.';
 COMMENT ON COLUMN match_players.godlikes IS 'Veces que alcanzo GODLIKE.';
 COMMENT ON COLUMN match_players.streaks_ended IS 'Rachas ajenas (>= base) que corto matando.';
+COMMENT ON COLUMN match_players.zone_seconds IS 'Modo control: segundos que paso dentro de la zona (vivo y con la zona abierta).';
 
 COMMENT ON TABLE kills IS 'Una kill (o suicidio/muerte por entorno). Tabla de detalle, la mas grande.';
 COMMENT ON COLUMN kills.id IS 'Clave interna.';
@@ -1069,7 +1109,7 @@ COMMENT ON TABLE objectives IS 'Eventos de objetivo de una partida (banderas, ma
 COMMENT ON COLUMN objectives.id IS 'Clave interna.';
 COMMENT ON COLUMN objectives.match_id IS 'Partida.';
 COMMENT ON COLUMN objectives.t IS 'Segundos desde el inicio del mapa.';
-COMMENT ON COLUMN objectives.type IS 'Tipo: touch, area, timed, timed_held, explosive, bc_pickup/bc_drop/bc_capture.';
+COMMENT ON COLUMN objectives.type IS 'Tipo: touch, area, timed, timed_held, explosive, bc_pickup/bc_drop/bc_capture, zone_capture (modo control: un evento por jugador del equipo que estaba en la zona).';
 COMMENT ON COLUMN objectives.name IS 'Nombre del objetivo.';
 COMMENT ON COLUMN objectives.team IS 'Equipo que lo completo.';
 COMMENT ON COLUMN objectives.player_id IS 'Jugador que lo hizo (NULL si no aplica).';
@@ -1129,6 +1169,8 @@ COMMENT ON COLUMN player_stats.godlikes IS 'Veces que alcanzo GODLIKE.';
 COMMENT ON COLUMN player_stats.streaks_ended IS 'Rachas ajenas que corto.';
 COMMENT ON COLUMN player_stats.longest_kill IS 'Kill mas larga (distancia en unidades de Quake 2).';
 COMMENT ON COLUMN player_stats.last_match IS 'Fecha de la ultima partida.';
+COMMENT ON COLUMN player_stats.zone_seconds IS 'Modo control: segundos dentro de la zona.';
+COMMENT ON COLUMN player_stats.zone_captures IS 'Modo control: capturas de la zona en las que participo (estaba dentro).';
 
 COMMENT ON TABLE player_map_stats IS 'Resumen por jugador y mapa (todas las temporadas).';
 COMMENT ON COLUMN player_map_stats.player_id IS 'Jugador.';
@@ -1224,5 +1266,6 @@ COMMENT ON FUNCTION ladder_streak(text, integer, text, text) IS 'Mejores rachas 
 COMMENT ON FUNCTION ladder_luck(integer, text, text, text) IS 'Los mas suertudos (casco que desvia + pie salvado).';
 COMMENT ON FUNCTION ladder_unlucky(integer, text, text, text) IS 'Los tiradores mas desafortunados (tiros desviados por cascos).';
 COMMENT ON FUNCTION ladder_streak_tiers(integer, text, text, text) IS 'Rachas por nivel: quien mas llego a GODLIKE, UNSTOPPABLE, etc.';
+COMMENT ON FUNCTION ladder_zone(integer, text, text) IS 'Modo control: capturas y minutos en la zona por jugador.';
 
 COMMIT;

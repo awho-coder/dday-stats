@@ -2296,6 +2296,7 @@ char *Control_StatusBar (char *statusbar);
 void Control_HudStats (edict_t *ent);
 int Control_GrenadeLimit (void);
 qboolean Control_ClassBanned (int mos);
+qboolean Control_PlayerInZone (edict_t *ent);
 
 #include "g_statslog.h"
 

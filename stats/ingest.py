@@ -73,6 +73,7 @@ class PlayerAgg:
     foot_saves: int = 0      # sobrevivio con "almost lost a foot"
     deflected: int = 0       # tiros suyos desviados por un casco
     human_deaths: int = 0    # muertes por humanos, suicidio o entorno
+    zone_time: int = 0       # modo control: segundos dentro de la zona
 
     def add(self, ev):
         t = ev.get("time") or [0, 0]
@@ -84,7 +85,7 @@ class PlayerAgg:
                           ("tk", "tk"), ("hs", "hs"), ("objs", "objs"), ("hits", "hits"),
                           ("misses", "misses"), ("score", "score"), ("points", "points"),
                           ("helmet_saves", "helmet_saves"), ("foot_saves", "foot_saves"),
-                          ("deflected", "deflected")):
+                          ("deflected", "deflected"), ("zone_time", "zone_time")):
             setattr(self, attr, getattr(self, attr) + int(ev.get(key) or 0))
         self.best_streak = max(self.best_streak, int(ev.get("best_streak") or 0))
 
@@ -350,13 +351,13 @@ class Ingestor:
                     """INSERT INTO match_players (match_id, player_id, team, time_team0, time_team1,
                            kills, deaths, human_kills, human_deaths, suicides, teamkills, headshots,
                            objectives, best_streak, helmet_saves, foot_saves, deflected,
-                           hits, misses, score, points, classes, main_class, result)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                           hits, misses, score, points, classes, main_class, result, zone_seconds)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (match.id, pid, p.team, p.time[0], p.time[1], p.kills, p.deaths,
                      p.human_kills, p.human_deaths,
                      p.suicides, p.tk, p.hs, p.objs, p.best_streak, p.helmet_saves, p.foot_saves,
                      p.deflected, p.hits, p.misses, p.score, p.points,
-                     json.dumps(p.classes), p.main_class, result))
+                     json.dumps(p.classes), p.main_class, result, p.zone_time))
 
             def actor_id(name, bot):
                 key = (name, bot)
