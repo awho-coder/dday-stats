@@ -707,6 +707,7 @@ extern	cvar_t	*control_mode;		// modo control de zona (0 desactivado, 1 activo)
 extern	cvar_t	*control_lock;		// segundos que la zona esta bloqueada al empezar
 extern	cvar_t	*control_captime;	// segundos que tarda un jugador solo en capturar la zona
 extern	cvar_t	*control_holdtime;	// segundos de control para llegar al 100%
+extern	cvar_t	*control_emptyrate;	// con la zona vacia el control del dueno sube a esta fraccion (0 = se congela)
 extern	cvar_t	*control_engineer;	// 0 = clase ingeniero deshabilitada en este modo, 1 = permitida
 extern	cvar_t	*control_grenades;	// maximo de granadas por jugador en este modo (0 = sin granadas, -1 = sin limite)
 

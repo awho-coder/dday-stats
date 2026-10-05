@@ -1364,11 +1364,18 @@ void objective_control_think (edict_t *self)
 	{
 		enemy = (owner + 1) % MAX_TEAMS;
 
-		// el control solo sube con el dueno dentro y sin rivales (vacia o disputada se congela)
+		// con el dueno dentro y sin rivales el control sube a velocidad normal; con la
+		// zona vacia sube mas lento (control_emptyrate); disputada se congela
+		mult = 0;
 		if (level.control_inzone[owner] && !level.control_inzone[enemy])
+			mult = 1.0;
+		else if (!level.control_inzone[owner] && !level.control_inzone[enemy] && control_emptyrate)
+			mult = (control_emptyrate->value > 1) ? 1.0 : control_emptyrate->value;
+
+		if (mult > 0)
 		{
 			before = (int)level.control_pct[owner];
-			level.control_pct[owner] += 100.0 / Control_Cvar (control_holdtime, 120) * FRAMETIME;
+			level.control_pct[owner] += 100.0 / Control_Cvar (control_holdtime, 120) * mult * FRAMETIME;
 			after = (int)level.control_pct[owner];
 
 			for (i = 0; i < sizeof(milestones) / sizeof(milestones[0]); i++)

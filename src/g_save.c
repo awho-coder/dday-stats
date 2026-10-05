@@ -424,6 +424,7 @@ void InitGame (void)
 	control_lock = gi.cvar("control_lock", "30", 0);
 	control_captime = gi.cvar("control_captime", "15", 0);
 	control_holdtime = gi.cvar("control_holdtime", "120", 0);
+	control_emptyrate = gi.cvar("control_emptyrate", "0.5", 0);
 	control_grenades = gi.cvar("control_grenades", "0", 0);
 	control_engineer = gi.cvar("control_engineer", "0", 0);
 
