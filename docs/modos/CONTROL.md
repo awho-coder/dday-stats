@@ -15,8 +15,9 @@ zona del mapa y gana el primero que la controla por completo.
    el otro equipo, primero tiene que deshacer el avance del rival.
 5. Al completar la captura el equipo pasa a ser **dueño** de la zona: aparece
    su bandera y su **control** sube (`control_holdtime` segundos para llegar al
-   100%) **solo mientras tenga jugadores dentro y ningún rival**. Si la zona
-   queda vacía o disputada, el control se congela (no baja).
+   100%) mientras tenga jugadores dentro y ningún rival. Si la zona queda
+   **vacía**, el control sigue subiendo pero más lento (`control_emptyrate`, por
+   defecto a la mitad). Si queda **disputada**, el control se congela. Nunca baja.
 6. Gana el primer equipo que llega al **100%**. Si en ese momento el rival
    todavía tiene una captura en curso, hay **tiempo extra**: el dueño queda en
    99% y tiene que aguantar en la zona hasta borrarla.
@@ -33,6 +34,20 @@ La clase **ingeniero no está disponible** (`control_engineer 0`): con su TNT
 sería demasiado fácil limpiar la zona. Quien la elige (o un bot, o la clase al
 azar) aparece como infantería. El **oficial** se mantiene, y su ataque aéreo es
 el único explosivo de área del modo.
+
+### Tiempos con los valores por defecto
+
+| Situación | Tiempo |
+|---|---|
+| Capturar con 1 jugador | 15 s |
+| Capturar con 2 jugadores | 10 s |
+| Capturar con 3 o más | 7,5 s |
+| Control de 0 a 100% con gente del dueño dentro | 120 s (2 min) |
+| Control de 0 a 100% con la zona vacía todo el rato | 240 s (4 min) |
+| Captura a medias que se pierde si todos salen | 15 s desde 100 a 0 |
+
+En el control, que haya más jugadores del dueño dentro no lo acelera: lo que
+cuenta es si hay gente dentro, si está vacía o si está disputada.
 
 ## En pantalla
 
@@ -69,6 +84,7 @@ partida) y el Elo del modo con `ladder_elo(10, 'public', 'current', 'control')`.
 | `control_lock` | `30` | Segundos que la zona está bloqueada al empezar. |
 | `control_captime` | `15` | Segundos que tarda un jugador solo en capturar la zona. |
 | `control_holdtime` | `120` | Segundos de control necesarios para llegar al 100%. |
+| `control_emptyrate` | `0.5` | Con la zona vacía, el control del dueño sube a esta fracción de la velocidad normal (`0.5` = la mitad, `0` = se congela, máximo `1`). |
 | `control_engineer` | `0` | `1` permite la clase ingeniero en este modo. |
 | `control_grenades` | `0` | Máximo de granadas por jugador en este modo (`0` = sin granadas, `-1` = sin límite, como el juego normal). Se aplica al reaparecer. |
 
