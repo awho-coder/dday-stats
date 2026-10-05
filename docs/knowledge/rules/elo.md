@@ -33,29 +33,12 @@ Los bots nunca cuentan. Quien jugó menos del 20 % de la partida en su equipo
 - El Elo parte de **1500** en cada temporada.
 - Hay tres categorías con rating separado: `public`, `duel` y `official`.
 
-# Elo general y Elo por modo
-
-Cada categoría y temporada tiene **dos clases de rating**:
-
-- **General** (`mode = 'all'`): se actualiza con todas las partidas rankeadas,
-  sin importar el modo. Es el Elo de siempre.
-- **Por modo** (`mode = 'dm'`, `'ctb'`, `'campaign'`, `'control'`...): se
-  actualiza solo con las partidas rankeadas de ese modo (el campo `matches.mode`
-  que manda el juego). Un modo nuevo tiene su Elo sin cambiar el esquema.
-
-Una partida rankeada actualiza ambos a la vez, cada uno con sus propias
-partidas jugadas (el `K` alto de las primeras 10 partidas cuenta por separado en
-cada modo). Las reglas de partida rankeada no cambian. Así ganar una partida de
-control no mueve el Elo de kills de deathmatch, pero sí el general.
-
 # Consulta
 
 ```sql
 SELECT * FROM ladder_elo(10);                 -- Elo público, temporada actual
 SELECT * FROM ladder_elo(5, 'official');      -- duelos oficiales
 SELECT * FROM ladder_elo(10, 'public', 'all');-- histórico
-SELECT * FROM ladder_elo(10, 'public', 'current', 'control'); -- Elo solo del modo control
-SELECT * FROM ladder_elo(10, 'public', 'current', 'dm');      -- Elo solo de deathmatch
 ```
 
 # Ver también

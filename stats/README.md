@@ -179,10 +179,8 @@ duró lo suficiente y cada equipo tuvo suficientes humanos. Los bots nunca cuent
 | humanos mínimos por equipo | 2 (`--min-humans`) | 1 (`--duel-min-humans`) |
 
 Hay tres categorías con **ratings separados**: `public`, `duel` (casual) y
-`official` (cualquier partida con `stats_event`). Cada categoría tiene además un
-Elo **general** (`mode = 'all'`, todas las partidas) y un Elo **por modo** (`dm`,
-`ctb`, `campaign`, `control`...): cada partida rankeada actualiza los dos, así
-ganar una partida de control no mueve el Elo de kills de `dm`. En el ladder K/D, las
+`official` (cualquier partida con `stats_event`). El Elo es uno solo para todos
+los modos de juego (`dm`, `ctb`, `control`...). En el ladder K/D, las
 kills a bots y las muertes causadas por bots no cuentan (se ven aparte en
 `bot_kills`).
 
@@ -216,9 +214,10 @@ reasignan y se recalcula todo solo.
 -- Parámetros comunes:
 --   categoría: 'public', 'duel', 'official' o 'all'
 --   temporada: 'current' (por defecto), 'all' (histórico) o el nombre de una temporada
---   modo (último parámetro de ladder_kd / ladder_elo / ladder_streak / ladder_luck /
+--   modo (último parámetro de ladder_kd / ladder_streak / ladder_luck /
 --   ladder_unlucky / ladder_streak_tiers, y 4.º de player_totals): 'dm', 'ctb',
---   'campaign', 'control'... o 'all' (por defecto). En ladder_elo 'all' es el Elo general.
+--   'campaign', 'control'... o 'all' (por defecto). ladder_elo no lo tiene: el Elo
+--   es uno solo para todos los modos.
 
 SELECT * FROM ladder_kd(10);                         -- K/D, temporada actual, mínimo 10 partidas
 SELECT * FROM ladder_kd(10, 'public');               -- solo público
@@ -232,8 +231,6 @@ SELECT * FROM ladder_kd(10, 'all', 'current', NULL, 'dm');  -- K/D solo en death
 SELECT * FROM ladder_elo(10);                        -- Elo público, temporada actual
 SELECT * FROM ladder_elo(5, 'official');             -- Elo de duelos oficiales
 SELECT * FROM ladder_elo(10, 'public', 'all');       -- Elo histórico
-SELECT * FROM ladder_elo(10, 'public', 'current', 'control');  -- Elo solo del modo control
-SELECT * FROM ladder_elo(10, 'public', 'current', 'dm');       -- Elo solo de deathmatch
 
 SELECT * FROM ladder_streak();                       -- 20 mejores rachas, temporada actual
 SELECT * FROM ladder_streak('duel', 10, 'all');      -- 10 mejores rachas en duelos, histórico

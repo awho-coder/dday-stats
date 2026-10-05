@@ -1,11 +1,11 @@
 ---
 type: PostgreSQL Table
 title: ratings
-description: 'Elo por equipos, por jugador, categoria (public/duel/official), modo de juego y temporada.'
+description: 'Elo por equipos, por jugador, categoria (public/duel/official) y temporada (todos los modos juntos).'
 resource: postgresql://dday/public/ratings
 tags: [postgresql, table, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-05T01:21:03Z }
+generated: { by: process:okf-export, at: 2026-10-05T02:17:08Z }
 sources: 
   - id: schema
     resource: /references/schema.sql
@@ -17,7 +17,6 @@ sources:
 |---|---|---|---|
 | `player_id` | integer | no | Jugador. (PK; FK → [players](players.md)) |
 | `kind` | text | no | Categoria: public, duel u official. (PK) |
-| `mode` | text | no | Modo del Elo: all = general (todos los modos) o dm, ctb, control... solo de ese modo. (PK) |
 | `season_id` | integer | no | Temporada; 0 = historico (todas). (PK) |
 | `rating` | real | no | Elo actual (arranca en 1500). |
 | `peak` | real | no | Elo maximo alcanzado. |

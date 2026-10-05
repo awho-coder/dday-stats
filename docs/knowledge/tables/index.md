@@ -15,5 +15,5 @@
 * [player_weapon_stats](player_weapon_stats.md) - Kills por arma y jugador (arma en mano o, si no aplica, la causa).
 * [players](players.md) - Jugador o bot. La identidad es el nombre (sin colores).
 * [rating_history](rating_history.md) - Elo antes/despues de cada partida (para graficos de evolucion).
-* [ratings](ratings.md) - Elo por equipos, por jugador, categoria (public/duel/official), modo de juego y temporada.
+* [ratings](ratings.md) - Elo por equipos, por jugador, categoria (public/duel/official) y temporada (todos los modos juntos).
 * [seasons](seasons.md) - Temporadas del ladder (se crean con "ingest.py --new-season NOMBRE").

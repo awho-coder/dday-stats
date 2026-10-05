@@ -419,35 +419,29 @@ class Ingestor:
 def apply_elo(cur, match_id, min_participation):
     """Elo por equipos. Usa match_players de la partida ya insertada.
 
-    Se actualizan dos ratings de la categoria de la partida (public, duel u
-    official): el de la temporada de la partida y el historico (season_id = 0).
-    Cada uno en dos versiones: el general (mode = 'all', todos los modos) y el
-    del modo de la partida (dm, ctb, control...).
+    Se actualizan dos ratings: el de la temporada de la partida y el historico
+    (season_id = 0), ambos de su categoria (public, duel u official).
     """
-    cur.execute("SELECT duration_s, winner, match_category(kind, event), season_id, mode"
+    cur.execute("SELECT duration_s, winner, match_category(kind, event), season_id"
                 " FROM matches WHERE id = %s", (match_id,))
-    duration, winner, kind, season_id, match_mode = cur.fetchone()
+    duration, winner, kind, season_id = cur.fetchone()
     if winner not in (0, 1, -1) or not duration:
         return
-    modes = ["all"]
-    if match_mode and match_mode != "all":
-        modes.append(match_mode)
     for scope in (season_id, 0):
-        for mode in modes:
-            _apply_elo_scope(cur, match_id, duration, winner, kind, mode, scope, min_participation)
+        _apply_elo_scope(cur, match_id, duration, winner, kind, scope, min_participation)
 
 
-def _apply_elo_scope(cur, match_id, duration, winner, kind, mode, season_id, min_participation):
+def _apply_elo_scope(cur, match_id, duration, winner, kind, season_id, min_participation):
     cur.execute(
         """SELECT mp.player_id, mp.team, mp.time_team0, mp.time_team1,
                   coalesce(r.rating, %s), coalesce(r.games, 0)
            FROM match_players mp
            JOIN players p ON p.id = mp.player_id
            LEFT JOIN ratings r ON r.player_id = mp.player_id AND r.kind = %s
-                              AND r.mode = %s AND r.season_id = %s
+                              AND r.season_id = %s
            WHERE mp.match_id = %s AND NOT p.is_bot AND mp.team IS NOT NULL
            ORDER BY mp.player_id""",
-        (ELO_START, kind, mode, season_id, match_id))
+        (ELO_START, kind, season_id, match_id))
     rows = cur.fetchall()
 
     parts = []
@@ -477,10 +471,10 @@ def _apply_elo_scope(cur, match_id, duration, winner, kind, mode, season_id, min
         loss = 1 if score == 0.0 else 0
         draw = 1 if score == 0.5 else 0
         cur.execute(
-            """INSERT INTO ratings (player_id, kind, mode, season_id, rating, peak, games, wins,
-                                   losses, draws, updated_at)
-               VALUES (%s, %s, %s, %s, %s, greatest(%s, %s), 1, %s, %s, %s, now())
-               ON CONFLICT (player_id, kind, mode, season_id) DO UPDATE SET
+            """INSERT INTO ratings (player_id, kind, season_id, rating, peak, games, wins, losses,
+                                   draws, updated_at)
+               VALUES (%s, %s, %s, %s, greatest(%s, %s), 1, %s, %s, %s, now())
+               ON CONFLICT (player_id, kind, season_id) DO UPDATE SET
                  rating = EXCLUDED.rating,
                  peak = greatest(ratings.peak, EXCLUDED.rating),
                  games = ratings.games + 1,
@@ -488,12 +482,11 @@ def _apply_elo_scope(cur, match_id, duration, winner, kind, mode, season_id, min
                  losses = ratings.losses + EXCLUDED.losses,
                  draws = ratings.draws + EXCLUDED.draws,
                  updated_at = now()""",
-            (pid, kind, mode, season_id, new_rating, ELO_START, new_rating, win, loss, draw))
+            (pid, kind, season_id, new_rating, ELO_START, new_rating, win, loss, draw))
         cur.execute(
-            """INSERT INTO rating_history (match_id, player_id, mode, season_id, rating_before,
-                                          rating_after)
-               VALUES (%s, %s, %s, %s, %s, %s)""",
-            (match_id, pid, mode, season_id, rating, new_rating))
+            """INSERT INTO rating_history (match_id, player_id, season_id, rating_before, rating_after)
+               VALUES (%s, %s, %s, %s, %s)""",
+            (match_id, pid, season_id, rating, new_rating))
 
 
 def rebuild_ratings(conn, cfg):
@@ -628,11 +621,9 @@ def main():
             if args.init_schema:
                 conn.execute(SCHEMA_FILE.read_text(encoding="utf-8"))
                 log.info("esquema actualizado")
-                # ratings recreada por una migracion (o sin Elo por modo): se recalcula sola
+                # ratings recreada por una migracion: se recalcula sola
                 if conn.execute("SELECT EXISTS (SELECT 1 FROM matches WHERE ranked)"
-                                " AND (NOT EXISTS (SELECT 1 FROM ratings)"
-                                "      OR NOT EXISTS (SELECT 1 FROM ratings WHERE mode <> 'all'))"
-                                ).fetchone()[0]:
+                                " AND NOT EXISTS (SELECT 1 FROM ratings)").fetchone()[0]:
                     rebuild_elo = True
             if args.new_season:
                 if new_season(conn, args.new_season, args.season_start):

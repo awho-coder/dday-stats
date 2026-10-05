@@ -101,14 +101,11 @@ dentro de la zona; no aparece en los otros modos).
   `delta = K * (S - E) * participación`, con `E` calculado con el promedio
   de rating de cada equipo, `K = 40` en las primeras 10 partidas y luego 24,
   y `participación` = fracción del tiempo de la partida jugado en ese equipo.
-- **Elo general y Elo por modo**: cada categoría (`public`, `duel`, `official`)
-  se calcula dos veces por partida rankeada: el rating **general**
-  (`ratings.mode = 'all'`, todos los modos) y el del **modo** de la partida
-  (`ratings.mode = 'dm'`, `'ctb'`, `'control'`...). Las reglas de "rankeada" son
-  las mismas; solo cambia en qué fila se acumula el resultado. Los totales
-  (`player_stats`, `map_stats`) también llevan el modo, y los ladders reciben
-  un parámetro opcional `match_mode` (por defecto `'all'`).
-- **Modo control** (`mode = 'control'`): además del Elo y el K/D del modo, se
+- **Un solo Elo para todos los modos**: el rating es por categoría (`public`,
+  `duel`, `official`) y temporada, sin separar por modo de juego. Los totales
+  (`player_stats`, `map_stats`) sí llevan el modo, y los ladders de K/D, rachas
+  y suerte reciben un parámetro opcional `match_mode` (por defecto `'all'`).
+- **Modo control** (`mode = 'control'`): además del K/D del modo, se
   registran los segundos dentro de la zona (`zone_time`) y las capturas
   (`obj.type = 'zone_capture'`, una por cada jugador del equipo capturador que
   estaba en la zona). Se consultan con `ladder_zone()`.

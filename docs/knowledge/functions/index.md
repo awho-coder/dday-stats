@@ -1,7 +1,7 @@
 # Funciones
 
 * [apply_rollups(ids text[])](apply_rollups.md) - Suma las partidas indicadas a las tablas de resumen (una sola vez por partida).
-* [ladder_elo(min_games integer, match_kind text, season text, match_mode text)](ladder_elo.md) - Ladder por rating Elo, por categoria y modo (all = general).
+* [ladder_elo(min_games integer, match_kind text, season text)](ladder_elo.md) - Ladder por rating Elo, por categoria.
 * [ladder_kd(min_matches integer, match_kind text, season text, match_event text, match_mode text)](ladder_kd.md) - Ladder por K/D (humano vs humano), opcionalmente de un modo.
 * [ladder_luck(min_matches integer, match_kind text, season text, match_mode text)](ladder_luck.md) - Los mas suertudos (casco que desvia + pie salvado).
 * [ladder_streak(match_kind text, max_rows integer, season text, match_mode text)](ladder_streak.md) - Mejores rachas de kills (una fila por partida), opcionalmente de un modo.
