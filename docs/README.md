@@ -14,6 +14,7 @@ Si es tu primera vez en el repo, seguí este orden:
 
 ## Cómo contribuir
 
+- **Ramas (GitFlow):** ver [`GITFLOW.md`](GITFLOW.md). Todo el trabajo sale de `develop`; `main` es producción.
 - **Si cambiás el esquema** (`stats/schema.sql`): aplicalo con `ingest.py --init-schema` y **regenerá el catálogo**:
   ```sh
   python3 stats/okf_export.py --dsn "$DDAY_STATS_DSN" --out docs/knowledge
