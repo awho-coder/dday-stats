@@ -110,3 +110,53 @@ hacer `spot`, y después recorrer el borde haciendo `spot` en cada esquina. Conv
 | `invade6` | **Colina**: polígono de 10 puntos marcado en el juego, equidistante de ambas bases. Archivo: [`ents/invade6.ctl`](../../ents/invade6.ctl). |
 
 Los bots no buscan la zona: juegan como en un mapa de kills.
+
+## Probar en un servidor
+
+Para pasar un servidor en marcha al modo control y volver, por rcon:
+
+```
+rcon set control_mode 1
+rcon set sv_maplist "invade6"
+rcon map invade6
+```
+
+```
+rcon set control_mode 0
+rcon set sv_maplist "dday2"
+rcon map dday2
+```
+
+`control_mode` se aplica al cambiar de mapa, así que siempre va seguido de
+`map`. Hay que cambiar también `sv_maplist`: si sigue apuntando a `invade6` con
+`control_mode 0`, el mapa se juega en modo normal (por kills).
+
+Para actualizar el DLL, **no** copiar encima de `gamex86_64.so` con el servidor
+corriendo: el proceso tiene el archivo cargado en memoria y se cae
+(`SIGSEGV`) en el siguiente cambio de mapa. Copiar a un archivo temporal y
+reemplazar con `mv` (el proceso sigue usando el archivo viejo hasta reiniciar),
+o detener el servicio antes de copiar.
+
+## Prueba con jugadores (4 de octubre de 2026)
+
+Primera prueba en el servidor de prueba, en `invade6`, con 5 a 7 jugadores y
+bots, entre las 19:55 y las 21:29 (hora de Chile).
+
+- Se jugaron 4 rondas completas en modo control y todas terminaron por la zona
+  (3 para Aliados, 1 para el Eje). En una la zona cambió de dueño 11 veces en
+  9 minutos. Ninguna ronda en modo control terminó por kills.
+- Valores usados: primero `control_lock 5`, `control_captime 5` y
+  `control_holdtime 15` para probar rápido; después los valores por defecto
+  (30 / 15 / 120), que dieron rondas de 4 a 9 minutos.
+- Sin errores ni caídas con el modo activo.
+- A los jugadores les gustó, y entendieron rápido la regla de que con más
+  gente en la zona se captura más rápido.
+
+Lo que quedó pendiente:
+
+- **El interior del búnker no cuenta como zona.** Un jugador lo preguntó en la
+  partida. Es intencional (desde adentro sería muy fácil defenderla), pero no se
+  ve en el juego: conviene avisarlo o marcarlo mejor.
+- **Hay un solo mapa.** Los jugadores pidieron más mapas con zona.
+- **Los bots no van a la zona**, así que con pocos jugadores la ronda se alarga
+  hasta que alguien la captura.
