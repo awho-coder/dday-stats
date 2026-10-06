@@ -1,0 +1,11 @@
+[Unit]
+Description=Relay LLM para admin del server Q2
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 /home/pi/quake-llm-relay/relay.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

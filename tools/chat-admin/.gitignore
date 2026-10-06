@@ -1,0 +1,5 @@
+# secretos reales (NO versionar)
+token
+.relay-token
+*secret*
+*.bak*

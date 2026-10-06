@@ -1,0 +1,14 @@
+[Unit]
+Description=D-Day chat admin (allowlist + whitelist rcon)
+After=dday-test.service
+Wants=dday-test.service
+
+[Service]
+Type=simple
+User=ubuntu
+ExecStart=/usr/bin/python3 /home/ubuntu/dday/chat-admin.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
