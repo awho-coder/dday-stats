@@ -1143,9 +1143,12 @@ static void Control_Reset (edict_t *zone)
 		}
 	}
 
-	zone->s.modelindex = 0;
-	zone->s.sound = 0;
-	zone->s.effects = 0;
+	if (level.control_flag)
+	{
+		level.control_flag->s.modelindex = 0;
+		level.control_flag->s.sound = 0;
+		level.control_flag->s.effects = 0;
+	}
 
 	Control_UpdateHud ();
 }
@@ -1178,11 +1181,14 @@ static void Control_Capture (edict_t *zone, int team)
 	}
 
 	// bandera del equipo dueno en el centro de la zona
-	zone->s.modelindex = gi.modelindex (va("models/objects/%sflag/tris.md2", team_list[team]->teamid));
-	zone->s.sound = gi.soundindex ("faf/flag.wav");
+	if (level.control_flag)
+	{
+		level.control_flag->s.modelindex = gi.modelindex (va("models/objects/%sflag/tris.md2", team_list[team]->teamid));
+		level.control_flag->s.sound = gi.soundindex ("faf/flag.wav");
 
-	// luz del color del dueno alrededor de la bandera (azul Aliados, roja Eje, como el borde)
-	zone->s.effects = (team == 0) ? EF_FLAG2 : EF_FLAG1;
+		// luz del color del dueno alrededor de la bandera (azul Aliados, roja Eje, como el borde)
+		level.control_flag->s.effects = (team == 0) ? EF_FLAG2 : EF_FLAG1;
+	}
 
 	gi.sound (zone, CHAN_NO_PHS_ADD, gi.soundindex(va("%s/objectives/area_cap.wav", team_list[team]->teamid)), 1, 0, 0);
 
@@ -1483,6 +1489,10 @@ void objective_control_think (edict_t *self)
 
 void SP_objective_control (edict_t *self)
 {
+	edict_t	*flag;
+	vec3_t	end;
+	trace_t	tr;
+
 	if (!deathmatch->value || !control_mode->value)
 	{
 		G_FreeEdict (self);
@@ -1535,6 +1545,22 @@ void SP_objective_control (edict_t *self)
 	self->nextthink = level.time + FRAMETIME;
 
 	level.control_zone = self;
+
+	// la bandera va aparte, apoyada en el piso: el origin de la zona esta a la
+	// altura de un jugador parado y ahi la bandera quedaba en el aire
+	flag = G_Spawn ();
+	flag->classname = "control_flag";
+	flag->movetype = MOVETYPE_NONE;
+	flag->solid = SOLID_NOT;
+	VectorCopy (self->s.origin, flag->s.origin);
+	VectorCopy (self->s.origin, end);
+	end[2] -= self->count + 64;
+	tr = gi.trace (self->s.origin, NULL, NULL, end, self, MASK_SOLID);
+	if (!tr.startsolid && tr.fraction < 1.0)
+		VectorCopy (tr.endpos, flag->s.origin);
+	gi.linkentity (flag);
+	level.control_flag = flag;
+	gi.dprintf ("objective_control: bandera en %s\n", vtos(flag->s.origin));
 
 	if (level.control_numpoints)
 		gi.dprintf ("objective_control \"%s\" en %s, poligono de %i puntos, altura %i\n",
