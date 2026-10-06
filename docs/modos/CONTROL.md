@@ -142,6 +142,7 @@ hacer `spot`, y después recorrer el borde haciendo `spot` en cada esquina. Conv
 | `invade2` | **Patio**: polígono de 8 puntos marcado en el juego, zona chica al aire libre entre ambas bases (≈ 345 × 223 unidades). Archivo: [`ents/invade2.ctl`](../../ents/invade2.ctl). |
 | `inland4` | **Iglesia**: polígono de 9 puntos marcado en el juego, alrededor de la iglesia en el centro del mapa (≈ 765 × 435 unidades). Archivo: [`ents/inland4.ctl`](../../ents/inland4.ctl). |
 | `eurovilla` | **Torre Central**: polígono de 8 puntos en forma de L marcado en el juego, a la misma distancia de ambas bases (≈ 274 × 495 unidades). Archivo: [`ents/eurovilla.ctl`](../../ents/eurovilla.ctl). |
+| `itadday3` | **Puente**: polígono de 8 puntos marcado en el juego sobre el puente del centro del mapa; el río de abajo no cuenta (≈ 520 × 478 unidades). Archivo: [`ents/itadday3.ctl`](../../ents/itadday3.ctl). |
 
 Los bots no buscan la zona: juegan como en un mapa de kills.
 
