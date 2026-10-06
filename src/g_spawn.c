@@ -1484,7 +1484,7 @@ char *dday_statusbar =
 	"yt 158 "
 	"xr -70 "
 	"pic 31 "
-"end if "
+"endif "
 
 
 // respawn timer

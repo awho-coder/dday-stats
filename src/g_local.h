@@ -491,6 +491,7 @@ typedef struct
 	float		control_start;		// level.time en que empezo la disputa (0 = sin empezar)
 	float		control_gamestart;	// gameStartTime visto al empezar (cambia con cada cuenta regresiva)
 	float		control_msghold;	// hasta cuando no se tapa un aviso general con el estado de la zona
+	float		control_remind;		// proximo recordatorio en consola de quien controla la zona
 	int			control_msgstate[MAX_CLIENTS];	// ultimo estado mostrado a cada jugador (0 = fuera)
 
 } level_locals_t;
