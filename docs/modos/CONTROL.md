@@ -139,6 +139,7 @@ hacer `spot`, y después recorrer el borde haciendo `spot` en cada esquina. Conv
 | Mapa | Zona |
 |---|---|
 | `invade6` | **Colina**: polígono de 10 puntos marcado en el juego, equidistante de ambas bases. Archivo: [`ents/invade6.ctl`](../../ents/invade6.ctl). |
+| `eurovilla` | **Torre Central**: polígono de 8 puntos en forma de L marcado en el juego, a la misma distancia de ambas bases (≈ 274 × 495 unidades). Archivo: [`ents/eurovilla.ctl`](../../ents/eurovilla.ctl). |
 
 Los bots no buscan la zona: juegan como en un mapa de kills.
 
