@@ -1548,8 +1548,8 @@ void SP_objective_control (edict_t *self)
 char *Control_StatusBar (char *statusbar)
 {
 	static char	buf[4096];
-	char		*p, name[11];	// el nombre entra en el espacio hasta el icono
-	int			owner, n;
+	char		*p, name[15];	// nombres largos se cortan para no pisar el marcador
+	int			owner, n, x;
 
 	strncpy (buf, statusbar, sizeof(buf) - 1);
 	buf[sizeof(buf) - 1] = 0;
@@ -1559,24 +1559,33 @@ char *Control_StatusBar (char *statusbar)
 	if ((p = strstr(buf, "\"TIME\"")) != NULL)
 		memcpy (p, "\"TOMA\"", 6);
 
-	// debajo de los equipos: quien controla la zona, siempre a la vista
-	n = strlen (buf);
+	// TOMA baja un poco para dejar lugar a la linea del dueno de la zona
+	if ((p = strstr(buf, "yt 115 ")) != NULL)
+		memcpy (p, "yt 131 ", 7);
+	if ((p = strstr(buf, "yt 128 ")) != NULL)
+		memcpy (p, "yt 144 ", 7);
+	if ((p = strstr(buf, "yt 158 ")) != NULL)
+		memcpy (p, "yt 174 ", 7);
+
 	owner = level.control_owner - 1;
 	if (owner >= 0 && owner < MAX_TEAMS && team_list[owner])
 	{
-		// nombre corto y sin comillas para no romper el layout
+		// sin comillas para no romper el layout
 		strncpy (name, team_list[owner]->teamname, sizeof(name) - 1);
 		name[sizeof(name) - 1] = 0;
 		for (p = name; *p; p++)
 			if (*p == '"')
 				*p = '\'';
-
-		Com_sprintf (buf + n, sizeof(buf) - n,
-			"yt 98 xr -33 picn teams/%s yt 106 xr -160 string \"ZONA:\" xr -118 string2 \"%s\" ",
-			team_list[owner]->teamid, name);
 	}
 	else
-		Com_sprintf (buf + n, sizeof(buf) - n, "yt 106 xr -160 string \"ZONA:\" xr -118 string \"NEUTRAL\" ");
+		strcpy (name, "NEUTRAL");
+
+	// debajo de los equipos, alineado a la derecha como el marcador: "ZONA: <dueno>"
+	// (8 pixeles por letra; "ZONA: " son 6)
+	x = -(int)(strlen(name) + 6) * 8 - 4;
+	n = strlen (buf);
+	Com_sprintf (buf + n, sizeof(buf) - n, "yt 104 xr %i string \"ZONA:\" xr %i %s \"%s\" ",
+		x, x + 48, (owner >= 0) ? "string2" : "string", name);
 
 	return buf;
 }
