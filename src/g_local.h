@@ -478,6 +478,7 @@ typedef struct
 	// modo control de zona (control_mode)
 #define CONTROL_MAX_POINTS	32
 	edict_t		*control_zone;		// zona en disputa, NULL si el mapa no tiene
+	edict_t		*control_flag;		// bandera del dueno, apoyada en el piso bajo el centro de la zona
 	int			control_numpoints;	// puntos del borde si la zona es un poligono (0 = circulo)
 	float		control_poly[CONTROL_MAX_POINTS][2];
 	int			control_owner;		// equipo dueno + 1 (0 = neutral)
