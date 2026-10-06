@@ -139,6 +139,7 @@ hacer `spot`, y después recorrer el borde haciendo `spot` en cada esquina. Conv
 | Mapa | Zona |
 |---|---|
 | `invade6` | **Colina**: polígono de 10 puntos marcado en el juego, equidistante de ambas bases. Archivo: [`ents/invade6.ctl`](../../ents/invade6.ctl). |
+| `inland4` | **Iglesia**: polígono de 9 puntos marcado en el juego, alrededor de la iglesia en el centro del mapa (≈ 765 × 435 unidades). Archivo: [`ents/inland4.ctl`](../../ents/inland4.ctl). |
 
 Los bots no buscan la zona: juegan como en un mapa de kills.
 
