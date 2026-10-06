@@ -1024,6 +1024,10 @@ extern qboolean freeze_mode;
 extern float gameStartTime;
 
 #define CONTROL_RING_POINTS	24
+#define CONTROL_REMIND_TIME	30	// segundos entre recordatorios de quien controla la zona
+
+static void Control_UpdateHud (void);
+extern char *dday_statusbar;
 
 static float Control_Cvar (cvar_t *cvar, float fallback)
 {
@@ -1121,6 +1125,7 @@ static void Control_Reset (edict_t *zone)
 	level.control_unlocked = false;
 	level.control_overtime = false;
 	level.control_winner = 0;
+	level.control_remind = 0;
 	level.control_start = level.time;
 	level.control_gamestart = gameStartTime;
 
@@ -1140,6 +1145,9 @@ static void Control_Reset (edict_t *zone)
 
 	zone->s.modelindex = 0;
 	zone->s.sound = 0;
+	zone->s.effects = 0;
+
+	Control_UpdateHud ();
 }
 
 // aviso general a todos; el estado de la zona espera unos segundos para no taparlo
@@ -1152,9 +1160,10 @@ static void Control_Announce (char *msg)
 static void Control_Capture (edict_t *zone, int team)
 {
 	edict_t	*ent;
-	int		i;
+	int		i, loser = level.control_owner - 1;
 
 	level.control_owner = team + 1;
+	level.control_remind = level.time + CONTROL_REMIND_TIME;
 	level.control_capteam = 0;
 	level.control_capture = 0;
 	level.control_overtime = false;
@@ -1172,10 +1181,30 @@ static void Control_Capture (edict_t *zone, int team)
 	zone->s.modelindex = gi.modelindex (va("models/objects/%sflag/tris.md2", team_list[team]->teamid));
 	zone->s.sound = gi.soundindex ("faf/flag.wav");
 
+	// luz del color del dueno alrededor de la bandera (azul Aliados, roja Eje, como el borde)
+	zone->s.effects = (team == 0) ? EF_FLAG2 : EF_FLAG1;
+
 	gi.sound (zone, CHAN_NO_PHS_ADD, gi.soundindex(va("%s/objectives/area_cap.wav", team_list[team]->teamid)), 1, 0, 0);
 
 	safe_bprintf (PRINT_HIGH, "Equipo %s capturo la zona %s!\n", team_list[team]->teamname, zone->obj_name);
 	Control_Announce (va("%s\ncapturo la zona!", team_list[team]->teamname));
+
+	// el equipo que la tenia recibe su propio aviso (por encima del general) y una alerta
+	if (loser >= 0 && loser != team && team_list[loser])
+	{
+		for (i = 1; i <= game.maxclients; i++)
+		{
+			ent = &g_edicts[i];
+
+			if (ent->inuse && ent->client && ent->client->resp.team_on &&
+				ent->client->resp.team_on->index == loser)
+				gi.centerprintf (ent, "PERDIERON LA ZONA!\n%s la capturo", team_list[team]->teamname);
+		}
+
+		PlayTeamSound (loser, va("%s/shout/flagtk.wav", team_list[loser]->teamid), false);
+	}
+
+	Control_UpdateHud ();
 }
 
 static void Control_Spark (edict_t *zone, float x, float y, int color)
@@ -1435,6 +1464,14 @@ void objective_control_think (edict_t *self)
 		}
 	}
 
+	// recordatorio en consola para los que estan lejos de la zona
+	if (owner >= 0 && level.time >= level.control_remind)
+	{
+		level.control_remind = level.time + CONTROL_REMIND_TIME;
+		safe_bprintf (PRINT_HIGH, "%s controla la zona %s (%i/100).\n",
+			team_list[owner]->teamname, self->obj_name, (int)level.control_pct[owner]);
+	}
+
 	for (i = 0; i < MAX_TEAMS; i++)
 	{
 		if (team_list[i])
@@ -1511,7 +1548,8 @@ void SP_objective_control (edict_t *self)
 char *Control_StatusBar (char *statusbar)
 {
 	static char	buf[4096];
-	char		*p;
+	char		*p, name[11];	// el nombre entra en el espacio hasta el icono
+	int			owner, n;
 
 	strncpy (buf, statusbar, sizeof(buf) - 1);
 	buf[sizeof(buf) - 1] = 0;
@@ -1521,7 +1559,32 @@ char *Control_StatusBar (char *statusbar)
 	if ((p = strstr(buf, "\"TIME\"")) != NULL)
 		memcpy (p, "\"TOMA\"", 6);
 
+	// debajo de los equipos: quien controla la zona, siempre a la vista
+	n = strlen (buf);
+	owner = level.control_owner - 1;
+	if (owner >= 0 && owner < MAX_TEAMS && team_list[owner])
+	{
+		// nombre corto y sin comillas para no romper el layout
+		strncpy (name, team_list[owner]->teamname, sizeof(name) - 1);
+		name[sizeof(name) - 1] = 0;
+		for (p = name; *p; p++)
+			if (*p == '"')
+				*p = '\'';
+
+		Com_sprintf (buf + n, sizeof(buf) - n,
+			"yt 98 xr -33 picn teams/%s yt 106 xr -160 string \"ZONA:\" xr -118 string2 \"%s\" ",
+			team_list[owner]->teamid, name);
+	}
+	else
+		Com_sprintf (buf + n, sizeof(buf) - n, "yt 106 xr -160 string \"ZONA:\" xr -118 string \"NEUTRAL\" ");
+
 	return buf;
+}
+
+// reenvia el HUD a todos cuando la zona cambia de dueno
+static void Control_UpdateHud (void)
+{
+	gi.configstring (CS_STATUSBAR, Control_StatusBar (dday_statusbar));
 }
 
 // maximo de granadas por jugador en el modo control (0 = sin granadas, -1 = sin limite)
