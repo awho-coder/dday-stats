@@ -192,6 +192,17 @@ def run_cmd(text, by):
         rcon("set control_mode 0"); rcon("set stats_mode public")
         rcon('set sv_maplist "dday2"'); rcon("map dday2")
         return "[ADMIN] modo NORMAL listo: dday2 · DM · public (petición de %s)" % by, True
+    if verb in ("evento", "event", "torneoevento"):
+        nombre = (arg or "").strip().strip('"')
+        if norm(nombre) in ("off", "quitar", "quitarlo", "limpiar", "ninguno", "sacar", "terminar", "fin"):
+            rcon('set stats_event ""'); rcon("set tournament 0")
+            return "[ADMIN] evento TERMINADO: las partidas vuelven al ladder normal", True
+        if not nombre:
+            return "[ADMIN] uso: evento <nombre-del-torneo>  o  evento off", True
+        if not re.match(r"^[A-Za-z0-9 ._-]{3,40}$", nombre):
+            return "[ADMIN] nombre de evento invalido (letras, numeros, . _ -, max 40)", True
+        rcon('set stats_event "%s"' % nombre)
+        return "[ADMIN] evento '%s' ACTIVO: las partidas van al ladder OFICIAL" % nombre, True
     if verb in ("pass", "password", "clave", "contrasena", "contraseña"):
         if verb in ("passoff",):  # placeholder nunca alcanzado
             pass
@@ -440,7 +451,7 @@ def looks_command(text):
     return v in {"ayuda","help","estado","status","jugadores","players","kick","kickea","echar",
                  "kickban","ban","unban","delban","desban","lock","unlock","bloquear","abrir",
                  "mapa","map","cambiamapa","duelo","duel","publico","publica","cuenta","startcount",
-                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","control","dm","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
+                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","control","dm","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
                  "restart","reload"}
 
 def handle_line(line, dry=False):
