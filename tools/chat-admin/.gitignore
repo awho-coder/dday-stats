@@ -3,3 +3,4 @@ token
 .relay-token
 *secret*
 *.bak*
+__pycache__/
