@@ -66,7 +66,7 @@ implemented it yet? */
 
 // 99 is basically unlimited
 
-#define MAX_OFFICERS		15
+#define MAX_OFFICERS		1
 #define MAX_INFANTRY		99
 #define MAX_L_GUNNER		2
 #define MAX_H_GUNNER		2
