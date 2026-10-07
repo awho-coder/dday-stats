@@ -149,8 +149,8 @@ def run_cmd(text, by):
         if m not in {norm(x) for x in MAPS}:
             return "[ADMIN] mapa '%s' no está en la lista" % arg, True
         real = [x for x in MAPS if norm(x) == m][0]
-        rcon("map %s" % real)
-        return "[ADMIN] cambiando a %s (petición de %s)" % (real, by), True
+        rcon('set sv_maplist "%s"' % real); rcon("set control_mode 0"); rcon("map %s" % real)
+        return "[ADMIN] cambiando a %s en modo normal (petición de %s)" % (real, by), True
     if verb in ("duelo", "duel"):
         real = None
         if arg:
@@ -163,8 +163,8 @@ def run_cmd(text, by):
         return ("[ADMIN] modo DUELO armado en %s — cuando estén listos: 'cuenta' "
                 "para tirar la cuenta atrás (petición de %s)" % (real or "mapa actual", by)), True
     if verb in ("publico", "publica"):
-        rcon('set stats_mode public')
-        return "[ADMIN] stats_mode vuelta a public", True
+        rcon('set stats_mode public'); rcon("set control_mode 0")
+        return "[ADMIN] modo PUBLICO/NORMAL: stats public y control apagado", True
     if verb in ("cuenta", "startcount", "tiracuenta", "tira", "tirar", "tiro", "lanza", "lanzar",
                 "iniciar", "inicia", "arrancar", "arranca", "empezar", "empeza", "empieza",
                 "start", "countdown", "count", "cuentaatras"):
@@ -188,6 +188,21 @@ def run_cmd(text, by):
             real = [x for x in MAPS if norm(x) == m][0]
         rcon("set control_mode 0"); rcon('set sv_maplist "%s"' % real); rcon("map %s" % real)
         return "[ADMIN] modo DM en %s" % real, True
+    if verb in ("normal", "modo", "clasico", "restaurar", "default", "resetmodo"):
+        rcon("set control_mode 0"); rcon("set stats_mode public")
+        rcon('set sv_maplist "dday2"'); rcon("map dday2")
+        return "[ADMIN] modo NORMAL listo: dday2 · DM · public (petición de %s)" % by, True
+    if verb in ("evento", "event", "torneoevento"):
+        nombre = (arg or "").strip().strip('"')
+        if norm(nombre) in ("off", "quitar", "quitarlo", "limpiar", "ninguno", "sacar", "terminar", "fin"):
+            rcon('set stats_event ""'); rcon("set tournament 0")
+            return "[ADMIN] evento TERMINADO: las partidas vuelven al ladder normal", True
+        if not nombre:
+            return "[ADMIN] uso: evento <nombre-del-torneo>  o  evento off", True
+        if not re.match(r"^[A-Za-z0-9 ._-]{3,40}$", nombre):
+            return "[ADMIN] nombre de evento invalido (letras, numeros, . _ -, max 40)", True
+        rcon('set stats_event "%s"' % nombre)
+        return "[ADMIN] evento '%s' ACTIVO: las partidas van al ladder OFICIAL" % nombre, True
     if verb in ("pass", "password", "clave", "contrasena", "contraseña"):
         if verb in ("passoff",):  # placeholder nunca alcanzado
             pass
@@ -436,7 +451,7 @@ def looks_command(text):
     return v in {"ayuda","help","estado","status","jugadores","players","kick","kickea","echar",
                  "kickban","ban","unban","delban","desban","lock","unlock","bloquear","abrir",
                  "mapa","map","cambiamapa","duelo","duel","publico","publica","cuenta","startcount",
-                 "reset","resetcount","control","dm","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
+                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","control","dm","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
                  "restart","reload"}
 
 def handle_line(line, dry=False):
