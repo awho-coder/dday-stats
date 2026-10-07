@@ -66,9 +66,19 @@ cuenta es si hay gente dentro, si está vacía o si está disputada.
   de cada equipo.
 - El contador lateral (**TOMA**) muestra el avance de la captura en curso, con
   el ícono del equipo que captura.
-- Los jugadores dentro de la zona ven un aviso cuando cambia su estado
-  (bloqueada, disputada, quién captura, quién controla, tiempo extra). Los
-  porcentajes se siguen en el HUD para no llenar la consola.
+- Los jugadores dentro de la zona ven su **estado en el HUD**, en texto a la
+  altura de los mensajes del centro (ZONA BLOQUEADA, ZONA DISPUTADA,
+  X CAPTURANDO, X CONTROLA, X - TIEMPO EXTRA). Usa el lugar de la imagen de
+  objetivos del mapa (stat 16), que en este modo no se muestra.
+- **Avisos y kills:** en q2pro cada mensaje en el centro de la pantalla borra
+  las notificaciones de arriba (las kills), y cada aviso a todos ocupa una de
+  sus 4 líneas. Por eso el modo usa pocos: en el centro solo la explicación,
+  "zona abierta", la captura (un solo mensaje por jugador: el equipo que la
+  pierde ve "PERDIERON LA ZONA!") y el ingeniero desbloqueado (solo a ese
+  equipo); arriba solo "se abre en 10 segundos", los hitos de 50 y 90% y el
+  tiempo extra. No hay recordatorio periódico: el dueño está en "ZONA:" y el
+  avance en ZONA %. Los jugadores pueden poner `con_notifylines 6` y
+  `con_notifytime 5` en q2pro para ver más kills.
 - El borde de la zona se marca con chispas cada segundo; el color cambia según
   el dueño (neutral, Aliados o Eje).
 

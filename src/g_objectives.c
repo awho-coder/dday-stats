@@ -1024,7 +1024,17 @@ extern qboolean freeze_mode;
 extern float gameStartTime;
 
 #define CONTROL_RING_POINTS	24
-#define CONTROL_REMIND_TIME	30	// segundos entre recordatorios de quien controla la zona
+// estado de la zona en el HUD (stat_string en STAT_OBJECTIVE, ver Control_StatusBar):
+// los centerprints borran las kills de la consola en q2pro, por eso no se usan
+// para algo que cambia seguido. Ocupa los ultimos configstrings de CS_GENERAL
+// (el resto se usa por jugador en p_view.c).
+#define CONTROL_CS_STATUS	(CS_GENERAL + MAX_CLIENTS - 8)
+#define CONTROL_ST_LOCKED	0
+#define CONTROL_ST_CONTESTED	1
+#define CONTROL_ST_CAPTURE	2	// + equipo
+#define CONTROL_ST_OWNER	4	// + equipo
+#define CONTROL_ST_OVERTIME	6	// + equipo
+#define CONTROL_STATUS_WIDTH	28	// caracteres; el texto se centra con espacios
 #define CONTROL_INTRO_SENDS	3	// la explicacion del modo se repite para que dure en pantalla
 #define CONTROL_INTRO_TIME	2.5	// segundos entre repeticiones (lo que dura un centerprint)
 
@@ -1118,6 +1128,36 @@ qboolean Control_PlayerInZone (edict_t *ent)
 	return Control_InZone (level.control_zone, ent);
 }
 
+static void Control_StatusString (int index, char *text)
+{
+	char	buf[CONTROL_STATUS_WIDTH + 1];
+	int		len = strlen (text), pad;
+
+	if (len > CONTROL_STATUS_WIDTH)
+		len = CONTROL_STATUS_WIDTH;
+	pad = (CONTROL_STATUS_WIDTH - len) / 2;
+
+	Com_sprintf (buf, sizeof(buf), "%*s%.*s", pad, "", len, text);
+	gi.configstring (CONTROL_CS_STATUS + index, buf);
+}
+
+static void Control_StatusStrings (void)
+{
+	int		i;
+
+	Control_StatusString (CONTROL_ST_LOCKED, "ZONA BLOQUEADA");
+	Control_StatusString (CONTROL_ST_CONTESTED, "ZONA DISPUTADA");
+
+	for (i = 0; i < 2; i++)
+	{
+		if (!team_list[i])
+			continue;
+		Control_StatusString (CONTROL_ST_CAPTURE + i, va("%s CAPTURANDO", team_list[i]->teamname));
+		Control_StatusString (CONTROL_ST_OWNER + i, va("%s CONTROLA", team_list[i]->teamname));
+		Control_StatusString (CONTROL_ST_OVERTIME + i, va("%s - TIEMPO EXTRA", team_list[i]->teamname));
+	}
+}
+
 static void Control_Reset (edict_t *zone)
 {
 	int i;
@@ -1128,7 +1168,6 @@ static void Control_Reset (edict_t *zone)
 	level.control_unlocked = false;
 	level.control_overtime = false;
 	level.control_winner = 0;
-	level.control_remind = 0;
 	level.control_start = level.time;
 	level.control_engunlock[0] = level.control_engunlock[1] = false;
 	level.control_gamestart = gameStartTime;
@@ -1154,6 +1193,7 @@ static void Control_Reset (edict_t *zone)
 		level.control_flag->s.effects = 0;
 	}
 
+	Control_StatusStrings ();
 	Control_UpdateHud ();
 }
 
@@ -1170,7 +1210,6 @@ static void Control_Capture (edict_t *zone, int team)
 	int		i, loser = level.control_owner - 1;
 
 	level.control_owner = team + 1;
-	level.control_remind = level.time + CONTROL_REMIND_TIME;
 	level.control_capteam = 0;
 	level.control_capture = 0;
 	level.control_overtime = false;
@@ -1196,23 +1235,27 @@ static void Control_Capture (edict_t *zone, int team)
 
 	gi.sound (zone, CHAN_NO_PHS_ADD, gi.soundindex(va("%s/objectives/area_cap.wav", team_list[team]->teamid)), 1, 0, 0);
 
-	safe_bprintf (PRINT_HIGH, "Equipo %s capturo la zona %s!\n", team_list[team]->teamname, zone->obj_name);
-	Control_Announce (va("%s\ncapturo la zona!", team_list[team]->teamname));
+	// un solo centerprint por jugador (cada uno borra las kills de arriba):
+	// el equipo que la tenia recibe el suyo, el resto el general
+	if (loser < 0 || loser == team || !team_list[loser])
+		loser = -1;
 
-	// el equipo que la tenia recibe su propio aviso (por encima del general) y una alerta
-	if (loser >= 0 && loser != team && team_list[loser])
+	gi.dprintf ("Equipo %s capturo la zona %s\n", team_list[team]->teamname, zone->obj_name);
+	for (i = 1; i <= game.maxclients; i++)
 	{
-		for (i = 1; i <= game.maxclients; i++)
-		{
-			ent = &g_edicts[i];
+		ent = &g_edicts[i];
+		if (!ent->inuse || !ent->client)
+			continue;
 
-			if (ent->inuse && ent->client && ent->client->resp.team_on &&
-				ent->client->resp.team_on->index == loser)
-				gi.centerprintf (ent, "PERDIERON LA ZONA!\n%s la capturo", team_list[team]->teamname);
-		}
-
-		PlayTeamSound (loser, va("%s/shout/flagtk.wav", team_list[loser]->teamid), false);
+		if (loser >= 0 && ent->client->resp.team_on && ent->client->resp.team_on->index == loser)
+			gi.centerprintf (ent, "PERDIERON LA ZONA!\n%s la capturo", team_list[team]->teamname);
+		else
+			gi.centerprintf (ent, "%s\ncapturo la zona!", team_list[team]->teamname);
 	}
+	level.control_msghold = level.time + 3;
+
+	if (loser >= 0)
+		PlayTeamSound (loser, va("%s/shout/flagtk.wav", team_list[loser]->teamid), false);
 
 	Control_UpdateHud ();
 }
@@ -1282,54 +1325,32 @@ static void Control_DrawRing (edict_t *zone)
 
 // estado de la zona para los que estan dentro: solo cuando cambia, para no
 // llenar la consola (los porcentajes se ven en el HUD: ZONA % y TOMA)
+// estado de la zona para los jugadores que estan dentro, en el HUD
+// (level.control_msgstate guarda el configstring a mostrar, 0 = nada)
 static void Control_ZoneMessage (edict_t *zone)
 {
-	char	msg[128];
 	edict_t	*ent;
-	int		i, state, owner = level.control_owner - 1;
+	int		i, cs, owner = level.control_owner - 1;
 
 	if (!level.control_unlocked)
-	{
-		state = 1;
-		Com_sprintf (msg, sizeof(msg), "ZONA BLOQUEADA\nespera a que se abra");
-	}
+		cs = CONTROL_CS_STATUS + CONTROL_ST_LOCKED;
 	else if (level.control_inzone[0] && level.control_inzone[1])
-	{
-		state = 2;
-		Com_sprintf (msg, sizeof(msg), "ZONA DISPUTADA");
-	}
+		cs = CONTROL_CS_STATUS + CONTROL_ST_CONTESTED;
 	else if (level.control_capture > 0 && level.control_capteam)
-	{
-		state = 10 + level.control_capteam;
-		Com_sprintf (msg, sizeof(msg), "%s CAPTURANDO LA ZONA\n(avance en TOMA)",
-			team_list[level.control_capteam - 1]->teamname);
-	}
+		cs = CONTROL_CS_STATUS + CONTROL_ST_CAPTURE + level.control_capteam - 1;
 	else if (owner >= 0)
-	{
-		state = (level.control_overtime ? 30 : 20) + owner;
-		Com_sprintf (msg, sizeof(msg), "%s CONTROLA LA ZONA%s",
-			team_list[owner]->teamname, level.control_overtime ? "\nTIEMPO EXTRA" : "");
-	}
+		cs = CONTROL_CS_STATUS + (level.control_overtime ? CONTROL_ST_OVERTIME : CONTROL_ST_OWNER) + owner;
 	else
-		state = 3;	// neutral y vacia: no hay nada que mostrar
+		cs = 0;	// neutral y vacia: no hay nada que mostrar
 
 	for (i = 1; i <= game.maxclients; i++)
 	{
 		ent = &g_edicts[i];
 
 		if (!ent->inuse || !IsValidPlayer(ent) || ent->deadflag || !Control_InZone (zone, ent))
-		{
 			level.control_msgstate[i - 1] = 0;
-			continue;
-		}
-
-		if (level.control_msgstate[i - 1] == state || level.time < level.control_msghold ||
-			level.time < level.control_intronext[i - 1])
-			continue;
-
-		level.control_msgstate[i - 1] = state;
-		if (state != 3)
-			gi.centerprintf (ent, "%s", msg);
+		else
+			level.control_msgstate[i - 1] = cs;
 	}
 }
 
@@ -1393,7 +1414,7 @@ void objective_control_think (edict_t *self)
 {
 	float	unlock_time, rate, mult;
 	int		n, team, enemy, owner, i, before, after;
-	static const int milestones[] = {25, 50, 75, 90};
+	static const int milestones[] = {50, 90};
 
 	self->nextthink = level.time + FRAMETIME;
 
@@ -1432,7 +1453,6 @@ void objective_control_think (edict_t *self)
 			return;
 
 		level.control_unlocked = true;
-		safe_bprintf (PRINT_HIGH, "La zona %s esta abierta!\n", self->obj_name);
 		Control_Announce ("La zona esta abierta!\nCapturenla!");
 	}
 
@@ -1532,14 +1552,6 @@ void objective_control_think (edict_t *self)
 				level.control_winner = owner + 1;
 			}
 		}
-	}
-
-	// recordatorio en consola para los que estan lejos de la zona
-	if (owner >= 0 && level.time >= level.control_remind)
-	{
-		level.control_remind = level.time + CONTROL_REMIND_TIME;
-		safe_bprintf (PRINT_HIGH, "%s controla la zona %s (%i/100).\n",
-			team_list[owner]->teamname, self->obj_name, (int)level.control_pct[owner]);
 	}
 
 	for (i = 0; i < MAX_TEAMS; i++)
@@ -1644,6 +1656,21 @@ char *Control_StatusBar (char *statusbar)
 	strncpy (buf, statusbar, sizeof(buf) - 1);
 	buf[sizeof(buf) - 1] = 0;
 
+	// la imagen de objetivos (stat 16) se reemplaza por el estado de la zona, en texto,
+	// a la altura de los centerprints (centrado: el texto ya viene con espacios)
+	if ((p = strstr(buf, "if 16    xl 0    yt 0    pic 16 endif ")) != NULL)
+	{
+		static const char	*old16 = "if 16    xl 0    yt 0    pic 16 endif ";
+		static const char	*new16 = "if 16 xv 48 yv 76 stat_string 16 endif ";
+		size_t				ol = strlen (old16), nw = strlen (new16);
+
+		if (strlen (buf) - ol + nw < sizeof(buf))
+		{
+			memmove (p + nw, p + ol, strlen (p + ol) + 1);
+			memcpy (p, new16, nw);
+		}
+	}
+
 	if ((p = strstr(buf, "\"POINTS\"")) != NULL)
 		memcpy (p, "\"ZONA %\"", 8);
 	if ((p = strstr(buf, "\"TIME\"")) != NULL)
@@ -1741,7 +1768,7 @@ static void Control_EngineerUnlock (int leader)
 		return;
 
 	level.control_engunlock[team] = true;
-	safe_bprintf (PRINT_HIGH, "%s llego a %i%% de control: %s ya puede usar ingeniero.\n",
+	gi.dprintf ("%s llego a %i%% de control: %s ya puede usar ingeniero\n",
 		team_list[leader]->teamname, (int)control_engineer_at->value, team_list[team]->teamname);
 
 	for (i = 1; i <= game.maxclients; i++)
@@ -1768,4 +1795,7 @@ void Control_HudStats (edict_t *ent)
 	}
 	else
 		ent->client->ps.stats[STAT_TIMER2] = 0;
+
+	// en este modo STAT_OBJECTIVE muestra el estado de la zona (ver Control_StatusBar)
+	ent->client->ps.stats[STAT_OBJECTIVE] = level.control_msgstate[ent - g_edicts - 1];
 }
