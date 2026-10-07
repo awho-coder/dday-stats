@@ -76,7 +76,7 @@ def _cl(s):
     return _r.sub(r'[\x00-\x08\x0b-\x1f\ufffd]+', '', s).replace('print', '').strip()
 
 def say(msg):
-    return rcon("say " + _cl(msg)[:190])
+    return rcon("say " + _cl(msg)[:190], wait=0.3)
 
 def log_action(by, text, result):
     try:
@@ -539,8 +539,13 @@ def handle_line(line, dry=False):
         if action:
             resp, _ = run_cmd(action, nick)
             log_action(nick, "llm:" + action, resp)
-            if resp: say(resp)
-        if reply:
+            if action.strip().lower().startswith("say"):
+                pass          # el anuncio ya salio al chat: no hace falta confirmarlo
+            elif resp:
+                say(resp)     # UNA sola linea por pedido
+            elif reply:
+                say(reply)
+        elif reply:
             say(reply)
         print("CHAT-LLM %s -> action=%s reply=%s" % (nick, action, reply[:60]))
         return ("llm", nick, text, reply or action)
