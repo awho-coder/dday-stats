@@ -109,7 +109,7 @@ def find_player(name):
 HELP = ("[ADMIN] comandos: estado, kick <quien>, kickban <quien>, ban <ip>, unban <ip>, "
         "mapa <nombre>, duelo <mapa>, publico, cuenta, reset, resetscore, tiempo, mapas, bans, "
         "bots on|off, kickbots, screenshot, stuff <cmd>, autostuff <cmd>, autostuffoff, "
-        "control <mapa>, dm <mapa>, "
+        "dm <mapa>, "
         "lock, unlock, say <texto>, ayuda")
 
 def run_cmd(text, by):
@@ -125,7 +125,7 @@ def run_cmd(text, by):
         arg = sub[1] if len(sub) > 1 else ""
         if verb not in ("control", "dm", "deathmatch", "duelo", "duel", "publico", "publica",
                         "normal", "clasico", "restaurar", "default"):
-            return "[ADMIN] uso: modo normal | modo control <mapa> | modo dm <mapa> | modo duelo <mapa>", True
+            return "[ADMIN] uso: modo normal | modo dm <mapa> | modo duelo <mapa>", True
 
     # lecturas
     if verb in ("ayuda", "help"): return HELP, True
@@ -195,12 +195,8 @@ def run_cmd(text, by):
         rcon("sv resetcount")
         return "[ADMIN] cuenta reseteada (lo registrado se descarta)", True
     if verb in ("control",):
-        if not arg: return "[ADMIN] uso: control <mapa>", True
-        m = norm(arg)
-        if m not in {norm(x) for x in MAPS}: return "[ADMIN] mapa '%s' no está en la lista" % arg, True
-        real = [x for x in MAPS if norm(x) == m][0]
-        rcon("set control_mode 1"); rcon('set sv_maplist "%s"' % real); rcon("map %s" % real)
-        return "[ADMIN] modo CONTROL en %s (petición de %s)" % (real, by), True
+        # el modo control solo lo activa el dueño del server por rcon; por chat se juega en DM
+        return "[ADMIN] el modo control solo lo activa el dueño del server. Para jugar el mapa en DM: dm <mapa>", True
     if verb in ("dm", "deathmatch"):
         real = "dday2"
         if arg:
