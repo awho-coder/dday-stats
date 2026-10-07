@@ -1025,6 +1025,8 @@ extern float gameStartTime;
 
 #define CONTROL_RING_POINTS	24
 #define CONTROL_REMIND_TIME	30	// segundos entre recordatorios de quien controla la zona
+#define CONTROL_INTRO_SENDS	3	// la explicacion del modo se repite para que dure en pantalla
+#define CONTROL_INTRO_TIME	2.5	// segundos entre repeticiones (lo que dura un centerprint)
 
 static void Control_UpdateHud (void);
 extern char *dday_statusbar;
@@ -1319,12 +1321,65 @@ static void Control_ZoneMessage (edict_t *zone)
 			continue;
 		}
 
-		if (level.control_msgstate[i - 1] == state || level.time < level.control_msghold)
+		if (level.control_msgstate[i - 1] == state || level.time < level.control_msghold ||
+			level.time < level.control_intronext[i - 1])
 			continue;
 
 		level.control_msgstate[i - 1] = state;
 		if (state != 3)
 			gi.centerprintf (ent, "%s", msg);
+	}
+}
+
+// explicacion corta del modo, una vez por mapa, la primera vez que el jugador
+// aparece en un equipo (tambien queda en la consola)
+static void Control_Intro (edict_t *zone)
+{
+	char	msg[400], extra[128];
+	edict_t	*ent;
+	int		i;
+	qboolean	nogren, noeng;
+
+	nogren = (Control_GrenadeLimit() == 0);
+	noeng = Control_ClassBanned (ENGINEER);
+
+	if (nogren && noeng)
+		Com_sprintf (extra, sizeof(extra), "Sin granadas ni ingenieros.\n");
+	else if (nogren || noeng)
+		Com_sprintf (extra, sizeof(extra), "Sin %s.\n", nogren ? "granadas" : "ingenieros");
+	else
+		extra[0] = 0;
+
+	Com_sprintf (msg, sizeof(msg),
+		"MODO CONTROL DE ZONA\n\n"
+		"Capturen la zona %s parandose dentro.\n"
+		"Mas jugadores capturan mas rapido.\n"
+		"Con rivales dentro queda disputada.\n\n"
+		"Gana el primer equipo en llegar\n"
+		"a 100%% de control (ZONA %% en el HUD).\n"
+		"%s",
+		zone->obj_name, extra);
+
+	for (i = 1; i <= game.maxclients; i++)
+	{
+		ent = &g_edicts[i];
+
+		// slot libre: el proximo que entre la vuelve a ver
+		if (!ent->inuse)
+		{
+			level.control_introsent[i - 1] = 0;
+			level.control_intronext[i - 1] = 0;
+			continue;
+		}
+
+		if (ent->ai || !IsValidPlayer(ent) || ent->deadflag ||
+			level.control_introsent[i - 1] >= CONTROL_INTRO_SENDS ||
+			level.time < level.control_intronext[i - 1])
+			continue;
+
+		gi.centerprintf (ent, "%s", msg);
+		level.control_introsent[i - 1]++;
+		level.control_intronext[i - 1] = level.time + CONTROL_INTRO_TIME;
 	}
 }
 
@@ -1353,6 +1408,7 @@ void objective_control_think (edict_t *self)
 		Control_Reset (self);
 
 	Control_CountPlayers (self);
+	Control_Intro (self);
 
 	if (level.framenum % 10 == 0)
 		Control_DrawRing (self);

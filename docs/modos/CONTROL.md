@@ -51,6 +51,10 @@ cuenta es si hay gente dentro, si está vacía o si está disputada.
 
 ## En pantalla
 
+- La primera vez que un jugador aparece en un equipo en el mapa, ve una
+  **explicación corta del modo** en el centro de la pantalla (unos 7 segundos;
+  también queda en la consola). Dice si no hay granadas ni ingenieros según
+  `control_grenades` y `control_engineer`. Los bots no la reciben.
 - La columna **POINTS** del HUD pasa a llamarse **ZONA %** y muestra el control
   de cada equipo.
 - El contador lateral (**TOMA**) muestra el avance de la captura en curso, con
