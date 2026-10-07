@@ -79,8 +79,11 @@ comando.
 - **Info:** `estado` `ayuda` `bans` `tiempo` `mapas` `infomapa` `marcador`
   `zona` `versiones` `lag` `tiempos`
 - **Juego:** `mapa <x>` `duelo <mapa>` `publico` `normal` `control <mapa>`
-  `dm <mapa>` `evento <nombre>` `cuenta` `reset` `resetscore` `torneo on|off`
-  `freeze` `proximamapa` `lock` `unlock` `say <texto>`
+  `dm <mapa>` `modo normal|control|dm|duelo [mapa]` `evento <nombre>` `cuenta`
+  `reset` `resetscore` `torneo on|off` `freeze` `proximamapa` `lock` `unlock`
+  `say <texto>`
+- `mapa`, `dm`, `normal` y `publico` apagan el modo control y restauran la
+  rotación (`sv_maplist`) de `server.cfg`; `control <mapa>` deja solo ese mapa.
 - **Moderación:** `kick <nick>` `kickban <nick>` `ban <ip>` `unban <ip>`
   `killjugador <nick>` `kickbots` `bots on|off` `reportar <quien> <motivo>`
 - **q2pro:** `screenshot` `stuff <cmd>` `stuffid <id> <cmd>` `autostuff <cmd>`
