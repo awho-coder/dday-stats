@@ -78,15 +78,16 @@ comando.
 
 - **Info:** `estado` `ayuda` `bans` `tiempo` `mapas` `infomapa` `marcador`
   `zona` `versiones` `lag` `tiempos`
-- **Juego:** `mapa <x>` `duelo <mapa>` `publico` `normal` `dm <mapa>`
-  `modo normal|dm|duelo [mapa]` `evento <nombre>` `cuenta` `reset` `resetscore`
-  `torneo on|off` `freeze` `proximamapa` `lock` `unlock` `say <texto>`
+- **Juego:** `mapa <x>` `duelo <mapa>` `publico` `normal` `control <mapa>`
+  `dm <mapa>` `modo normal|control|dm|duelo [mapa]` `evento <nombre>` `cuenta`
+  `reset` `resetscore` `torneo on|off` `freeze` `proximamapa` `lock` `unlock`
+  `say <texto>`
+- `control <mapa>` (o `modo control <mapa>`) deja solo ese mapa y **apaga la
+  votación** mientras dure la sesión: las rondas se repiten en ese mapa.
 - `mapa`, `dm`, `normal` y `publico` apagan el modo control y restauran la
-  rotación (`sv_maplist`) de `server.cfg`.
-- **El modo control no se puede activar por chat** (`control` y `modo control`
-  responden que lo activa solo el dueño del server). Se activa por rcon:
-  `set control_mode 1`, `set sv_maplist "<mapa>"` y `map <mapa>`. Los mapas
-  con zona se juegan en deathmatch normal con `control_mode 0`.
+  rotación (`sv_maplist`) y la votación (`mapvoting`) de `server.cfg`.
+- La votación de fin de mapa **nunca** lleva al modo control: el mapa votado
+  siempre arranca en deathmatch (la DLL pone `control_mode 0`).
 - **Moderación:** `kick <nick>` `kickban <nick>` `ban <ip>` `unban <ip>`
   `killjugador <nick>` `kickbots` `bots on|off` `reportar <quien> <motivo>`
 - **q2pro:** `screenshot` `stuff <cmd>` `stuffid <id> <cmd>` `autostuff <cmd>`

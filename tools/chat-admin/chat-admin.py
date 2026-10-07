@@ -34,11 +34,21 @@ def normal_maplist():
     except Exception:
         return ""
 
+def cfg_value(name):
+    """Valor de 'set <name> "..."' (o sin comillas) en server.cfg, '' si no esta."""
+    try:
+        m = re.search(r'^\s*set\s+%s\s+(?:"([^"]*)"|(\S+))' % re.escape(name), open(CFG).read(), re.M)
+        return (m.group(1) if m.group(1) is not None else m.group(2)) if m else ""
+    except Exception:
+        return ""
+
 def restore_rotation():
-    """Modo normal: sin control y con la rotacion de server.cfg (no un solo mapa repetido)."""
+    """Modo normal: sin control, con la rotacion y la votacion de server.cfg."""
     rcon("set control_mode 0")
     ml = normal_maplist()
     if ml: rcon('set sv_maplist "%s"' % ml)
+    mv = cfg_value("mapvoting")
+    if mv: rcon("set mapvoting %s" % mv)
 
 def rcon(cmd, wait=1.0):
     if DRY:
@@ -109,7 +119,7 @@ def find_player(name):
 HELP = ("[ADMIN] comandos: estado, kick <quien>, kickban <quien>, ban <ip>, unban <ip>, "
         "mapa <nombre>, duelo <mapa>, publico, cuenta, reset, resetscore, tiempo, mapas, bans, "
         "bots on|off, kickbots, screenshot, stuff <cmd>, autostuff <cmd>, autostuffoff, "
-        "dm <mapa>, "
+        "control <mapa>, dm <mapa>, "
         "lock, unlock, say <texto>, ayuda")
 
 def run_cmd(text, by):
@@ -125,7 +135,7 @@ def run_cmd(text, by):
         arg = sub[1] if len(sub) > 1 else ""
         if verb not in ("control", "dm", "deathmatch", "duelo", "duel", "publico", "publica",
                         "normal", "clasico", "restaurar", "default"):
-            return "[ADMIN] uso: modo normal | modo dm <mapa> | modo duelo <mapa>", True
+            return "[ADMIN] uso: modo normal | modo control <mapa> | modo dm <mapa> | modo duelo <mapa>", True
 
     # lecturas
     if verb in ("ayuda", "help"): return HELP, True
@@ -195,8 +205,14 @@ def run_cmd(text, by):
         rcon("sv resetcount")
         return "[ADMIN] cuenta reseteada (lo registrado se descarta)", True
     if verb in ("control",):
-        # el modo control solo lo activa el dueño del server por rcon; por chat se juega en DM
-        return "[ADMIN] el modo control solo lo activa el dueño del server. Para jugar el mapa en DM: dm <mapa>", True
+        if not arg: return "[ADMIN] uso: control <mapa>", True
+        m = norm(arg)
+        if m not in {norm(x) for x in MAPS}: return "[ADMIN] mapa '%s' no está en la lista" % arg, True
+        real = [x for x in MAPS if norm(x) == m][0]
+        # sin votacion durante la sesion de control: las rondas siguen en este mapa hasta
+        # que se pida normal/dm/mapa (la votacion nunca debe llevar al modo control)
+        rcon("set mapvoting 0"); rcon("set control_mode 1"); rcon('set sv_maplist "%s"' % real); rcon("map %s" % real)
+        return "[ADMIN] modo CONTROL en %s, sin votación hasta volver a normal (petición de %s)" % (real, by), True
     if verb in ("dm", "deathmatch"):
         real = "dday2"
         if arg:
