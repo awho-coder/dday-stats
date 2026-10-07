@@ -427,6 +427,9 @@ void InitGame (void)
 	control_emptyrate = gi.cvar("control_emptyrate", "0.25", 0);
 	control_grenades = gi.cvar("control_grenades", "0", 0);
 	control_engineer = gi.cvar("control_engineer", "0", 0);
+	control_engineer_at = gi.cvar("control_engineer_at", "85", 0);
+	control_engineer_rockets = gi.cvar("control_engineer_rockets", "3", 0);
+	control_engineer_grenades = gi.cvar("control_engineer_grenades", "1", 0);
 
 	// kernel: time to display the MOTD at beginning of level
 	motd_time = gi.cvar("motd_time", "10", 0);

@@ -498,6 +498,7 @@ typedef struct
 	int			control_msgstate[MAX_CLIENTS];	// ultimo estado mostrado a cada jugador (0 = fuera)
 	int			control_introsent[MAX_CLIENTS];	// veces que se mostro la explicacion del modo a cada jugador
 	float		control_intronext[MAX_CLIENTS];	// cuando repetirla, para que dure en pantalla
+	qboolean	control_engunlock[MAX_TEAMS];	// ingeniero desbloqueado para ese equipo (el rival llego a control_engineer_at)
 
 } level_locals_t;
 
@@ -715,6 +716,9 @@ extern	cvar_t	*control_captime;	// segundos que tarda un jugador solo en captura
 extern	cvar_t	*control_holdtime;	// segundos de control para llegar al 100%
 extern	cvar_t	*control_emptyrate;	// con la zona vacia el control del dueno sube a esta fraccion (0 = se congela)
 extern	cvar_t	*control_engineer;	// 0 = clase ingeniero deshabilitada en este modo, 1 = permitida
+extern	cvar_t	*control_engineer_at;	// % de control del rival que desbloquea el ingeniero (0 = nunca)
+extern	cvar_t	*control_engineer_rockets;	// cohetes en total del ingeniero desbloqueado (cargado + repuesto)
+extern	cvar_t	*control_engineer_grenades;	// granadas del ingeniero desbloqueado
 extern	cvar_t	*control_grenades;	// maximo de granadas por jugador en este modo (0 = sin granadas, -1 = sin limite)
 
 extern	cvar_t	*dmflags;
@@ -2301,8 +2305,9 @@ qboolean Pickup_Briefcase (edict_t *ent, edict_t *other);
 void Drop_Briefcase (edict_t *ent, gitem_t *item);
 char *Control_StatusBar (char *statusbar);
 void Control_HudStats (edict_t *ent);
-int Control_GrenadeLimit (void);
-qboolean Control_ClassBanned (int mos);
+int Control_GrenadeLimit (edict_t *ent);
+qboolean Control_ClassBanned (edict_t *ent, int mos);
+qboolean Control_LimitedEngineer (edict_t *ent);
 qboolean Control_PlayerInZone (edict_t *ent);
 
 #include "g_statslog.h"
