@@ -1727,7 +1727,10 @@ void G_SetStats (edict_t *ent)
 	//
 	// OBJECTIVES
 	//
-	if (level.objectivepic && ent->client->display_info) 
+	// (en modo control STAT_OBJECTIVE muestra el estado de la zona, ver Control_HudStats)
+	if (level.control_zone)
+		;
+	else if (level.objectivepic && ent->client->display_info) 
     {
 		char pic[75];
 		if (snprintf(pic, 75, "objectives/%s", level.mapname) >= 75)
