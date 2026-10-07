@@ -12,7 +12,10 @@ ALLOW_RAW = ("[MR]+Peruano+", "[MR]+roman")  # match EXACTO anti-squatting
 MAPS   = {"dday2","invade1","invade2","invade6","itadday3","townwar","eurovilla","eurovilla3",
           "inland2","inland3","inland4","inland5","inland6","market1","mp1dday1","mp1dday2",
           "mp1dday3","nav2","nuenen","outpost","townwar1","war3","itadday1","itadday2",
-          "dust","dday3","dday4"}
+          "dust","dday3","dday4","doomtown","tebessa2"}
+POOL   = "doomtown dust eurovilla3 market1 nuenen outpost tebessa2 townwar invade6"
+POOL_MAPS = ["doomtown","dust","eurovilla3","market1","nuenen","outpost","tebessa2","townwar","invade6"]
+NO_NAV = {"eurovilla3","market1","nuenen","tebessa2","townwar"}   # sin .cmp de bots
 RCON = ("127.0.0.1", 27910)
 DRY = False
 TESTMODE = False
@@ -209,6 +212,12 @@ def run_cmd(text, by):
         restore_rotation(); rcon("set stats_mode public")
         rcon("map dday2")
         return "[ADMIN] modo NORMAL listo: dday2 · DM · public · rotación normal (petición de %s)" % by, True
+    if verb in ("pool", "rotacion", "rotar", "mapaspool", "rotacionmapas"):
+        rcon("set control_mode 0")
+        ml = normal_maplist() or POOL
+        rcon('set sv_maplist "%s"' % ml)
+        sin = ", ".join(sorted(NO_NAV))
+        return "[ADMIN] rotacion de 9 restaurada. Sin bots: %s" % sin, True
     if verb in ("evento", "event", "torneoevento"):
         nombre = (arg or "").strip().strip('"')
         if norm(nombre) in ("off", "quitar", "quitarlo", "limpiar", "ninguno", "sacar", "terminar", "fin"):
@@ -468,7 +477,7 @@ def looks_command(text):
     return v in {"ayuda","help","estado","status","jugadores","players","kick","kickea","echar",
                  "kickban","ban","unban","delban","desban","lock","unlock","bloquear","abrir",
                  "mapa","map","cambiamapa","duelo","duel","publico","publica","cuenta","startcount",
-                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","control","dm","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
+                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","dm","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
                  "restart","reload"}
 
 def handle_line(line, dry=False):
