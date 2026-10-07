@@ -22,7 +22,7 @@ SYSTEM = (
 "con buena onda, como admin del server. Podes responder con texto o pedir una ACCION (solo estos verbos exactos):\n"
 "estado | ayuda | bans | tiempo | mapas | infomapa | marcador | zona | versiones | lag | tiempos | elo <nick> | "
         "kick <nombre> | kickban <nombre> | ban <ip> | unban <ip> | killjugador <nombre> | reportar <quien> <motivo> | "
-        "mapa <nombre> | duelo <mapa> | publico | normal | evento <nombre> | dm <mapa> | proximamapa | torneo on|off | freeze | "
+        "mapa <nombre> | duelo <mapa> | publico | normal | pool | evento <nombre> | dm <mapa> | proximamapa | torneo on|off | freeze | "
         "lock | unlock | say <texto> | pass <nueva> | passoff | bots on|off | kickbots | screenshot | stuff <cmd> | "
         "autostuff <cmd> | autostuffoff | resetscore | "
         " | "
