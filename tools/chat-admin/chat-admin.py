@@ -26,6 +26,20 @@ def rcon_pw():
     except Exception:
         return ""
 
+def normal_maplist():
+    """sv_maplist de server.cfg: la rotacion normal (si nadie vota al final del mapa, sigue esta)."""
+    try:
+        m = re.search(r'^\s*set\s+sv_maplist\s+"([^"]+)"', open(CFG).read(), re.M)
+        return m.group(1) if m else ""
+    except Exception:
+        return ""
+
+def restore_rotation():
+    """Modo normal: sin control y con la rotacion de server.cfg (no un solo mapa repetido)."""
+    rcon("set control_mode 0")
+    ml = normal_maplist()
+    if ml: rcon('set sv_maplist "%s"' % ml)
+
 def rcon(cmd, wait=1.0):
     if DRY:
         print("DRY-RCON:", cmd); return ""
@@ -105,6 +119,13 @@ def run_cmd(text, by):
     parts = t.split(None, 1)
     if not parts: return HELP, True
     verb = norm(parts[0]); arg = clean_arg(parts[1].strip()) if len(parts) > 1 else ""
+    if verb == "modo":
+        sub = arg.split(None, 1)
+        verb = norm(sub[0]) if sub else "normal"
+        arg = sub[1] if len(sub) > 1 else ""
+        if verb not in ("control", "dm", "deathmatch", "duelo", "duel", "publico", "publica",
+                        "normal", "clasico", "restaurar", "default"):
+            return "[ADMIN] uso: modo normal | modo control <mapa> | modo dm <mapa> | modo duelo <mapa>", True
 
     # lecturas
     if verb in ("ayuda", "help"): return HELP, True
@@ -149,7 +170,7 @@ def run_cmd(text, by):
         if m not in {norm(x) for x in MAPS}:
             return "[ADMIN] mapa '%s' no está en la lista" % arg, True
         real = [x for x in MAPS if norm(x) == m][0]
-        rcon('set sv_maplist "%s"' % real); rcon("set control_mode 0"); rcon("map %s" % real)
+        restore_rotation(); rcon("map %s" % real)
         return "[ADMIN] cambiando a %s en modo normal (petición de %s)" % (real, by), True
     if verb in ("duelo", "duel"):
         real = None
@@ -163,8 +184,8 @@ def run_cmd(text, by):
         return ("[ADMIN] modo DUELO armado en %s — cuando estén listos: 'cuenta' "
                 "para tirar la cuenta atrás (petición de %s)" % (real or "mapa actual", by)), True
     if verb in ("publico", "publica"):
-        rcon('set stats_mode public'); rcon("set control_mode 0")
-        return "[ADMIN] modo PUBLICO/NORMAL: stats public y control apagado", True
+        rcon('set stats_mode public'); restore_rotation()
+        return "[ADMIN] modo PUBLICO/NORMAL: stats public, control apagado y rotación normal", True
     if verb in ("cuenta", "startcount", "tiracuenta", "tira", "tirar", "tiro", "lanza", "lanzar",
                 "iniciar", "inicia", "arrancar", "arranca", "empezar", "empeza", "empieza",
                 "start", "countdown", "count", "cuentaatras"):
@@ -186,12 +207,12 @@ def run_cmd(text, by):
             m = norm(arg)
             if m not in {norm(x) for x in MAPS}: return "[ADMIN] mapa '%s' no está en la lista" % arg, True
             real = [x for x in MAPS if norm(x) == m][0]
-        rcon("set control_mode 0"); rcon('set sv_maplist "%s"' % real); rcon("map %s" % real)
+        restore_rotation(); rcon("map %s" % real)
         return "[ADMIN] modo DM en %s" % real, True
-    if verb in ("normal", "modo", "clasico", "restaurar", "default", "resetmodo"):
-        rcon("set control_mode 0"); rcon("set stats_mode public")
-        rcon('set sv_maplist "dday2"'); rcon("map dday2")
-        return "[ADMIN] modo NORMAL listo: dday2 · DM · public (petición de %s)" % by, True
+    if verb in ("normal", "clasico", "restaurar", "default", "resetmodo"):
+        restore_rotation(); rcon("set stats_mode public")
+        rcon("map dday2")
+        return "[ADMIN] modo NORMAL listo: dday2 · DM · public · rotación normal (petición de %s)" % by, True
     if verb in ("evento", "event", "torneoevento"):
         nombre = (arg or "").strip().strip('"')
         if norm(nombre) in ("off", "quitar", "quitarlo", "limpiar", "ninguno", "sacar", "terminar", "fin"):
