@@ -87,6 +87,15 @@ de control queda registrada con `mode` `control`, y su K/D se puede ver aparte
 Se consultan con `ladder_zone()` (capturas, minutos en la zona y capturas por
 partida). El Elo es uno solo para todos los modos.
 
+## Votación de mapa
+
+El modo control solo se juega cuando un admin lo pide (`control <mapa>` en el
+chat del bot, o `control_mode 1` por rcon). Si la votación de fin de mapa está
+activa (`mapvoting 1`), el mapa votado **siempre arranca en deathmatch**: la DLL
+pone `control_mode 0` al contar los votos y ofrece todos los mapas de
+`votemaps.txt`, no solo los que tienen zona. El bot apaga la votación durante
+una sesión de control para que las rondas sigan en el mismo mapa.
+
 ## Cvars del servidor
 
 | Cvar | Por defecto | Descripción |

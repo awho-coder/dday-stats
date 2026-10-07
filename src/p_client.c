@@ -3328,6 +3328,14 @@ void Count_Votes (void)
 	}
 
 	level.changemap = votemaps[highmap];
+
+	// modo control de zona: solo se juega cuando el admin lo pide; un mapa
+	// elegido por votacion siempre arranca en deathmatch
+	if (control_mode->value)
+	{
+		gi.cvar_forceset ("control_mode", "0");
+		safe_bprintf (PRINT_HIGH, "El proximo mapa se juega en deathmatch (modo control desactivado).\n");
+	}
 }
 
 qboolean Setup_Map_Vote (void)
@@ -3367,8 +3375,8 @@ qboolean Setup_Map_Vote (void)
 				if (MapExists(s))
 				{
 					// kernel: CTB mode requeries enabled maps
-					if ((!ctb_mode->value || TestEntFile(s, "ctb")) &&
-						(!control_mode->value || TestEntFile(s, "ctl")))
+					// (el modo control no filtra: lo votado se juega en deathmatch, ver Count_Votes)
+					if (!ctb_mode->value || TestEntFile(s, "ctb"))
 					{
 						maplisttxt[c] = s;
 						mapcount++;
