@@ -117,7 +117,7 @@ void Give_Class_Weapon(edict_t *ent)
 	client=ent->client;
 
 	// modo control de zona: clase deshabilitada, aparece como infanteria
-	if (Control_ClassBanned (client->resp.mos))
+	if (Control_ClassBanned (ent, client->resp.mos))
 	{
 		client->resp.mos = INFANTRY;
 		safe_cprintf (ent, PRINT_HIGH, "El ingeniero no esta disponible en el modo control.\n");
@@ -179,7 +179,7 @@ void Give_Class_Weapon(edict_t *ent)
 	{ 
 		int random_value = (rand() % 9); // `rand() % 9` genera [0, 8] que son los numeros correspondientes a las clases.
 		client->resp.mos = random_value; // Le asignamos el numero generado.
-		if (Control_ClassBanned (client->resp.mos))
+		if (Control_ClassBanned (ent, client->resp.mos))
 			client->resp.mos = INFANTRY;
 		item = FindItemInTeam(client->resp.team_on->mos[client->resp.mos]->weapon1,
 							  client->resp.team_on->teamid); // Le entregamos el arma principal a la clase sorteada.
@@ -243,9 +243,9 @@ void Give_Class_Weapon(edict_t *ent)
 			client->pers.inventory[ITEM_INDEX(item)]=client->resp.team_on->mos[client->resp.mos]->grenadenum;
 
 		// modo control de zona: limite de granadas (tambien para las que se recogen)
-		if (item && Control_GrenadeLimit() >= 0)
+		if (item && Control_GrenadeLimit (ent) >= 0)
 		{
-			client->pers.max_grenades = Control_GrenadeLimit();
+			client->pers.max_grenades = Control_GrenadeLimit (ent);
 			if (client->pers.inventory[ITEM_INDEX(item)] > client->pers.max_grenades)
 				client->pers.inventory[ITEM_INDEX(item)] = client->pers.max_grenades;
 		}
@@ -280,8 +280,21 @@ void Give_Class_Ammo(edict_t *ent)
 
 		if (item)
 		{
+			int count = ent->client->resp.team_on->mos[ent->client->resp.mos]->ammo1;
+
 			ammo_item = FindItemInTeam(item->ammo, item->dllname);
-			if (!Add_Ammo(ent, ammo_item, ent->client->resp.team_on->mos[ent->client->resp.mos]->ammo1))
+
+			// modo control: el ingeniero desbloqueado lleva control_engineer_rockets en total,
+			// contando el que ya viene cargado
+			if (ammo_item && item->position == LOC_ROCKET && Control_LimitedEngineer (ent))
+			{
+				count = (control_engineer_rockets && control_engineer_rockets->value >= 0 ?
+					(int)control_engineer_rockets->value : 3) - ammo_item->quantity;
+				if (count < 0)
+					count = 0;
+			}
+
+			if (count && !Add_Ammo(ent, ammo_item, count))
 				safe_cprintf(ent, PRINT_HIGH, "No ammo for %s\n", item->pickup_name);
 		}
 		else

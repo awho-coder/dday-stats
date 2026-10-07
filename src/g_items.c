@@ -366,7 +366,7 @@ qboolean Pickup_Pack (edict_t *ent, edict_t *other)
 		other->client->pers.max_shells = 200;
 	if (other->client->pers.max_rockets < 100)
 		other->client->pers.max_rockets = 100;
-	if (other->client->pers.max_grenades < 2 && Control_GrenadeLimit() < 0)
+	if (other->client->pers.max_grenades < 2 && Control_GrenadeLimit (other) < 0)
 		other->client->pers.max_grenades = 2;
 //bcass start - TNT
 	if (other->client->pers.max_tnt < 1)
@@ -554,8 +554,8 @@ qboolean Add_Ammo (edict_t *ent, gitem_t *item, int count)
 		max = ent->client->pers.max_grenades;
 
 		// modo control de zona: limite de granadas por jugador
-		if (Control_GrenadeLimit() >= 0 && max > Control_GrenadeLimit())
-			max = Control_GrenadeLimit();
+		if (Control_GrenadeLimit (ent) >= 0 && max > Control_GrenadeLimit (ent))
+			max = Control_GrenadeLimit (ent);
 	}
 //bcass start - TNT
 	else if (item->tag == AMMO_TYPE_TNT)

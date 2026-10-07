@@ -32,8 +32,14 @@ permite ese máximo por jugador.
 
 La clase **ingeniero no está disponible** (`control_engineer 0`): con su TNT
 sería demasiado fácil limpiar la zona. Quien la elige (o un bot, o la clase al
-azar) aparece como infantería. El **oficial** se mantiene, y su ataque aéreo es
-el único explosivo de área del modo.
+azar) aparece como infantería. El **oficial** se mantiene.
+
+**Ingeniero de remontada:** cuando un equipo llega a **85% de control**
+(`control_engineer_at`), el equipo rival puede elegir ingeniero hasta el fin de
+la ronda, con equipo reducido: **3 cohetes en total** (1 cargado + 2 de
+repuesto, `control_engineer_rockets`), **1 granada** (`control_engineer_grenades`,
+también al recoger) y su TNT. Ese equipo recibe un aviso en pantalla. En el
+Japón el ingeniero no tiene lanzacohetes, así que solo cambian las granadas.
 
 ### Tiempos con los valores por defecto
 
@@ -54,7 +60,8 @@ cuenta es si hay gente dentro, si está vacía o si está disputada.
 - La primera vez que un jugador aparece en un equipo en el mapa, ve una
   **explicación corta del modo** en el centro de la pantalla (unos 7 segundos;
   también queda en la consola). Dice si no hay granadas ni ingenieros según
-  `control_grenades` y `control_engineer`. Los bots no la reciben.
+  `control_grenades` y `control_engineer`, y desde qué % del rival se
+  desbloquea el ingeniero. Los bots no la reciben.
 - La columna **POINTS** del HUD pasa a llamarse **ZONA %** y muestra el control
   de cada equipo.
 - El contador lateral (**TOMA**) muestra el avance de la captura en curso, con
@@ -89,7 +96,10 @@ partida). El Elo es uno solo para todos los modos.
 | `control_captime` | `15` | Segundos que tarda un jugador solo en capturar la zona. |
 | `control_holdtime` | `120` | Segundos de control necesarios para llegar al 100%. |
 | `control_emptyrate` | `0.25` | Con la zona vacía, el control del dueño sube a esta fracción de la velocidad normal (`0.25` = un cuarto, `0` = se congela, máximo `1`). |
-| `control_engineer` | `0` | `1` permite la clase ingeniero en este modo. |
+| `control_engineer` | `0` | `1` permite la clase ingeniero en este modo (con su equipo normal). |
+| `control_engineer_at` | `85` | Con `control_engineer 0`: % de control de un equipo que desbloquea el ingeniero al rival hasta el fin de la ronda (`0` = nunca). |
+| `control_engineer_rockets` | `3` | Cohetes en total del ingeniero desbloqueado, contando el cargado. |
+| `control_engineer_grenades` | `1` | Granadas del ingeniero desbloqueado. |
 | `control_grenades` | `0` | Máximo de granadas por jugador en este modo (`0` = sin granadas, `-1` = sin límite, como el juego normal). Se aplica al reaparecer. |
 
 Con `control_mode 1` la votación de mapas solo ofrece mapas que tengan archivo

@@ -1029,6 +1029,7 @@ extern float gameStartTime;
 #define CONTROL_INTRO_TIME	2.5	// segundos entre repeticiones (lo que dura un centerprint)
 
 static void Control_UpdateHud (void);
+static void Control_EngineerUnlock (int leader);
 extern char *dday_statusbar;
 
 static float Control_Cvar (cvar_t *cvar, float fallback)
@@ -1129,6 +1130,7 @@ static void Control_Reset (edict_t *zone)
 	level.control_winner = 0;
 	level.control_remind = 0;
 	level.control_start = level.time;
+	level.control_engunlock[0] = level.control_engunlock[1] = false;
 	level.control_gamestart = gameStartTime;
 
 	for (i = 0; i < MAX_TEAMS; i++)
@@ -1340,8 +1342,8 @@ static void Control_Intro (edict_t *zone)
 	int		i;
 	qboolean	nogren, noeng;
 
-	nogren = (Control_GrenadeLimit() == 0);
-	noeng = Control_ClassBanned (ENGINEER);
+	nogren = (Control_GrenadeLimit (NULL) == 0);
+	noeng = Control_ClassBanned (NULL, ENGINEER);
 
 	if (nogren && noeng)
 		Com_sprintf (extra, sizeof(extra), "Sin granadas ni ingenieros.\n");
@@ -1349,6 +1351,10 @@ static void Control_Intro (edict_t *zone)
 		Com_sprintf (extra, sizeof(extra), "Sin %s.\n", nogren ? "granadas" : "ingenieros");
 	else
 		extra[0] = 0;
+
+	if (noeng && control_engineer_at && control_engineer_at->value > 0)
+		Com_sprintf (extra + strlen (extra), sizeof(extra) - strlen (extra),
+			"Si el rival llega a %i%%, tu equipo\nrecibe el ingeniero.\n", (int)control_engineer_at->value);
 
 	Com_sprintf (msg, sizeof(msg),
 		"MODO CONTROL DE ZONA\n\n"
@@ -1502,6 +1508,8 @@ void objective_control_think (edict_t *self)
 				if (before < milestones[i] && after >= milestones[i])
 					safe_bprintf (PRINT_HIGH, "Equipo %s lleva %i/100 de control de la zona.\n", team_list[owner]->teamname, milestones[i]);
 			}
+
+			Control_EngineerUnlock (owner);
 		}
 
 		if (level.control_pct[owner] >= 100)
@@ -1678,22 +1686,74 @@ static void Control_UpdateHud (void)
 	gi.configstring (CS_STATUSBAR, Control_StatusBar (dday_statusbar));
 }
 
-// maximo de granadas por jugador en el modo control (0 = sin granadas, -1 = sin limite)
-int Control_GrenadeLimit (void)
+// ingeniero que solo esta permitido porque el rival llego a control_engineer_at:
+// lleva menos cohetes y granadas (ver Give_Class_Weapon y Give_Class_Ammo)
+qboolean Control_LimitedEngineer (edict_t *ent)
 {
-	if (!level.control_zone || !control_grenades || control_grenades->value < 0)
+	if (!level.control_zone || !ent || !ent->client || !ent->client->resp.team_on)
+		return false;
+
+	return (ent->client->resp.mos == ENGINEER && control_engineer && !control_engineer->value &&
+		level.control_engunlock[ent->client->resp.team_on->index]);
+}
+
+// maximo de granadas del jugador en el modo control (0 = sin granadas, -1 = sin limite)
+int Control_GrenadeLimit (edict_t *ent)
+{
+	if (!level.control_zone)
+		return -1;
+
+	if (Control_LimitedEngineer (ent))
+		return control_engineer_grenades && control_engineer_grenades->value >= 0 ?
+			(int)control_engineer_grenades->value : 1;
+
+	if (!control_grenades || control_grenades->value < 0)
 		return -1;
 
 	return (int)control_grenades->value;
 }
 
-// clases que no se pueden usar en el modo control (el ingeniero, salvo control_engineer 1)
-qboolean Control_ClassBanned (int mos)
+// clases que no se pueden usar en el modo control: el ingeniero, salvo control_engineer 1
+// o que el equipo rival haya llegado a control_engineer_at (ent NULL = sin desbloqueo)
+qboolean Control_ClassBanned (edict_t *ent, int mos)
 {
-	if (!level.control_zone)
+	if (!level.control_zone || mos != ENGINEER || !control_engineer || control_engineer->value)
 		return false;
 
-	return (mos == ENGINEER && control_engineer && !control_engineer->value);
+	if (ent && ent->client && ent->client->resp.team_on &&
+		level.control_engunlock[ent->client->resp.team_on->index])
+		return false;
+
+	return true;
+}
+
+// el equipo que va perdiendo recibe el ingeniero cuando el rival llega a control_engineer_at
+static void Control_EngineerUnlock (int leader)
+{
+	edict_t	*ent;
+	int		i, team = 1 - leader;
+	int		grenades = (control_engineer_grenades && control_engineer_grenades->value >= 0) ?
+		(int)control_engineer_grenades->value : 1;
+
+	if (!control_engineer || control_engineer->value || !control_engineer_at ||
+		control_engineer_at->value <= 0 || level.control_engunlock[team] ||
+		level.control_pct[leader] < control_engineer_at->value)
+		return;
+
+	level.control_engunlock[team] = true;
+	safe_bprintf (PRINT_HIGH, "%s llego a %i%% de control: %s ya puede usar ingeniero.\n",
+		team_list[leader]->teamname, (int)control_engineer_at->value, team_list[team]->teamname);
+
+	for (i = 1; i <= game.maxclients; i++)
+	{
+		ent = &g_edicts[i];
+		if (!ent->inuse || ent->ai || !ent->client || ent->client->resp.team_on != team_list[team])
+			continue;
+
+		gi.centerprintf (ent, "INGENIERO DESBLOQUEADO\n\n%i cohetes, %i granada%s y TNT.\nCambia de clase en el menu.",
+			(int)Control_Cvar (control_engineer_rockets, 3), grenades, grenades == 1 ? "" : "s");
+	}
+	level.control_msghold = level.time + 3;
 }
 
 void Control_HudStats (edict_t *ent)
