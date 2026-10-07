@@ -496,6 +496,8 @@ typedef struct
 	float		control_msghold;	// hasta cuando no se tapa un aviso general con el estado de la zona
 	float		control_remind;		// proximo recordatorio en consola de quien controla la zona
 	int			control_msgstate[MAX_CLIENTS];	// ultimo estado mostrado a cada jugador (0 = fuera)
+	int			control_introsent[MAX_CLIENTS];	// veces que se mostro la explicacion del modo a cada jugador
+	float		control_intronext[MAX_CLIENTS];	// cuando repetirla, para que dure en pantalla
 
 } level_locals_t;
 
