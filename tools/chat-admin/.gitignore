@@ -4,7 +4,4 @@ token
 *secret*
 *.bak*
 __pycache__/
-<<<<<<< HEAD
-=======
 *.pyc
->>>>>>> f0445e7 (chore(tools/chat-admin): ignorar __pycache__ (.pyc fuera del repo))
