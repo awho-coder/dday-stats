@@ -114,7 +114,7 @@ una entidad `objective_control` agregada **al final**:
 {
 "classname" "objective_control"
 "origin" "1129 2137 -359"
-"obj_name" "Colina"
+"obj_name" "Bunker"
 "polygon" "816 1872 817 2609 919 2711 976 2695 1251 2425 1449 2294 1455 2048 1201 1810 1092 1708 933 1866"
 "height" "160"
 }
@@ -142,7 +142,7 @@ hacer `spot`, y después recorrer el borde haciendo `spot` en cada esquina. Conv
 
 | Mapa | Zona |
 |---|---|
-| `invade6` | **Colina**: polígono de 10 puntos marcado en el juego, equidistante de ambas bases. Archivo: [`ents/invade6.ctl`](../../ents/invade6.ctl). |
+| `invade6` | **Bunker**: polígono de 10 puntos marcado en el juego alrededor del búnker (el interior no cuenta), equidistante de ambas bases. Archivo: [`ents/invade6.ctl`](../../ents/invade6.ctl). |
 | `invade2` | **Patio**: polígono de 8 puntos marcado en el juego, zona chica al aire libre entre ambas bases (≈ 345 × 223 unidades). Archivo: [`ents/invade2.ctl`](../../ents/invade2.ctl). |
 | `inland4` | **Iglesia**: polígono de 9 puntos marcado en el juego, alrededor de la iglesia en el centro del mapa (≈ 765 × 435 unidades). Archivo: [`ents/inland4.ctl`](../../ents/inland4.ctl). |
 | `eurovilla` | **Torre Central**: polígono de 8 puntos en forma de L marcado en el juego, a la misma distancia de ambas bases (≈ 274 × 495 unidades). Archivo: [`ents/eurovilla.ctl`](../../ents/eurovilla.ctl). |
