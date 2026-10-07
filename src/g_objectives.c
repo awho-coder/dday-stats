@@ -1032,7 +1032,6 @@ extern float gameStartTime;
 #define CONTROL_ST_LOCKED	0
 #define CONTROL_ST_CONTESTED	1
 #define CONTROL_ST_CAPTURE	2	// + equipo
-#define CONTROL_ST_OWNER	4	// + equipo
 #define CONTROL_ST_OVERTIME	6	// + equipo
 #define CONTROL_STATUS_WIDTH	28	// caracteres; el texto se centra con espacios
 #define CONTROL_INTRO_SENDS	3	// la explicacion del modo se repite para que dure en pantalla
@@ -1153,7 +1152,6 @@ static void Control_StatusStrings (void)
 		if (!team_list[i])
 			continue;
 		Control_StatusString (CONTROL_ST_CAPTURE + i, va("%s CAPTURANDO", team_list[i]->teamname));
-		Control_StatusString (CONTROL_ST_OWNER + i, va("%s CONTROLA", team_list[i]->teamname));
 		Control_StatusString (CONTROL_ST_OVERTIME + i, va("%s - TIEMPO EXTRA", team_list[i]->teamname));
 	}
 }
@@ -1338,10 +1336,10 @@ static void Control_ZoneMessage (edict_t *zone)
 		cs = CONTROL_CS_STATUS + CONTROL_ST_CONTESTED;
 	else if (level.control_capture > 0 && level.control_capteam)
 		cs = CONTROL_CS_STATUS + CONTROL_ST_CAPTURE + level.control_capteam - 1;
-	else if (owner >= 0)
-		cs = CONTROL_CS_STATUS + (level.control_overtime ? CONTROL_ST_OVERTIME : CONTROL_ST_OWNER) + owner;
+	else if (owner >= 0 && level.control_overtime)
+		cs = CONTROL_CS_STATUS + CONTROL_ST_OVERTIME + owner;
 	else
-		cs = 0;	// neutral y vacia: no hay nada que mostrar
+		cs = 0;	// el dueno ya se ve en "ZONA:" bajo el marcador; neutral y vacia, nada
 
 	for (i = 1; i <= game.maxclients; i++)
 	{

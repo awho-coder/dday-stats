@@ -68,7 +68,7 @@ cuenta es si hay gente dentro, si está vacía o si está disputada.
   el ícono del equipo que captura.
 - Los jugadores dentro de la zona ven su **estado en el HUD**, en texto a la
   altura de los mensajes del centro (ZONA BLOQUEADA, ZONA DISPUTADA,
-  X CAPTURANDO, X CONTROLA, X - TIEMPO EXTRA). Usa el lugar de la imagen de
+  X CAPTURANDO, X - TIEMPO EXTRA; quién controla ya se ve en "ZONA:" bajo el marcador). Usa el lugar de la imagen de
   objetivos del mapa (stat 16), que en este modo no se muestra.
 - **Avisos y kills:** en q2pro cada mensaje en el centro de la pantalla borra
   las notificaciones de arriba (las kills), y cada aviso a todos ocupa una de
