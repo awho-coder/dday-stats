@@ -12,6 +12,10 @@ Si es tu primera vez en el repo, seguí este orden:
 4. [`stats/INSTALACION.md`](stats/INSTALACION.md) — cómo montar PostgreSQL + ingestor + servidor de juego.
 5. [`stats/PLAN.md`](stats/PLAN.md) — diseño del sistema y formato de eventos (JSONL).
 
+## Referencia rápida
+
+- [`COMANDOS.md`](COMANDOS.md) — **todos los cvars, comandos y opciones que agregó este fork** (modo control, estadísticas, ingestor, bot admin por chat).
+
 ## Cómo contribuir
 
 - **Ramas (GitFlow):** ver [`GITFLOW.md`](GITFLOW.md). Todo el trabajo sale de `develop`; `main` es producción.
