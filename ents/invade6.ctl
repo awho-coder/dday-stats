@@ -654,7 +654,7 @@
 {
 "classname" "objective_control"
 "origin" "1129 2137 -359"
-"obj_name" "Colina"
+"obj_name" "Bunker"
 "polygon" "816 1872 817 2609 919 2711 976 2695 1251 2425 1449 2294 1455 2048 1201 1810 1092 1708 933 1866"
 "height" "160"
 }
