@@ -66,7 +66,7 @@ implemented it yet? */
 
 // 99 is basically unlimited
 
-#define MAX_OFFICERS		1
+#define MAX_OFFICERS		15
 #define MAX_INFANTRY		99
 #define MAX_L_GUNNER		2
 #define MAX_H_GUNNER		2
@@ -177,9 +177,9 @@ implemented it yet? */
 #define JUMP_REGEN			0.09
 
 // pbowens: P_ExplosionEffects
-#define SWAY_START			5
-#define SWAY_BREAK			5
-#define SWAY_MULTI			4
+#define SWAY_START			2
+#define SWAY_BREAK			2
+#define SWAY_MULTI			1
 
 // pbowens: surface types
 #define SURF_SAND			1
