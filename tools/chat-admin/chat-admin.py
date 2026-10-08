@@ -103,6 +103,15 @@ def clean_arg(arg):
     words = [w for w in re.split(r"\s+", arg) if norm(w) not in FILLER]
     return " ".join(words).strip()
 
+def current_map():
+    """Mapa que se esta jugando (de 'status'), '' si no se pudo leer."""
+    st = rcon("status")
+    m = re.search(r"mapname\\(\S+)|Current map:\s*(\S+)", st)
+    return (m.group(1) or m.group(2)) if m else ""
+
+# 'ffa', 'ffa este mapa', 'ffa aca'... = el mapa que se esta jugando
+MAPA_ACTUAL = {"", "mapa", "estemapa", "elmapa", "mapaactual", "actual", "aca", "aqui", "este", "esta"}
+
 def find_player(name):
     n = norm(name)
     if n: n = clean_arg(n) or n
@@ -217,8 +226,8 @@ def run_cmd(text, by):
         rcon("set mapvoting 0"); rcon("set ffa 0"); rcon("set control_mode 1"); rcon('set sv_maplist "%s"' % real); rcon("map %s" % real)
         return "[ADMIN] modo CONTROL en %s, sin votación hasta volver a normal (petición de %s)" % (real, by), True
     if verb in ("ffa", "freeforall", "todoscontratodos"):
-        real = "dday2"
-        if arg:
+        real = current_map() or "dday2"
+        if norm(arg) not in MAPA_ACTUAL:
             m = norm(arg)
             if m not in {norm(x) for x in MAPS}: return "[ADMIN] mapa '%s' no está en la lista" % arg, True
             real = [x for x in MAPS if norm(x) == m][0]
@@ -461,6 +470,23 @@ def password_phrase(text):
             return tok
     return None
 
+FFA_WORDS = ("ffa", "free for all", "freeforall", "todos contra todos", "todoscontratodos")
+FFA_OFF = ("saca", "sacar", "quita", "quitar", "apaga", "apagar", "desactiva", "desactivar", "termina",
+           "terminar", "para ", "parar", "basta", "volver", "vuelve", "sin ffa", "no mas", "no más")
+
+def ffa_phrase(text):
+    """Frases tipo 'admin quiero probar el modo ffa en dust' -> 'ffa dust' ('ffa' = mapa actual).
+    None si no piden FFA o piden sacarlo (eso lo resuelve el relay -> normal)."""
+    low = " " + text.lower() + " "
+    if not any(re.search(r"\b%s\b" % re.escape(w), low) for w in FFA_WORDS):
+        return None
+    if any(w in low for w in FFA_OFF):
+        return None
+    for tok in re.findall(r"[a-z0-9_]+", low):
+        if tok in MAPS:
+            return "ffa " + tok
+    return "ffa"
+
 COOLDOWN = {}
 
 def rate_ok(nick):
@@ -538,6 +564,17 @@ def handle_line(line, dry=False):
         if "admin" not in text.lower():
             print("CHAT-IGNORADO (sin 'admin') %s" % nick)
             return ("ignorado", nick, text, None)
+        # FFA en frase natural: local, sin LLM (el relay no sabe en que mapa estamos)
+        ffa = ffa_phrase(text)
+        if ffa:
+            if not rate_ok(nick):
+                say("[ADMIN] calma, espera unos segundos")
+                return ("rate", nick, text, None)
+            resp, _ = run_cmd(ffa, nick)
+            log_action(nick, "frase:" + ffa, resp)
+            say(resp)
+            print("FFA-PHRASE %s -> %s" % (nick, resp))
+            return ("ffaphrase", nick, text, resp)
         reply, action, ok = ask_relay(nick, text)
         if not ok:
             # fallback: relay caído -> bandeja (Hermes vía cron, ~1 min)
