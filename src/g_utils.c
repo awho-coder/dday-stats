@@ -635,7 +635,8 @@ void ClientCvarSync (edict_t *ent, qboolean dump);
 // Free For All: teamless mode, nobody is a teammate of anybody
 qboolean G_IsFFA(void)
 {
-	return (ffa && ffa->value && deathmatch->value && !ctb_mode->value);
+	// el modo control usa su propio .ctl y HUD: no se mezcla con Free For All
+	return (ffa && ffa->value && deathmatch->value && !ctb_mode->value && !control_mode->value);
 }
 
 // Free For All: nobody may keep a reference to a player that leaves. The slot is reused by the next

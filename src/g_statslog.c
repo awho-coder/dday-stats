@@ -783,6 +783,8 @@ void StatsLog_MatchBegin (void)
 		mode = "ctb";
 	else if (level.control_zone)
 		mode = "control";
+	else if (G_IsFFA ())
+		mode = "ffa";
 	else
 		mode = "dm";
 
@@ -1019,7 +1021,8 @@ void StatsLog_Kill (edict_t *targ, edict_t *inflictor, edict_t *attacker)
 	else
 	{
 		kteam = StatsLog_TeamOf (killer);
-		ff = (kteam >= 0 && kteam == vteam);
+		// Free For All: no hay companeros, ninguna kill es teamkill
+		ff = (!G_IsFFA () && kteam >= 0 && kteam == vteam);
 		hs = (targ->client->resp.deathblend == 1);
 
 		if (ff)
