@@ -719,6 +719,11 @@ extern	cvar_t	*control_engineer_at;	// % de control del rival que desbloquea el 
 extern	cvar_t	*control_engineer_rockets;	// cohetes en total del ingeniero desbloqueado (cargado + repuesto)
 extern	cvar_t	*control_engineer_grenades;	// granadas del ingeniero desbloqueado
 extern	cvar_t	*control_grenades;	// maximo de granadas por jugador en este modo (0 = sin granadas, -1 = sin limite)
+extern	cvar_t	*ffa; // Free For All mode (0 disabled, 1 enabled)
+extern	qboolean	ffa_statusbar_active; // Free For All statusbar built (g_spawn.c)
+#define FFA_DEFAULT_FRAGLIMIT	30	// Free For All frags to win when the server fraglimit is 0
+#define FFA_LEVEL_WAIT			10	// Free For All seconds of lobby at the start of the level
+#define FFA_RESPAWN_INTERVAL	3	// Free For All seconds to respawn after dying
 
 extern	cvar_t	*dmflags;
 
@@ -967,6 +972,15 @@ void Think_Arty (edict_t *ent);
 //qboolean FindOnTeam(edict_t *ent);
 
 qboolean OnSameTeam(edict_t *self,edict_t *target);
+qboolean G_IsFFA(void);
+void FFA_JoinPlayer(edict_t *ent);
+void FFA_HudReset(void);
+void FFA_SpawnReset(void);
+void initialize_random_seed();	// p_classes.c
+void FFA_ForgetPlayer(edict_t *gone);
+void FFA_ShowAnnouncement(char *top_text, int number, char *bottom_text);
+float G_LobbyTime(float team_delay);
+float G_RespawnInterval(void);
 
 
 
@@ -1439,6 +1453,11 @@ typedef struct
 	int			streak;
 
 	int			points; // kernel: to count points in coop mode
+
+	int			ffa_kills;		// Free For All: kills made by this player
+	int			ffa_deaths;		// Free For All: every death, suicides included
+	int			ffa_milestone;	// Free For All: last announced multiple of 10 frags
+	int			ffa_warned;		// Free For All: 1 = "5 frags away" announced, 2 = "1 frag away" announced
 
 } client_respawn_t;
 
