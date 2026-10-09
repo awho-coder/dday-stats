@@ -4262,7 +4262,8 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 			ent->client->pers.weapon &&
 			ent->client->pers.weapon->position != LOC_KNIFE  &&
 			ent->client->pers.weapon->position != LOC_HELMET &&
-			ent->client->pers.weapon->classnameb != WEAPON_BINOCULARS)
+			ent->client->pers.weapon->classnameb != WEAPON_BINOCULARS &&
+			!(ent->client->pers.weapon->classnameb == WEAPON_MORPHINE && Syringe_CanThrow (ent)))	// as the knife: the Medic keeps throwing syringes while he jumps
 
 		{
 			ent->client->aim = false;
