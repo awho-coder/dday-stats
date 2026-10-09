@@ -93,13 +93,16 @@ comando.
 - **Info:** `estado` `ayuda` `bans` `tiempo` `mapas` `infomapa` `marcador`
   `zona` `versiones` `lag` `tiempos`
 - **Juego:** `mapa <x>` `duelo <mapa>` `publico` `normal` `control <mapa>`
-  `dm <mapa>` `modo normal|control|dm|duelo [mapa]` `evento <nombre>` `cuenta`
+  `dm <mapa>` `modo normal|control|dm|duelo [mapa]` `kamikaze on|off` `evento <nombre>` `cuenta`
   `reset` `resetscore` `torneo on|off` `freeze` `proximamapa` `lock` `unlock`
   `say <texto>`
 - `control <mapa>` (o `modo control <mapa>`) deja solo ese mapa y **apaga la
   votación** mientras dure la sesión: las rondas se repiten en ese mapa.
 - `mapa`, `dm`, `normal` y `publico` apagan el modo control y restauran la
   rotación (`sv_maplist`) y la votación (`mapvoting`) de `server.cfg`.
+- `kamikaze on|off` prende o apaga el airstrike kamikaze del Officer (`kamikaze_arty`);
+  sin argumento dice el estado. También entiende frases ("admin activa el kamikaze").
+  Rige desde el próximo airstrike y un reinicio del server lo apaga.
 - La votación de fin de mapa **nunca** lleva al modo control: el mapa votado
   siempre arranca en deathmatch (la DLL pone `control_mode 0`).
 - **Moderación:** `kick <nick>` `kickban <nick>` `ban <ip>` `unban <ip>`
