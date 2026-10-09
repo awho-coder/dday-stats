@@ -863,6 +863,9 @@ extern cvar_t *limit_flamer;
 
 // kernel: make dday faster again
 extern cvar_t *fast_arty;
+extern cvar_t *kamikaze_arty;     // 1 = el Officer viaja en el avion del airstrike y se estrella (requiere airstrikes 1)
+extern cvar_t *kamikaze_dmg;       // dano del choque (bomba: 700)
+extern cvar_t *kamikaze_radius;    // radio del choque (bomba: 300)
 extern cvar_t *fast_bleeding;
 extern cvar_t *fast_sniper;
 
@@ -1036,6 +1039,12 @@ qboolean IsValidPlayer(edict_t *ent);
 
 qboolean IsPlayerInsideSpawnProtect(edict_t *ent);
 void MoveToTheirSpawnPoint(edict_t *ent);
+
+// kamikaze (g_arty.c): el Officer viaja en el avion del airstrike y se estrella
+#define PLANE_KAMIKAZE 1 // spawnflags del avion del Officer cuando lleva piloto
+void Kamikaze_Release (edict_t *p, qboolean to_spawn);
+qboolean Kamikaze_PlaneValid (edict_t *p);
+void Kamikaze_Follow (edict_t *plane);
 
 //
 // g_combat.c
@@ -1654,6 +1663,7 @@ struct gclient_s
 //faf	float		arty_time_fire;
 //	float		arty_time_restrict;
 	edict_t     *airstrike;//faf
+	edict_t     *kamikaze_plane; // avion kamikaze en el que va este jugador (NULL si ninguno)
 
 	float		jump_stamina;
 	qboolean	jump_push;

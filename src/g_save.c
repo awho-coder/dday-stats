@@ -407,6 +407,9 @@ void InitGame (void)
 
 	// kernel: make dday faster again
 	fast_arty = gi.cvar("fast_arty", "0", 0);
+	kamikaze_arty   = gi.cvar("kamikaze_arty", "0", 0);
+	kamikaze_dmg    = gi.cvar("kamikaze_dmg", "1000", 0);    // bomba: 700
+	kamikaze_radius = gi.cvar("kamikaze_radius", "420", 0);  // bomba: 300
 	fast_bleeding = gi.cvar("fast_bleeding", "0", 0);
 	fast_sniper = gi.cvar("fast_sniper", "1", 0);
 

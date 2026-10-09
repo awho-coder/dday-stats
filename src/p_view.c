@@ -2542,6 +2542,11 @@ void ClientEndServerFrame (edict_t *ent)
 		return;
 	}
 
+	// kamikaze: la camara sigue al avion en todos los frames, despues de que se movio
+	// (Plane_Fire piensa cada 0.2 s y la camara iria a saltos)
+	if (ent->client->kamikaze_plane && Kamikaze_PlaneValid (ent))
+		Kamikaze_Follow (ent->client->kamikaze_plane);
+
 	AngleVectors (ent->client->v_angle, forward, right, up);
 
 	// burn from lava, etc

@@ -634,6 +634,10 @@ Called by ClientBeginServerFrame and ClientThink
 */
 void Think_Weapon (edict_t *ent)
 {
+	// kamikaze: en el avion no se dispara, ni se tiran granadas, ni se pide otro airstrike
+	if (ent->client->kamikaze_plane)
+		return;
+
 	// if just died, put the weapon away
 	if(ent->client->limbo_mode ) 
 		return;

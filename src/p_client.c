@@ -1253,6 +1253,7 @@ void player_die (edict_t *self, edict_t *inflictor, edict_t *attacker, int damag
 
 
 	turret_off (self);
+	Kamikaze_Release (self, false);
 
 	
 	if (!self->deadflag)
@@ -3166,6 +3167,9 @@ void ClientDisconnect (edict_t *ent)
 	if (!ent->client)
 		return;
 
+	// kamikaze: si no, SVF_NOCLIENT queda en el edict y el proximo jugador de ese slot es invisible
+	Kamikaze_Release (ent, false);
+
 	StatsLog_ClientDisconnect (ent);
 
 	if (stats->value && !level.intermissiontime)
@@ -4095,6 +4099,7 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 
 	// kernel: verify if player is trying to exit his spawn_protect in tournament mode
 	if (!ent->ai &&
+		!client->kamikaze_plane &&	// el piloto lo mueve el avion
 		!client->limbo_mode && !ent->flyingnun &&
 		tournament->value &&
 		(freeze_mode || (countdownActive && !IsPlayerInsideSpawnProtect(ent))))
@@ -4119,7 +4124,15 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 	// set up for pmove
 	memset (&pm, 0, sizeof(pm));
 
-	if (client->turret)
+	// kamikaze: si el avion desaparecio sin estrellarse (limpieza de torneo, etc.),
+	// el piloto vuelve vivo a su spawn
+	if (client->kamikaze_plane && !Kamikaze_PlaneValid (ent))
+		Kamikaze_Release (ent, true);
+
+	if (client->kamikaze_plane)
+		client->ps.pmove.pm_type = PM_FREEZE;	// la camara la mueve el avion
+
+	else if (client->turret)
 		client->ps.pmove.pm_type = PM_NORMAL;
 
 	else if (ent->movetype == MOVETYPE_NOCLIP)
