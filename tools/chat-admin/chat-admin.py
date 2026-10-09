@@ -46,8 +46,8 @@ def cfg_value(name):
         return ""
 
 def restore_rotation():
-    """Modo normal: sin control, con la rotacion y la votacion de server.cfg."""
-    rcon("set control_mode 0")
+    """Modo normal: sin control ni FFA, con la rotacion y la votacion de server.cfg."""
+    rcon("set control_mode 0"); rcon("set ffa 0")
     ml = normal_maplist()
     if ml: rcon('set sv_maplist "%s"' % ml)
     mv = cfg_value("mapvoting")
@@ -103,6 +103,15 @@ def clean_arg(arg):
     words = [w for w in re.split(r"\s+", arg) if norm(w) not in FILLER]
     return " ".join(words).strip()
 
+def current_map():
+    """Mapa que se esta jugando (de 'status'), '' si no se pudo leer."""
+    st = rcon("status")
+    m = re.search(r"mapname\\(\S+)|Current map:\s*(\S+)", st)
+    return (m.group(1) or m.group(2)) if m else ""
+
+# 'ffa', 'ffa este mapa', 'ffa aca'... = el mapa que se esta jugando
+MAPA_ACTUAL = {"", "mapa", "estemapa", "elmapa", "mapaactual", "actual", "aca", "aqui", "este", "esta"}
+
 def find_player(name):
     n = norm(name)
     if n: n = clean_arg(n) or n
@@ -122,7 +131,7 @@ def find_player(name):
 HELP = ("[ADMIN] comandos: estado, kick <quien>, kickban <quien>, ban <ip>, unban <ip>, "
         "mapa <nombre>, duelo <mapa>, publico, cuenta, reset, resetscore, tiempo, mapas, bans, "
         "bots on|off, kickbots, screenshot, stuff <cmd>, autostuff <cmd>, autostuffoff, "
-        "control <mapa>, dm <mapa>, "
+        "control <mapa>, ffa <mapa>, dm <mapa>, "
         "lock, unlock, say <texto>, ayuda")
 
 def run_cmd(text, by):
@@ -136,9 +145,9 @@ def run_cmd(text, by):
         sub = arg.split(None, 1)
         verb = norm(sub[0]) if sub else "normal"
         arg = sub[1] if len(sub) > 1 else ""
-        if verb not in ("control", "dm", "deathmatch", "duelo", "duel", "publico", "publica",
-                        "normal", "clasico", "restaurar", "default"):
-            return "[ADMIN] uso: modo normal | modo control <mapa> | modo dm <mapa> | modo duelo <mapa>", True
+        if verb not in ("control", "ffa", "freeforall", "todoscontratodos", "dm", "deathmatch", "duelo", "duel",
+                        "publico", "publica", "normal", "clasico", "restaurar", "default"):
+            return "[ADMIN] uso: modo normal | modo control <mapa> | modo ffa <mapa> | modo dm <mapa> | modo duelo <mapa>", True
 
     # lecturas
     if verb in ("ayuda", "help"): return HELP, True
@@ -192,7 +201,7 @@ def run_cmd(text, by):
             if m not in {norm(x) for x in MAPS}:
                 return "[ADMIN] mapa '%s' no está en la lista" % arg, True
             real = [x for x in MAPS if norm(x) == m][0]
-        rcon('set stats_mode duel')
+        rcon('set stats_mode duel'); rcon("set ffa 0")
         if real: rcon("map %s" % real)
         return ("[ADMIN] modo DUELO armado en %s — cuando estén listos: 'cuenta' "
                 "para tirar la cuenta atrás (petición de %s)" % (real or "mapa actual", by)), True
@@ -214,8 +223,18 @@ def run_cmd(text, by):
         real = [x for x in MAPS if norm(x) == m][0]
         # sin votacion durante la sesion de control: las rondas siguen en este mapa hasta
         # que se pida normal/dm/mapa (la votacion nunca debe llevar al modo control)
-        rcon("set mapvoting 0"); rcon("set control_mode 1"); rcon('set sv_maplist "%s"' % real); rcon("map %s" % real)
+        rcon("set mapvoting 0"); rcon("set ffa 0"); rcon("set control_mode 1"); rcon('set sv_maplist "%s"' % real); rcon("map %s" % real)
         return "[ADMIN] modo CONTROL en %s, sin votación hasta volver a normal (petición de %s)" % (real, by), True
+    if verb in ("ffa", "freeforall", "todoscontratodos"):
+        real = current_map() or "dday2"
+        if norm(arg) not in MAPA_ACTUAL:
+            m = norm(arg)
+            if m not in {norm(x) for x in MAPS}: return "[ADMIN] mapa '%s' no está en la lista" % arg, True
+            real = [x for x in MAPS if norm(x) == m][0]
+        # ffa es latched: se aplica con el 'map'. Sin votacion para que la sesion siga en
+        # este mapa hasta que se pida normal/dm/mapa (como en control)
+        rcon("set mapvoting 0"); rcon("set control_mode 0"); rcon("set ffa 1"); rcon('set sv_maplist "%s"' % real); rcon("map %s" % real)
+        return "[ADMIN] modo FREE FOR ALL en %s, todos contra todos, sin votación hasta volver a normal (petición de %s)" % (real, by), True
     if verb in ("dm", "deathmatch"):
         real = "dday2"
         if arg:
@@ -451,6 +470,23 @@ def password_phrase(text):
             return tok
     return None
 
+FFA_WORDS = ("ffa", "free for all", "freeforall", "todos contra todos", "todoscontratodos")
+FFA_OFF = ("saca", "sacar", "quita", "quitar", "apaga", "apagar", "desactiva", "desactivar", "termina",
+           "terminar", "para ", "parar", "basta", "volver", "vuelve", "sin ffa", "no mas", "no más")
+
+def ffa_phrase(text):
+    """Frases tipo 'admin quiero probar el modo ffa en dust' -> 'ffa dust' ('ffa' = mapa actual).
+    None si no piden FFA o piden sacarlo (eso lo resuelve el relay -> normal)."""
+    low = " " + text.lower() + " "
+    if not any(re.search(r"\b%s\b" % re.escape(w), low) for w in FFA_WORDS):
+        return None
+    if any(w in low for w in FFA_OFF):
+        return None
+    for tok in re.findall(r"[a-z0-9_]+", low):
+        if tok in MAPS:
+            return "ffa " + tok
+    return "ffa"
+
 COOLDOWN = {}
 
 def rate_ok(nick):
@@ -492,7 +528,7 @@ def looks_command(text):
     return v in {"ayuda","help","estado","status","jugadores","players","kick","kickea","echar",
                  "kickban","ban","unban","delban","desban","lock","unlock","bloquear","abrir",
                  "mapa","map","cambiamapa","duelo","duel","publico","publica","cuenta","startcount",
-                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","dm","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
+                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","dm","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
                  "restart","reload"}
 
 def handle_line(line, dry=False):
@@ -528,6 +564,17 @@ def handle_line(line, dry=False):
         if "admin" not in text.lower():
             print("CHAT-IGNORADO (sin 'admin') %s" % nick)
             return ("ignorado", nick, text, None)
+        # FFA en frase natural: local, sin LLM (el relay no sabe en que mapa estamos)
+        ffa = ffa_phrase(text)
+        if ffa:
+            if not rate_ok(nick):
+                say("[ADMIN] calma, espera unos segundos")
+                return ("rate", nick, text, None)
+            resp, _ = run_cmd(ffa, nick)
+            log_action(nick, "frase:" + ffa, resp)
+            say(resp)
+            print("FFA-PHRASE %s -> %s" % (nick, resp))
+            return ("ffaphrase", nick, text, resp)
         reply, action, ok = ask_relay(nick, text)
         if not ok:
             # fallback: relay caído -> bandeja (Hermes vía cron, ~1 min)

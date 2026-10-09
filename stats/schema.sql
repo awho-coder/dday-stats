@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS matches (
     id           text PRIMARY KEY,           -- <fecha>-<servidor>-<random>
     server       text        NOT NULL,
     map          text        NOT NULL,
-    mode         text        NOT NULL,       -- dm, ctb, campaign, control
+    mode         text        NOT NULL,       -- dm, ctb, campaign, control, ffa
     kind         text        NOT NULL DEFAULT 'public',  -- public o duel (cvar stats_mode)
     event        text        NOT NULL DEFAULT '',        -- torneo (cvar stats_event); '' = casual
     season_id    integer     REFERENCES seasons (id),

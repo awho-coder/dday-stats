@@ -418,6 +418,7 @@ void InitGame (void)
 
 	// kernel: modes for CTB: (0 disabled, 1 one briefcase, 2 many briefcases)
 	ctb_mode = gi.cvar("ctb_mode", "0", CVAR_LATCH);
+	ffa = gi.cvar("ffa", "0", CVAR_SERVERINFO|CVAR_LATCH);
 
 	// modo control de zona: carga ents/<mapa>.ctl con una entidad objective_control
 	control_mode = gi.cvar("control_mode", "0", CVAR_LATCH);
