@@ -27,6 +27,20 @@ Mapas con zona: `invade6`, `invade2`, `inland4`, `eurovilla`, `itadday3`,
 `townwar`. Para marcar una zona nueva se usa el comando `spot` en consola
 (ya existía) y la skill `agregar-mapa-control`.
 
+## Servidor: airstrike kamikaze del Officer
+
+Feature de chiste, apagada por defecto. Con `kamikaze_arty 1` (y `airstrikes 1`), el
+Officer que llama el airstrike se sube al avión: la cámara viaja con él, el avión no
+bombardea y pica hasta clavarse en el punto marcado con los binoculares. En la picada la
+vista queda fija por la trompa. El Officer muere (cuenta como suicidio) y el choque hace daño
+de airstrike a su nombre. Los aviones de los mapas (`misc_airstrike`) no cambian.
+
+| Cvar | Por defecto | Qué hace |
+|---|---|---|
+| `kamikaze_arty` | `0` | `1` activa el kamikaze en el próximo airstrike (un vuelo ya en curso no cambia). |
+| `kamikaze_dmg` | `1000` | Daño del choque (una bomba normal hace 700). |
+| `kamikaze_radius` | `420` | Radio del choque (una bomba normal: 300). |
+
 ## Servidor: estadísticas
 
 Detalle: [`../stats/README.md`](../stats/README.md).
