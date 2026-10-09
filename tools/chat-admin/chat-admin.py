@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # chat-admin.py — admin bot por chat para D-Day (q2pro) — whitelist duro de comandos
-import os, re, sys, time, socket
+import os, re, sys, time, socket, fcntl
 
 LOG    = "/var/data/dday/logs/console.log"
 CFG    = "/home/ubuntu/dday/dday/server.cfg"
 INBOX  = "/home/ubuntu/dday/chat-inbox"           # chat conversacional -> Hermes
 RUNLOG = "/home/ubuntu/dday/chat-admin.actions"   # auditoría de acciones
 DEBUG  = "/home/ubuntu/dday/chat-admin.debug"     # calibración de formato
-ALLOW  = {"mrperuano", "mrroman"}          # solo para heurística de debug
-ALLOW_RAW = ("[MR]+Peruano+", "[MR]+roman")  # match EXACTO anti-squatting
+ALLOW  = {"chlsnako", "mrperuano", "mrroman"}          # solo para heurística de debug
+ALLOW_RAW = (">ChL<Snako", "[MR]+Peruano+", "[MR]+roman")  # match EXACTO anti-squatting
 MAPS   = {"dday2","invade1","invade2","invade6","itadday3","townwar","eurovilla","eurovilla3",
           "inland2","inland3","inland4","inland5","inland6","market1","mp1dday1","mp1dday2",
           "mp1dday3","nav2","nuenen","outpost","townwar1","war3","itadday1","itadday2",
@@ -668,6 +668,20 @@ def main():
         log_action(by, args[i+1], resp)
         say(resp)
         print(resp)
+        return
+    if any(a in ("-h", "--help") for a in args):
+        print("uso: chat-admin.py [--cmd '<comando>' [--by <nick>]]")
+        print("Sin argumentos arranca el daemon (una sola instancia permitida).")
+        return
+    # ── una sola instancia: candado por archivo ──
+    global _LOCK
+    try:
+        _LOCK = open("/home/ubuntu/dday/chat-admin.lock", "w")
+        fcntl.flock(_LOCK, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _LOCK.write(str(os.getpid()) + "\n")
+        _LOCK.flush()
+    except Exception:
+        print("ya hay otra instancia de chat-admin corriendo; salgo sin hacer nada")
         return
     daemon()
 

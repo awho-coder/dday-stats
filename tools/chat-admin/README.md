@@ -66,7 +66,7 @@ loginctl enable-linger $USER                       # sobrevive al logout
 
 | Qué | Dónde | Por defecto |
 |---|---|---|
-| Nicks autorizados | `chat-admin.py` → `ALLOW` | `[MR]+Peruano+`, `[MR]+roman` |
+| Nicks autorizados | `chat-admin.py` → `ALLOW_RAW` | `>ChL<Snako`, `[MR]+Peruano+`, `[MR]+roman` |
 | Log del server | `chat-admin.py` → `LOG` | `/var/data/dday/logs/console.log` |
 | URL del relay | `chat-admin.py` → `RELAY_URL` | `http://<ip-tailscale>:8099/ask` |
 | Token (VM) | archivo `.relay-token` | — |
@@ -107,6 +107,7 @@ loginctl enable-linger $USER                       # sobrevive al logout
 
 ```bash
 sudo systemctl restart dday-chat-admin      # VM (después de editar el .py)
+# corre una sola instancia (candado /home/ubuntu/dday/chat-admin.lock): una segunda sale sin hacer nada
 systemctl --user restart quake-llm-relay    # Pi
 tail -f /home/ubuntu/dday/chat-admin.actions   # auditoría (quién pidió qué)
 ```
