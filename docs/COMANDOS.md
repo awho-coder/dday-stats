@@ -27,6 +27,20 @@ Mapas con zona: `invade6`, `invade2`, `inland4`, `eurovilla`, `itadday3`,
 `townwar`. Para marcar una zona nueva se usa el comando `spot` en consola
 (ya existía) y la skill `agregar-mapa-control`.
 
+## Servidor: airstrike kamikaze del Officer
+
+Feature de chiste, apagada por defecto. Con `kamikaze_arty 1` (y `airstrikes 1`), el
+Officer que llama el airstrike se sube al avión: la cámara viaja con él, el avión no
+bombardea y pica hasta clavarse en el punto marcado con los binoculares. En la picada la
+vista queda fija por la trompa. El Officer muere (cuenta como suicidio) y el choque hace daño
+de airstrike a su nombre. Los aviones de los mapas (`misc_airstrike`) no cambian.
+
+| Cvar | Por defecto | Qué hace |
+|---|---|---|
+| `kamikaze_arty` | `0` | `1` activa el kamikaze en el próximo airstrike (un vuelo ya en curso no cambia). |
+| `kamikaze_dmg` | `1000` | Daño del choque (una bomba normal hace 700). |
+| `kamikaze_radius` | `420` | Radio del choque (una bomba normal: 300). |
+
 ## Servidor: estadísticas
 
 Detalle: [`../stats/README.md`](../stats/README.md).
@@ -79,13 +93,16 @@ comando.
 - **Info:** `estado` `ayuda` `bans` `tiempo` `mapas` `infomapa` `marcador`
   `zona` `versiones` `lag` `tiempos`
 - **Juego:** `mapa <x>` `duelo <mapa>` `publico` `normal` `control <mapa>`
-  `dm <mapa>` `modo normal|control|dm|duelo [mapa]` `evento <nombre>` `cuenta`
+  `dm <mapa>` `modo normal|control|dm|duelo [mapa]` `kamikaze on|off` `evento <nombre>` `cuenta`
   `reset` `resetscore` `torneo on|off` `freeze` `proximamapa` `lock` `unlock`
   `say <texto>`
 - `control <mapa>` (o `modo control <mapa>`) deja solo ese mapa y **apaga la
   votación** mientras dure la sesión: las rondas se repiten en ese mapa.
 - `mapa`, `dm`, `normal` y `publico` apagan el modo control y restauran la
   rotación (`sv_maplist`) y la votación (`mapvoting`) de `server.cfg`.
+- `kamikaze on|off` prende o apaga el airstrike kamikaze del Officer (`kamikaze_arty`);
+  sin argumento dice el estado. También entiende frases ("admin activa el kamikaze").
+  Rige desde el próximo airstrike y un reinicio del server lo apaga.
 - La votación de fin de mapa **nunca** lleva al modo control: el mapa votado
   siempre arranca en deathmatch (la DLL pone `control_mode 0`).
 - **Moderación:** `kick <nick>` `kickban <nick>` `ban <ip>` `unban <ip>`

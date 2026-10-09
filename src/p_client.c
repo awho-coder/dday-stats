@@ -749,6 +749,9 @@ void ClientObituary (edict_t *self, edict_t *inflictor, edict_t *attacker)
 				message = "was gunned down by";
 				message2 = "'s submachinegun";
 				break;
+			case MOD_BROWNING:
+				message = "was browned by";
+				break;
 			case MOD_SNIPER:
 				message = "was sniped by";
 				break;
@@ -939,7 +942,8 @@ void TossClientWeapon (edict_t *self)
 		((Q_stricmp (item->pickup_name, "Morphine")   == 0) ||
 		 (Q_stricmp (item->pickup_name, "Fists")      == 0) ||
 		 (Q_stricmp (item->pickup_name, "Sandbags")      == 0) ||
-		 (Q_stricmp (item->pickup_name, "Binoculars") == 0) ))
+		 (Q_stricmp (item->pickup_name, "Binoculars") == 0) ||
+		 (Q_stricmp (item->pickup_name, "Healthpack") == 0) ))
 		item = NULL;
 
 
@@ -1249,6 +1253,7 @@ void player_die (edict_t *self, edict_t *inflictor, edict_t *attacker, int damag
 
 
 	turret_off (self);
+	Kamikaze_Release (self, false);
 
 	
 	if (!self->deadflag)
@@ -1301,6 +1306,9 @@ void player_die (edict_t *self, edict_t *inflictor, edict_t *attacker, int damag
 	self->client->invincible_framenum = 0;
 	self->client->breather_framenum = 0;
 	self->client->enviro_framenum = 0;
+
+	// the healthpacks he threw do not stay on the ground when the Medic dies
+	RemoveHealthpacks (self);
 
 	// clear inventory
 	memset(self->client->pers.inventory, 0, sizeof(self->client->pers.inventory));
@@ -3159,6 +3167,9 @@ void ClientDisconnect (edict_t *ent)
 	if (!ent->client)
 		return;
 
+	// kamikaze: si no, SVF_NOCLIENT queda en el edict y el proximo jugador de ese slot es invisible
+	Kamikaze_Release (ent, false);
+
 	StatsLog_ClientDisconnect (ent);
 
 	if (stats->value && !level.intermissiontime)
@@ -3176,6 +3187,8 @@ void ClientDisconnect (edict_t *ent)
 	//faf:  ctb code
 	if(ent->client->pers.inventory[ITEM_INDEX(FindItemB(ITEM_BRIEFCASE))])
 		Drop_Briefcase(ent, FindItemB(ITEM_BRIEFCASE));
+
+	RemoveHealthpacks (ent);
 
 
 
@@ -4086,6 +4099,7 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 
 	// kernel: verify if player is trying to exit his spawn_protect in tournament mode
 	if (!ent->ai &&
+		!client->kamikaze_plane &&	// el piloto lo mueve el avion
 		!client->limbo_mode && !ent->flyingnun &&
 		tournament->value &&
 		(freeze_mode || (countdownActive && !IsPlayerInsideSpawnProtect(ent))))
@@ -4110,7 +4124,15 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 	// set up for pmove
 	memset (&pm, 0, sizeof(pm));
 
-	if (client->turret)
+	// kamikaze: si el avion desaparecio sin estrellarse (limpieza de torneo, etc.),
+	// el piloto vuelve vivo a su spawn
+	if (client->kamikaze_plane && !Kamikaze_PlaneValid (ent))
+		Kamikaze_Release (ent, true);
+
+	if (client->kamikaze_plane)
+		client->ps.pmove.pm_type = PM_FREEZE;	// la camara la mueve el avion
+
+	else if (client->turret)
 		client->ps.pmove.pm_type = PM_NORMAL;
 
 	else if (ent->movetype == MOVETYPE_NOCLIP)

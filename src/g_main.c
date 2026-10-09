@@ -191,6 +191,9 @@ cvar_t *limit_flamer;
 
 // kernel: make dday faster again
 cvar_t *fast_arty;
+cvar_t *kamikaze_arty;
+cvar_t *kamikaze_dmg;
+cvar_t *kamikaze_radius;
 cvar_t *fast_bleeding;
 cvar_t *fast_sniper;
 

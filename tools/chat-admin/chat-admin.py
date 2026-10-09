@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # chat-admin.py — admin bot por chat para D-Day (q2pro) — whitelist duro de comandos
-import os, re, sys, time, socket
+import os, re, sys, time, socket, fcntl
 
 LOG    = "/var/data/dday/logs/console.log"
 CFG    = "/home/ubuntu/dday/dday/server.cfg"
 INBOX  = "/home/ubuntu/dday/chat-inbox"           # chat conversacional -> Hermes
 RUNLOG = "/home/ubuntu/dday/chat-admin.actions"   # auditoría de acciones
 DEBUG  = "/home/ubuntu/dday/chat-admin.debug"     # calibración de formato
-ALLOW  = {"mrperuano", "mrroman"}          # solo para heurística de debug
-ALLOW_RAW = ("[MR]+Peruano+", "[MR]+roman")  # match EXACTO anti-squatting
+ALLOW  = {"chlsnako", "mrperuano", "mrroman"}          # solo para heurística de debug
+ALLOW_RAW = (">ChL<Snako", "[MR]+Peruano+", "[MR]+roman")  # match EXACTO anti-squatting
 MAPS   = {"dday2","invade1","invade2","invade6","itadday3","townwar","eurovilla","eurovilla3",
           "inland2","inland3","inland4","inland5","inland6","market1","mp1dday1","mp1dday2",
           "mp1dday3","nav2","nuenen","outpost","townwar1","war3","itadday1","itadday2",
@@ -131,7 +131,7 @@ def find_player(name):
 HELP = ("[ADMIN] comandos: estado, kick <quien>, kickban <quien>, ban <ip>, unban <ip>, "
         "mapa <nombre>, duelo <mapa>, publico, cuenta, reset, resetscore, tiempo, mapas, bans, "
         "bots on|off, kickbots, screenshot, stuff <cmd>, autostuff <cmd>, autostuffoff, "
-        "control <mapa>, ffa <mapa>, dm <mapa>, "
+        "control <mapa>, ffa <mapa>, dm <mapa>, kamikaze on|off, "
         "lock, unlock, say <texto>, ayuda")
 
 def run_cmd(text, by):
@@ -243,6 +243,19 @@ def run_cmd(text, by):
             real = [x for x in MAPS if norm(x) == m][0]
         restore_rotation(); rcon("map %s" % real)
         return "[ADMIN] modo DM en %s" % real, True
+    if verb in ("kamikaze", "kamikase", "kamicase"):
+        # cvar de la DLL (no latched): rige desde el proximo airstrike; un reinicio del server lo apaga
+        a = norm(arg)
+        if a in ("on", "1", "si", "activar", "activa", "prender", "prende", "encender", "enciende", "poner", "pon"):
+            rcon("set kamikaze_arty 1")
+            return ("[ADMIN] arty KAMIKAZE activado: el Officer viaja en su avion y se estrella "
+                    "en el punto marcado (desde el proximo airstrike)"), True
+        if a in ("off", "0", "no", "desactivar", "desactiva", "apagar", "apaga", "quitar", "quita", "sacar", "saca"):
+            rcon("set kamikaze_arty 0")
+            return "[ADMIN] arty kamikaze DESACTIVADO: el airstrike vuelve a ser normal", True
+        m = re.search(r'is\s+"(\d+)"', rcon("kamikaze_arty"))
+        estado = "?" if not m else ("ON" if m.group(1) != "0" else "OFF")
+        return "[ADMIN] arty kamikaze: %s (uso: kamikaze on|off)" % estado, True
     if verb in ("normal", "clasico", "restaurar", "default", "resetmodo"):
         restore_rotation(); rcon("set stats_mode public")
         rcon("map dday2")
@@ -487,6 +500,22 @@ def ffa_phrase(text):
             return "ffa " + tok
     return "ffa"
 
+KAMIKAZE_OFF = ("desactiva", "apaga", "saca", "quita", "deshabilita", "termina", "sin ", "off", "no mas",
+                "no más", "basta")
+KAMIKAZE_ON = ("activa", "prende", "enciende", "pon", "habilita", "mete", "on", "quiero", "probar")
+
+def kamikaze_phrase(text):
+    """Frases tipo 'admin activa el arty kamikaze' -> 'kamikaze on' ('apaga...' -> off,
+    sin verbo -> estado). None si no hablan del kamikaze."""
+    low = " " + text.lower() + " "
+    if not re.search(r"\bkamika[sz]e\b|\bkamicase\b", low):
+        return None
+    if any(w in low for w in KAMIKAZE_OFF):  # primero: 'desactiva' contiene 'activa'
+        return "kamikaze off"
+    if any(re.search(r"\b%s" % re.escape(w), low) for w in KAMIKAZE_ON):
+        return "kamikaze on"
+    return "kamikaze"
+
 COOLDOWN = {}
 
 def rate_ok(nick):
@@ -528,7 +557,7 @@ def looks_command(text):
     return v in {"ayuda","help","estado","status","jugadores","players","kick","kickea","echar",
                  "kickban","ban","unban","delban","desban","lock","unlock","bloquear","abrir",
                  "mapa","map","cambiamapa","duelo","duel","publico","publica","cuenta","startcount",
-                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","dm","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
+                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","dm","kamikaze","kamikase","kamicase","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
                  "restart","reload"}
 
 def handle_line(line, dry=False):
@@ -575,6 +604,17 @@ def handle_line(line, dry=False):
             say(resp)
             print("FFA-PHRASE %s -> %s" % (nick, resp))
             return ("ffaphrase", nick, text, resp)
+        # arty kamikaze en frase natural: local, sin LLM
+        kam = kamikaze_phrase(text)
+        if kam:
+            if not rate_ok(nick):
+                say("[ADMIN] calma, espera unos segundos")
+                return ("rate", nick, text, None)
+            resp, _ = run_cmd(kam, nick)
+            log_action(nick, "frase:" + kam, resp)
+            say(resp)
+            print("KAMIKAZE-PHRASE %s -> %s" % (nick, resp))
+            return ("kamikazephrase", nick, text, resp)
         reply, action, ok = ask_relay(nick, text)
         if not ok:
             # fallback: relay caído -> bandeja (Hermes vía cron, ~1 min)
@@ -628,6 +668,20 @@ def main():
         log_action(by, args[i+1], resp)
         say(resp)
         print(resp)
+        return
+    if any(a in ("-h", "--help") for a in args):
+        print("uso: chat-admin.py [--cmd '<comando>' [--by <nick>]]")
+        print("Sin argumentos arranca el daemon (una sola instancia permitida).")
+        return
+    # ── una sola instancia: candado por archivo ──
+    global _LOCK
+    try:
+        _LOCK = open("/home/ubuntu/dday/chat-admin.lock", "w")
+        fcntl.flock(_LOCK, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _LOCK.write(str(os.getpid()) + "\n")
+        _LOCK.flush()
+    except Exception:
+        print("ya hay otra instancia de chat-admin corriendo; salgo sin hacer nada")
         return
     daemon()
 

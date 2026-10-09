@@ -57,6 +57,17 @@ git checkout develop && git merge --no-ff hotfix/lo-urgente && git push origin d
 git branch -d hotfix/lo-urgente
 ```
 
+## Ramas de integración
+
+Además de las ramas de GitFlow existe **`Cambios-Snako`**: rama de
+**integración de pruebas** donde se juntan cambios de un amigo (por ejemplo
+desde el remoto `ddaychile`). Cuando los cambios están probados se pasan a
+`develop` con `merge --no-ff`.
+
+- **No se borra al mergear.** Sigue viva para seguir integrando cambios.
+- Conviene mantenerla al día con `develop` (`git merge develop`) para que el
+  paso a `develop` siga siendo limpio.
+
 ## Notas
 
 - La DLL se compila desde el commit que se despliega: anotar la versión/commit

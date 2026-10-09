@@ -1713,6 +1713,12 @@ void SP_worldspawn (edict_t *ent)
 
 	// pbowens: scoreboard
 	gi.imageindex ("scorehead");
+	if (G_IsFFA())
+	{
+		// Free For All scoreboard panel and winner banner, so the clients load/download them
+		gi.imageindex ("ffa_score");
+		gi.imageindex ("ffa_winner");
+	}
 	gi.imageindex ("scoreleft");
 	gi.imageindex ("scoreright");
 
@@ -1951,6 +1957,7 @@ void SP_worldspawn (edict_t *ent)
 
 	// pbowens: precache these here b/c players use them
 	PrecacheItem ( FindItem("Morphine")		);
+	PrecacheItem ( FindItem("Healthpack")	);
 	PrecacheItem ( FindItem("Helmet")		);
 	PrecacheItem ( FindItem("Fists")		);
 	PrecacheItem ( FindItem("Binoculars")	);

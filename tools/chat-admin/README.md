@@ -66,7 +66,7 @@ loginctl enable-linger $USER                       # sobrevive al logout
 
 | Qué | Dónde | Por defecto |
 |---|---|---|
-| Nicks autorizados | `chat-admin.py` → `ALLOW` | `[MR]+Peruano+`, `[MR]+roman` |
+| Nicks autorizados | `chat-admin.py` → `ALLOW_RAW` | `>ChL<Snako`, `[MR]+Peruano+`, `[MR]+roman` |
 | Log del server | `chat-admin.py` → `LOG` | `/var/data/dday/logs/console.log` |
 | URL del relay | `chat-admin.py` → `RELAY_URL` | `http://<ip-tailscale>:8099/ask` |
 | Token (VM) | archivo `.relay-token` | — |
@@ -79,6 +79,8 @@ loginctl enable-linger $USER                       # sobrevive al logout
 - **Info**: `estado` `ayuda` `bans` `tiempo` `mapas` `infomapa` `marcador` `zona`
   `versiones` `lag` `tiempos`
 - **Juego**: `mapa <x>` `duelo <mapa>` `publico` `control <mapa>` `ffa <mapa>` `dm <mapa>`
+  `kamikaze on|off` (sin argumento dice el estado; también en frase natural:
+  "admin activa/apaga el kamikaze", detector local, sin LLM)
   `cuenta` (17 alias: iniciar/start/tira…) `reset` `resetscore` `torneo on|off`
   `freeze` `proximamapa` `lock` `unlock` `say <texto>`
 - **Moderación**: `kick <nick>` `kickban <nick>` `ban <ip>` `unban <ip>`
@@ -105,6 +107,7 @@ loginctl enable-linger $USER                       # sobrevive al logout
 
 ```bash
 sudo systemctl restart dday-chat-admin      # VM (después de editar el .py)
+# corre una sola instancia (candado /home/ubuntu/dday/chat-admin.lock): una segunda sale sin hacer nada
 systemctl --user restart quake-llm-relay    # Pi
 tail -f /home/ubuntu/dday/chat-admin.actions   # auditoría (quién pidió qué)
 ```

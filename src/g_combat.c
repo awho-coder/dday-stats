@@ -743,7 +743,8 @@ void Drop_Flamed (edict_t *ent)
 	if (item->classnameb == WEAPON_FISTS ||
 		item->classnameb == WEAPON_FLAMETHROWER ||
 		item->classnameb == WEAPON_BINOCULARS ||
-		item->classnameb == WEAPON_MORPHINE)
+		item->classnameb == WEAPON_MORPHINE ||
+		item->classnameb == WEAPON_HEALTHPACK)
 		return;
 
 	if (ent->client->grenade)
@@ -908,6 +909,7 @@ void T_Damage (edict_t *targ, edict_t *inflictor, edict_t *attacker, vec3_t dir,
 						(mod == MOD_LMG) || 
 						(mod == MOD_HMG) || 
 						(mod == MOD_SUBMG) || 
+						(mod == MOD_BROWNING) ||
 						(mod == MOD_SNIPER) ||
 						(mod == MOD_BAYONET) ||
 						(mod == MOD_KNIFE)) ) 
@@ -1041,10 +1043,14 @@ void T_Damage (edict_t *targ, edict_t *inflictor, edict_t *attacker, vec3_t dir,
 		return;
 	}
 
+	// Browning Hi-Power: a headshot does a bit more than a chest hit (it is converted to one just below)
+	if (mod == MOD_BROWNING && result == HEAD_WOUND && targ->health > 30)
+		damage = damage * BROWNING_HEAD_BONUS / 100;
+
 	/*Wheaty: Per Darwin's request... SMG/LMG can no longer inflict headshots
 	if ((mod == MOD_LMG || mod == MOD_SHOTGUN2 || mod == MOD_SUBMG) && result == HEAD_WOUND)
 	*/
-	if ((mod == MOD_LMG || mod == MOD_SHOTGUN2 || mod == MOD_SUBMG) && result == HEAD_WOUND && targ->health > 30 ) // ZeRo - Se agrega condicion de hp maximo para que si sea headshot.
+	if ((mod == MOD_LMG || mod == MOD_SHOTGUN2 || mod == MOD_SUBMG || mod == MOD_BROWNING) && result == HEAD_WOUND && targ->health > 30 ) // ZeRo - Se agrega condicion de hp maximo para que si sea headshot.
 			result = CHEST_WOUND;
 			
 	switch (result)
@@ -1138,7 +1144,8 @@ void T_Damage (edict_t *targ, edict_t *inflictor, edict_t *attacker, vec3_t dir,
 				(targ->client->pers.weapon->classnameb != WEAPON_FISTS && 
 				targ->client->pers.weapon->classnameb != WEAPON_MORPHINE && 
 				targ->client->pers.weapon->classnameb != WEAPON_FLAMETHROWER &&
-				targ->client->pers.weapon->classnameb != WEAPON_BINOCULARS) &&
+				targ->client->pers.weapon->classnameb != WEAPON_BINOCULARS &&
+				targ->client->pers.weapon->classnameb != WEAPON_HEALTHPACK) &&
 				!targ->client->grenade && !targ->client->tnt) // kernel: live grenade or tnt won't drop gun
 				{
 					Drop_Shot (targ, targ->client->pers.weapon);
@@ -1675,6 +1682,7 @@ void SprayBlood(edict_t *self, vec3_t point, vec3_t angle, int damage, int mod)
 		speed = 1000;//700;
 		break;
 	case MOD_SUBMG:
+	case MOD_BROWNING:
 		speed = 1000;//500;
 		break;
 	case MOD_SNIPER:
@@ -1689,7 +1697,7 @@ void SprayBlood(edict_t *self, vec3_t point, vec3_t angle, int damage, int mod)
 
 	//Wheaty: To prevent fireworks bloodspray
 	if (mod == MOD_PISTOL || mod == MOD_SHOTGUN || mod == MOD_RIFLE || mod == MOD_LMG
-		|| mod == MOD_HMG || mod == MOD_SUBMG || mod == MOD_SNIPER || mod == MOD_KNIFE || mod == 69)
+		|| mod == MOD_HMG || mod == MOD_SUBMG || mod == MOD_BROWNING || mod == MOD_SNIPER || mod == MOD_KNIFE || mod == 69)
 	{
 	level.gib_count++;//faf
 

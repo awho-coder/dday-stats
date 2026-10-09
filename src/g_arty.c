@@ -131,6 +131,9 @@ void Cmd_Arty_f (edict_t *ent)
 	if (!ent->client)
 		return;
 
+	if (ent->client->kamikaze_plane)	// en el avion no hay vuelta atras
+		return;
+
 	if (!IsValidPlayer(ent))
 		return;
 
@@ -542,6 +545,335 @@ void Plane_Fly_Off (edict_t *ent)
 	}
 }
 
+//////////////////////////////////////////////////////////////////////
+//  Kamikaze: el Officer viaja en el avion del airstrike y se estrella //
+//////////////////////////////////////////////////////////////////////
+
+#define KAMIKAZE_CAM_BACK		96		// camara detras del avion (ajustar en prueba)
+#define KAMIKAZE_CAM_UP			32		// y por encima
+#define KAMIKAZE_DIVE_START		40		// empieza a picar cuando el blanco queda estos grados bajo la horizontal
+#define KAMIKAZE_PITCH_STEP0	2		// grados por frame al empezar a picar
+#define KAMIKAZE_PITCH_STEP		12		// grados por frame a pleno (tope)
+#define KAMIKAZE_TERMINAL		0.3		// segundos finales: va derecho al blanco para clavarse exacto
+#define KAMIKAZE_PITCH_RAMP		0.5		// segundos que tarda el paso en ir de STEP0 a STEP
+#define KAMIKAZE_ROLL_STEP		3		// grados por frame con los que se endereza el alabeo
+#define KAMIKAZE_DIVE_ACCEL		300		// u/s2 que acelera el avion mientras cae
+#define KAMIKAZE_DIVE_SPEEDCAP	1.6		// velocidad maxima: este multiplo de la que traia
+#define KAMIKAZE_DIVE_MAX		6		// segundos maximos de picada antes de forzar el choque
+
+void check_unscope (edict_t *ent);
+void Play_Ricochet_Noise (edict_t *ent, vec3_t origin);
+void Smoke_Effect (vec3_t origin, float strength);
+
+void Plane_Dive (edict_t *plane);
+
+// el piloto sigue vivo y enganchado a este avion?
+static qboolean Kamikaze_IsPilot (edict_t *plane, edict_t *p)
+{
+	return p && p->inuse && p->client && !p->deadflag &&
+		p->client->kamikaze_plane == plane;
+}
+
+// el avion del piloto sigue existiendo? (el edict se puede liberar y reusar)
+qboolean Kamikaze_PlaneValid (edict_t *p)
+{
+	edict_t *plane = p->client->kamikaze_plane;
+
+	return plane && plane->inuse && plane->classnameb == PLANE &&
+		plane->owner == p && (plane->spawnflags & PLANE_KAMIKAZE);
+}
+
+// devuelve a un piloto vivo al juego normal, en su spawn
+static void Kamikaze_PutBack (edict_t *p)
+{
+	p->movetype = MOVETYPE_WALK;
+	p->solid = SOLID_BBOX;
+	VectorClear (p->velocity);
+
+	// como turret_off: restaurar el arma en vista
+	if (p->client->pers.weapon)
+		p->client->ps.gunindex = gi.modelindex (p->client->pers.weapon->view_model);
+
+	MoveToTheirSpawnPoint (p);	// actualiza pmove.origin y linkea
+	gi.linkentity (p);
+}
+
+// desengancha al jugador del avion. to_spawn: si sigue vivo, mandarlo a su spawn
+void Kamikaze_Release (edict_t *p, qboolean to_spawn)
+{
+	if (!p->client || !p->client->kamikaze_plane)
+		return;
+
+	p->client->kamikaze_plane = NULL;
+	p->svflags &= ~SVF_NOCLIENT;
+	p->client->ps.pmove.pm_flags &= ~PMF_NO_PREDICTION;
+
+	if (to_spawn && !p->deadflag)
+		Kamikaze_PutBack (p);
+}
+
+// pone la camara del piloto junto al avion (se llama en cada frame desde ClientEndServerFrame)
+void Kamikaze_Follow (edict_t *plane)
+{
+	edict_t *p = plane->owner;
+	vec3_t forward, start, end;
+	vec3_t cam_mins = {-6, -6, -6}, cam_maxs = {6, 6, 6};	// margen para el near clip
+	trace_t tr;
+	int i;
+
+	if (!(plane->spawnflags & PLANE_KAMIKAZE) || !Kamikaze_IsPilot (plane, p))
+		return;
+
+	// en la picada la vista queda fija mirando por la trompa (con el roll del avion);
+	// antes de eso se puede mirar libre. Igual que turret_driver_link.
+	if (plane->think == Plane_Dive)
+	{
+		for (i = 0; i < 3; i++)
+			p->client->ps.pmove.delta_angles[i] =
+				ANGLE2SHORT(plane->s.angles[i] - p->client->resp.cmd_angles[i]);
+		VectorCopy (plane->s.angles, p->client->ps.viewangles);
+		VectorCopy (plane->s.angles, p->client->v_angle);
+	}
+
+	// el avion vuela pegado a la superficie del cielo (arty_entry) y nace contra una pared:
+	// la camara se ubica con traces para que el ojo nunca quede dentro de un solido
+	// (si no, la pantalla se tine de rojo, p_view.c SV_CalcBlend)
+	AngleVectors (plane->s.angles, forward, NULL, NULL);
+	VectorMA (plane->s.origin, 16, forward, start);	// un poco adelante (lejos de la pared de salida)
+	start[2] -= 16;									// y abajo (lejos del cielo)
+
+	tr = gi.trace (start, cam_mins, cam_maxs, start, plane, MASK_SOLID);
+	if (tr.startsolid)
+		return;	// sin lugar seguro este frame: dejar la camara donde estaba
+
+	VectorMA (start, -KAMIKAZE_CAM_BACK, forward, end);	// hacia atras
+	tr = gi.trace (start, cam_mins, cam_maxs, end, plane, MASK_SOLID);
+	VectorCopy (tr.endpos, start);
+
+	VectorCopy (start, end);								// y hacia arriba
+	end[2] += KAMIKAZE_CAM_UP;
+	tr = gi.trace (start, cam_mins, cam_maxs, end, plane, MASK_SOLID);
+
+	// el ojo es origin + viewheight: bajar el origin para que el ojo quede en el punto seguro
+	VectorCopy (tr.endpos, p->s.origin);
+	p->s.origin[2] -= p->viewheight;
+	VectorClear (p->velocity);
+	p->client->ps.gunindex = 0;	// por si algun comando le cambio el arma
+	p->client->ps.pmove.pm_flags |= PMF_NO_PREDICTION;
+	gi.linkentity (p);
+}
+
+// sube al Officer al avion recien creado
+static void Kamikaze_LinkPilot (edict_t *plane)
+{
+	edict_t *p = plane->owner;
+	int i;
+
+	if (!p || !p->inuse || !p->client || p->ai || p->deadflag ||
+		p->client->limbo_mode || p->flyingnun || !p->client->resp.team_on ||
+		p->client->kamikaze_plane)	// ya va en otro avion
+		return;
+
+	if (p->client->turret)
+		turret_off (p);
+
+	// sale del zoom de los binoculares
+	check_unscope (p);
+	p->client->aim = false;
+	p->client->ps.fov = STANDARD_FOV;
+
+	plane->spawnflags |= PLANE_KAMIKAZE;
+	p->client->kamikaze_plane = plane;
+
+	p->solid = SOLID_NOT;
+	p->movetype = MOVETYPE_NOCLIP;	// en ClientThink tambien evita G_TouchTriggers
+	p->groundentity = NULL;
+	p->svflags |= SVF_NOCLIENT;		// que no se vea su cuerpo flotando junto al avion
+	VectorClear (p->velocity);
+	p->client->ps.gunindex = 0;
+	p->client->ps.pmove.pm_type = PM_FREEZE;
+	p->client->ps.pmove.pm_flags |= PMF_NO_PREDICTION;
+
+	// apuntar la vista hacia donde vuela (despues puede mirar libre)
+	for (i = 0; i < 3; i++)
+		p->client->ps.pmove.delta_angles[i] =
+			ANGLE2SHORT(plane->s.angles[i] - p->client->resp.cmd_angles[i]);
+	VectorCopy (plane->s.angles, p->client->ps.viewangles);
+	VectorCopy (plane->s.angles, p->client->v_angle);
+
+	Kamikaze_Follow (plane);
+}
+
+// arranca la picada: no toca angulos ni velocidad, eso lo hace Plane_Dive de a poco
+// (el kamikaze no suelta bombas: va directo al punto marcado con los binoculares)
+static void Plane_StartDive (edict_t *plane)
+{
+	plane->speed = VectorLength (plane->velocity);	// velocidad con la que venia
+	plane->timestamp = level.time;
+	plane->think = Plane_Dive;
+	plane->nextthink = level.time + FRAMETIME;
+}
+
+// choque: mata al piloto (suicidio), explota y libera el avion
+static void Plane_Crash (edict_t *plane, vec3_t point)
+{
+	edict_t *p = plane->owner;
+	int n;
+
+	VectorCopy (point, plane->s.origin);
+	VectorClear (plane->velocity);
+	gi.linkentity (plane);
+
+	// 1) el piloto muere primero y como suicidio (antes del dano radial, para que no
+	//    lo mate la explosion con otro MOD)
+	if (Kamikaze_IsPilot (plane, p))
+	{
+		Kamikaze_Release (p, false);
+		VectorCopy (point, p->s.origin);
+		gi.linkentity (p);
+		p->client->last_wound_inflictor = NULL;	// que nadie se lleve la kill
+		T_Damage (p, plane, world, vec3_origin, p->s.origin, vec3_origin,
+				  10000, 0, DAMAGE_NO_PROTECTION, MOD_SUICIDE);
+		if (!p->deadflag)	// p.ej. freeze/cuenta de torneo: T_Damage no hizo nada
+			Kamikaze_PutBack (p);
+	}
+
+	// 2) explosion mas fuerte que la bomba; atacante = Officer (igual que las bombas)
+	T_RadiusDamage (plane, plane->owner, kamikaze_dmg->value, NULL,
+					kamikaze_radius->value, MOD_AIRSTRIKE_SPLASH);
+
+	// 3) efectos: explosion de cohete (o de agua) + explosion grande encima
+	gi.WriteByte (svc_temp_entity);
+	if (gi.pointcontents (point) & MASK_WATER)
+		gi.WriteByte (TE_ROCKET_EXPLOSION_WATER);
+	else
+		gi.WriteByte (TE_ROCKET_EXPLOSION);
+	gi.WritePosition (point);
+	gi.multicast (point, MULTICAST_PHS);
+
+	gi.WriteByte (svc_temp_entity);
+	gi.WriteByte (TE_EXPLOSION2);
+	gi.WritePosition (point);
+	gi.multicast (point, MULTICAST_PHS);
+
+	n = 3 + rand() % 3;
+	while (n--)
+		ThrowDebris (plane, "models/objects/debris2/tris.md2", 2, point);
+
+	Play_Ricochet_Noise (plane, point);
+	Smoke_Effect (point, .1);
+
+	G_FreeEdict (plane);
+}
+
+// normaliza un angulo a -180..180
+static float Kamikaze_Angle180 (float a)
+{
+	while (a > 180)
+		a -= 360;
+	while (a < -180)
+		a += 360;
+	return a;
+}
+
+// gira el angulo cur hacia goal, como mucho step grados
+static float Kamikaze_Approach (float cur, float goal, float step)
+{
+	float diff = Kamikaze_Angle180 (goal - cur);
+
+	if (diff > step)
+		diff = step;
+	else if (diff < -step)
+		diff = -step;
+	return cur + diff;
+}
+
+// hay que empezar la picada? cuando el blanco queda DIVE_START grados bajo la
+// horizontal (asi la picada no depende de la altura del cielo), o si ya lo paso
+static qboolean Kamikaze_ShouldDive (edict_t *plane)
+{
+	vec3_t d;
+	float h, hd;
+
+	VectorSubtract (plane->arty_target, plane->s.origin, d);
+	h = -d[2];
+	d[2] = 0;
+	if (DotProduct (d, plane->movedir) <= 0)
+		return true;
+	hd = VectorLength (d);
+	return atan2 (h, hd) * 180 / M_PI >= KAMIKAZE_DIVE_START;
+}
+
+// picada: la trompa gira de a poco hacia el blanco, el avion acelera y cae hasta chocar
+void Plane_Dive (edict_t *plane)
+{
+	vec3_t end, point, forward, dir, aim;
+	trace_t tr;
+	float t, step, roll, speed, dist;
+
+	// pitch: positivo = trompa abajo; el paso crece de STEP0 a STEP durante PITCH_RAMP
+	t = level.time - plane->timestamp - FRAMETIME;
+	if (t < 0)
+		t = 0;
+	if (t > KAMIKAZE_PITCH_RAMP)
+		t = KAMIKAZE_PITCH_RAMP;
+	step = KAMIKAZE_PITCH_STEP0 + (KAMIKAZE_PITCH_STEP - KAMIKAZE_PITCH_STEP0) * t / KAMIKAZE_PITCH_RAMP;
+
+	// velocidad: acelera como si cayera, con tope
+	speed = VectorLength (plane->velocity) + KAMIKAZE_DIVE_ACCEL * FRAMETIME;
+	if (speed > plane->speed * KAMIKAZE_DIVE_SPEEDCAP)
+		speed = plane->speed * KAMIKAZE_DIVE_SPEEDCAP;
+
+	// rumbo al blanco: pitch y yaw giran hacia la linea de vista al punto marcado.
+	// Con el giro limitado el radio de giro es grande y en el ultimo tramo se pasaria:
+	// ahi va derecho al blanco (la correccion que queda es chica)
+	VectorSubtract (plane->arty_target, plane->s.origin, dir);
+	dist = VectorLength (dir);
+	vectoangles (dir, aim);
+	if (dist < speed * KAMIKAZE_TERMINAL)
+	{
+		plane->s.angles[PITCH] = Kamikaze_Angle180 (aim[PITCH]);
+		plane->s.angles[YAW] = aim[YAW];
+	}
+	else
+	{
+		plane->s.angles[PITCH] = Kamikaze_Approach (Kamikaze_Angle180 (plane->s.angles[PITCH]), aim[PITCH], step);
+		plane->s.angles[YAW] = Kamikaze_Approach (plane->s.angles[YAW], aim[YAW], step);
+	}
+
+	// roll: se endereza de a poco; sin avelocity para que no siga el alabeo de Plane_Think
+	roll = Kamikaze_Angle180 (plane->s.angles[ROLL]);
+	if (roll > KAMIKAZE_ROLL_STEP)
+		roll -= KAMIKAZE_ROLL_STEP;
+	else if (roll < -KAMIKAZE_ROLL_STEP)
+		roll += KAMIKAZE_ROLL_STEP;
+	else
+		roll = 0;
+	plane->s.angles[ROLL] = roll;
+	VectorClear (plane->avelocity);
+
+	// la direccion sale de los angulos (el roll no la cambia)
+	AngleVectors (plane->s.angles, forward, NULL, NULL);
+	VectorScale (forward, speed, plane->velocity);
+
+	// el pusher se mueve velocity*FRAMETIME antes del proximo think: mirar ese tramo
+	VectorMA (plane->s.origin, FRAMETIME, plane->velocity, end);
+	tr = gi.trace (plane->s.origin, NULL, NULL, end, plane, MASK_SHOT | MASK_WATER);
+
+	// allsolid y no startsolid: el avion arranca pegado a la superficie del cielo
+	if (tr.allsolid || tr.fraction < 1.0 || level.time > plane->timestamp + KAMIKAZE_DIVE_MAX)
+	{
+		if (tr.fraction < 1.0 && !tr.allsolid)
+			VectorMA (tr.endpos, 8, tr.plane.normal, point);	// un poco afuera de la pared
+		else
+			VectorCopy (plane->s.origin, point);
+		Plane_Crash (plane, point);
+		return;
+	}
+
+	plane->nextthink = level.time + FRAMETIME;
+}
+
 void Plane_Fire (edict_t *ent)
 {
 	if (ent->leave_limbo_time < level.time - 20)
@@ -640,6 +972,16 @@ void Plane_Think (edict_t *ent)
 
 
 //	safe_bprintf (PRINT_HIGH, "%s \n", vtos(ent->s.angles));
+
+	// kamikaze: no bombardea; pica directo al blanco
+	if (ent->spawnflags & PLANE_KAMIKAZE)
+	{
+		if (Kamikaze_ShouldDive (ent))
+			Plane_StartDive (ent);
+		else
+			ent->nextthink = level.time + .1;
+		return;
+	}
 
 	// kernel: fast plane needs to drop bombs earlier
 	if (fast_arty->value)
@@ -860,6 +1202,10 @@ void Spawn_Plane(edict_t *ent)
 	plane->leave_limbo_time = level.time;
 	plane->s.renderfx   = RF_FULLBRIGHT;
 	gi.linkentity (plane);
+
+	// kamikaze: el Officer se sube al avion
+	if (kamikaze_arty->value)
+		Kamikaze_LinkPilot (plane);
 }
 
 //faf
