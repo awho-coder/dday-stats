@@ -67,6 +67,33 @@ de airstrike a su nombre. Los aviones de los mapas (`misc_airstrike`) no cambian
 | `kamikaze_dmg` | `1000` | Daño del choque (una bomba normal hace 700). |
 | `kamikaze_radius` | `420` | Radio del choque (una bomba normal: 300). |
 
+## Servidor: jeringas lanzables del Medic
+
+Apagado por defecto. Con `syringe_throw 1`, el Medic con la jeringa en la mano y en modo
+apuntado (aim) la **lanza** al apretar fuego, igual que el cuchillo lanzado (misma velocidad
+y cadencia, `SYRINGE_THROW_DELAY` en `src/g_local.h`). Al **compañero** que toca lo cura
+`syringe_heal` (no cura sangrado ni cojera). Al **enemigo** lo envenena: `syringe_poison` de
+daño repartido en 2 segundos; los venenos de varias jeringas se acumulan, pueden matar y la
+muerte cuenta como kill del Medic (`was poisoned by`, `syringe` en el log de stats). Contra
+una pared, un objetivo o un cadáver la jeringa se rompe. Lleva `syringe_count` jeringas
+lanzables por vida (el HUD muestra cuántas le quedan), además de la de la mano, que es
+infinita y sigue sirviendo para inyectar de cerca. El Medic se puede mover mientras lanza
+(aim + cuerpo a tierra lo deja quieto, como con el cuchillo).
+
+El modelo de la jeringa en vuelo es el del juego (`players/usa/w_morphine.md2`, ya está en el
+`pak1.pak`): no hay archivos nuevos que subir. Sin jeringas lanzables, con un bot o con
+`invuln_medic` distinto de 0, aim + fuego sigue autocurando como siempre.
+
+| Cvar | Por defecto | Qué hace |
+|---|---|---|
+| `syringe_throw` | `0` | `1` hace que aim + fuego lance la jeringa. |
+| `syringe_count` | `9` | Jeringas lanzables por vida (sin contar la de la mano). Se reparten al aparecer. |
+| `syringe_heal` | `33` | Vida que recupera el compañero (tope `HEALTH_MAX`). |
+| `syringe_poison` | `33` | Daño total del veneno de una jeringa, en 2 segundos. |
+
+Lo que se ponga por rcon se pierde al reiniciar el servidor; para dejarlo fijo va en
+`dday/server.cfg`.
+
 ## Servidor: estadísticas
 
 Detalle: [`../stats/README.md`](../stats/README.md).
