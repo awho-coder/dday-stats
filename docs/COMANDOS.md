@@ -27,6 +27,32 @@ Mapas con zona: `invade6`, `invade2`, `inland4`, `eurovilla`, `itadday3`,
 `townwar`. Para marcar una zona nueva se usa el comando `spot` en consola
 (ya existía) y la skill `agregar-mapa-control`.
 
+## Servidor: Free For All (todos contra todos)
+
+Rama `free-for-all-mod` de ddaychile. Apagado por defecto; con `ffa 0` el juego es el D-Day de siempre.
+
+| Cvar | Por defecto | Qué hace |
+|---|---|---|
+| `ffa` | `0` | `1` activa el modo (latched: se aplica con el próximo `map`). Requiere `deathmatch 1` y no se mezcla con el modo control ni con CTB. |
+
+Todos entran como Sniper (rifle + cuchillo), sin equipos ni fuego amigo, con spawns al azar
+lejos de los demás, puntaje individual, marcador propio y anuncios del líder. Termina por
+`fraglimit` (30 si el server usa 0) o `timelimit`. No funciona junto con `tournament` y las
+stats persistentes (`stats 1`) no lo distinguen. Desde el bot: `ffa <mapa>`.
+
+## Juego: cambios de clases y armas (sin cvar)
+
+Ramas de ddaychile integradas el 2026-10-09:
+
+- **Medic: Browning Hi-Power** (`browning-medic`): reemplaza a la pistola del Medic en todas
+  las facciones. Automática, 10 balas, 5 disparos por segundo, 17 de daño; el spread crece
+  con cada disparo de la ráfaga. Constantes `BROWNING_*` en `src/g_local.h`.
+- **Medic: botiquín lanzable** (`medic-healthpack`): 2 por vida, se usa con `use special`
+  y fuego; cura 25 al compañero que lo toma. Necesita los modelos y texturas de
+  [`../models/README.md`](../models/README.md) en el server y en cada cliente.
+- **BAR y MP43** (`lmg-recoil-spread`): el retroceso y el spread siguen subiendo mientras se
+  mantiene el gatillo (`LMG_BLOOM_*` en `src/g_local.h`) y la BAR lleva 7 cargadores.
+
 ## Servidor: airstrike kamikaze del Officer
 
 Feature de chiste, apagada por defecto. Con `kamikaze_arty 1` (y `airstrikes 1`), el
@@ -93,12 +119,14 @@ comando.
 - **Info:** `estado` `ayuda` `bans` `tiempo` `mapas` `infomapa` `marcador`
   `zona` `versiones` `lag` `tiempos`
 - **Juego:** `mapa <x>` `duelo <mapa>` `publico` `normal` `control <mapa>`
-  `dm <mapa>` `modo normal|control|dm|duelo [mapa]` `kamikaze on|off` `evento <nombre>` `cuenta`
+  `ffa <mapa>` `dm <mapa>` `modo normal|control|ffa|dm|duelo [mapa]` `kamikaze on|off` `evento <nombre>` `cuenta`
   `reset` `resetscore` `torneo on|off` `freeze` `proximamapa` `lock` `unlock`
   `say <texto>`
 - `control <mapa>` (o `modo control <mapa>`) deja solo ese mapa y **apaga la
   votación** mientras dure la sesión: las rondas se repiten en ese mapa.
-- `mapa`, `dm`, `normal` y `publico` apagan el modo control y restauran la
+- `ffa <mapa>` (o `ffa` solo = el mapa actual; también en frase: "admin quiero probar
+  el ffa en dust") arranca Free For All en ese mapa y, como `control`, apaga la votación.
+- `mapa`, `dm`, `normal` y `publico` apagan el modo control y el FFA, y restauran la
   rotación (`sv_maplist`) y la votación (`mapvoting`) de `server.cfg`.
 - `kamikaze on|off` prende o apaga el airstrike kamikaze del Officer (`kamikaze_arty`);
   sin argumento dice el estado. También entiende frases ("admin activa el kamikaze").

@@ -15,3 +15,8 @@ name their skin as `skin.pcx` and the client loads the `skin.png` next to them, 
 The server also needs `models/items/healthpack/tris.md2` and `weapons/tnt/toss.wav` (already in the game) to precache them.
 
 How to use it in game: bind a key to `use special` (the Medic has 2 healthpacks per life), then press fire to throw one.
+
+**Descarga automática:** los `.md2` nombran `skin.pcx`, pero solo existen los `skin.png`. Un jugador que baja el
+modelo desde el server recibe el `.md2` pero nunca la textura (la descarga pide `skin.pcx`), y tampoco el ícono, así que
+ve el botiquín sin textura. Hasta que haya versiones `.pcx` (paleta de Quake 2) o un pak para repartir, cada jugador
+tiene que copiar estos 5 archivos a mano.
