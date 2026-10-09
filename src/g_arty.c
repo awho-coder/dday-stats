@@ -553,7 +553,8 @@ void Plane_Fly_Off (edict_t *ent)
 #define KAMIKAZE_CAM_UP			32		// y por encima
 #define KAMIKAZE_DIVE_START		40		// empieza a picar cuando el blanco queda estos grados bajo la horizontal
 #define KAMIKAZE_PITCH_STEP0	2		// grados por frame al empezar a picar
-#define KAMIKAZE_PITCH_STEP		8		// grados por frame a pleno (tope)
+#define KAMIKAZE_PITCH_STEP		12		// grados por frame a pleno (tope)
+#define KAMIKAZE_TERMINAL		0.3		// segundos finales: va derecho al blanco para clavarse exacto
 #define KAMIKAZE_PITCH_RAMP		0.5		// segundos que tarda el paso en ir de STEP0 a STEP
 #define KAMIKAZE_ROLL_STEP		3		// grados por frame con los que se endereza el alabeo
 #define KAMIKAZE_DIVE_ACCEL		300		// u/s2 que acelera el avion mientras cae
@@ -808,7 +809,7 @@ void Plane_Dive (edict_t *plane)
 {
 	vec3_t end, point, forward, dir, aim;
 	trace_t tr;
-	float t, step, roll, speed;
+	float t, step, roll, speed, dist;
 
 	// pitch: positivo = trompa abajo; el paso crece de STEP0 a STEP durante PITCH_RAMP
 	t = level.time - plane->timestamp - FRAMETIME;
@@ -818,11 +819,27 @@ void Plane_Dive (edict_t *plane)
 		t = KAMIKAZE_PITCH_RAMP;
 	step = KAMIKAZE_PITCH_STEP0 + (KAMIKAZE_PITCH_STEP - KAMIKAZE_PITCH_STEP0) * t / KAMIKAZE_PITCH_RAMP;
 
-	// rumbo al blanco: pitch y yaw giran hacia la linea de vista al punto marcado
+	// velocidad: acelera como si cayera, con tope
+	speed = VectorLength (plane->velocity) + KAMIKAZE_DIVE_ACCEL * FRAMETIME;
+	if (speed > plane->speed * KAMIKAZE_DIVE_SPEEDCAP)
+		speed = plane->speed * KAMIKAZE_DIVE_SPEEDCAP;
+
+	// rumbo al blanco: pitch y yaw giran hacia la linea de vista al punto marcado.
+	// Con el giro limitado el radio de giro es grande y en el ultimo tramo se pasaria:
+	// ahi va derecho al blanco (la correccion que queda es chica)
 	VectorSubtract (plane->arty_target, plane->s.origin, dir);
+	dist = VectorLength (dir);
 	vectoangles (dir, aim);
-	plane->s.angles[PITCH] = Kamikaze_Approach (Kamikaze_Angle180 (plane->s.angles[PITCH]), aim[PITCH], step);
-	plane->s.angles[YAW] = Kamikaze_Approach (plane->s.angles[YAW], aim[YAW], step);
+	if (dist < speed * KAMIKAZE_TERMINAL)
+	{
+		plane->s.angles[PITCH] = Kamikaze_Angle180 (aim[PITCH]);
+		plane->s.angles[YAW] = aim[YAW];
+	}
+	else
+	{
+		plane->s.angles[PITCH] = Kamikaze_Approach (Kamikaze_Angle180 (plane->s.angles[PITCH]), aim[PITCH], step);
+		plane->s.angles[YAW] = Kamikaze_Approach (plane->s.angles[YAW], aim[YAW], step);
+	}
 
 	// roll: se endereza de a poco; sin avelocity para que no siga el alabeo de Plane_Think
 	roll = Kamikaze_Angle180 (plane->s.angles[ROLL]);
@@ -835,10 +852,7 @@ void Plane_Dive (edict_t *plane)
 	plane->s.angles[ROLL] = roll;
 	VectorClear (plane->avelocity);
 
-	// velocidad: acelera como si cayera, con tope; la direccion sale de los angulos
-	speed = VectorLength (plane->velocity) + KAMIKAZE_DIVE_ACCEL * FRAMETIME;
-	if (speed > plane->speed * KAMIKAZE_DIVE_SPEEDCAP)
-		speed = plane->speed * KAMIKAZE_DIVE_SPEEDCAP;
+	// la direccion sale de los angulos (el roll no la cambia)
 	AngleVectors (plane->s.angles, forward, NULL, NULL);
 	VectorScale (forward, speed, plane->velocity);
 
