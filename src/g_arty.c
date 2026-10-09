@@ -611,8 +611,8 @@ void Kamikaze_Release (edict_t *p, qboolean to_spawn)
 		Kamikaze_PutBack (p);
 }
 
-// pone la camara del piloto junto al avion (llamar en cada think del avion)
-static void Kamikaze_Follow (edict_t *plane)
+// pone la camara del piloto junto al avion (se llama en cada frame desde ClientEndServerFrame)
+void Kamikaze_Follow (edict_t *plane)
 {
 	edict_t *p = plane->owner;
 	vec3_t forward;
@@ -795,8 +795,6 @@ void Plane_Dive (edict_t *plane)
 	AngleVectors (plane->s.angles, forward, NULL, NULL);
 	VectorScale (forward, speed, plane->velocity);
 
-	Kamikaze_Follow (plane);
-
 	// el pusher se mueve velocity*FRAMETIME antes del proximo think: mirar ese tramo
 	VectorMA (plane->s.origin, FRAMETIME, plane->velocity, end);
 	tr = gi.trace (plane->s.origin, NULL, NULL, end, plane, MASK_SHOT | MASK_WATER);
@@ -817,8 +815,6 @@ void Plane_Dive (edict_t *plane)
 
 void Plane_Fire (edict_t *ent)
 {
-	Kamikaze_Follow (ent);
-
 	if (ent->leave_limbo_time < level.time - 20)
 	{
 		ent->nextthink= level.time + .1;
@@ -934,8 +930,6 @@ void Plane_Think (edict_t *ent)
 			gi.sound(ent->owner, CHAN_AUTO, gi.soundindex(va("%s/arty/hit%i.wav", ent->arty_teamid, 1)),
 					 1, ATTN_NORM, 0);
 	}
-
-	Kamikaze_Follow (ent);
 
 	ent->nextthink = level.time +.1;
 }

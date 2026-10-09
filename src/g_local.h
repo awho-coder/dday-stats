@@ -1041,6 +1041,7 @@ void MoveToTheirSpawnPoint(edict_t *ent);
 #define PLANE_KAMIKAZE 1 // spawnflags del avion del Officer cuando lleva piloto
 void Kamikaze_Release (edict_t *p, qboolean to_spawn);
 qboolean Kamikaze_PlaneValid (edict_t *p);
+void Kamikaze_Follow (edict_t *plane);
 
 //
 // g_combat.c
