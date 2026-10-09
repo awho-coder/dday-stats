@@ -14,7 +14,7 @@ Si es tu primera vez en el repo, seguí este orden:
 
 ## Referencia rápida
 
-- [`COMANDOS.md`](COMANDOS.md) — **todos los cvars, comandos y opciones que agregó este fork** (modo control, estadísticas, ingestor, bot admin por chat).
+- [`COMANDOS.md`](COMANDOS.md) — **todos los cvars, comandos y opciones que agregó este fork** (modo control, Free For All, airstrike kamikaze, cambios de armas del Medic, estadísticas, ingestor, bot admin por chat).
 
 ## Cómo contribuir
 
