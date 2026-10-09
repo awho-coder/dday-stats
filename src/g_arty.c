@@ -564,6 +564,8 @@ void check_unscope (edict_t *ent);
 void Play_Ricochet_Noise (edict_t *ent, vec3_t origin);
 void Smoke_Effect (vec3_t origin, float strength);
 
+void Plane_Dive (edict_t *plane);
+
 // el piloto sigue vivo y enganchado a este avion?
 static qboolean Kamikaze_IsPilot (edict_t *plane, edict_t *p)
 {
@@ -614,9 +616,21 @@ static void Kamikaze_Follow (edict_t *plane)
 {
 	edict_t *p = plane->owner;
 	vec3_t forward;
+	int i;
 
 	if (!(plane->spawnflags & PLANE_KAMIKAZE) || !Kamikaze_IsPilot (plane, p))
 		return;
+
+	// en la picada la vista queda fija mirando por la trompa (con el roll del avion);
+	// antes de eso se puede mirar libre. Igual que turret_driver_link.
+	if (plane->think == Plane_Dive)
+	{
+		for (i = 0; i < 3; i++)
+			p->client->ps.pmove.delta_angles[i] =
+				ANGLE2SHORT(plane->s.angles[i] - p->client->resp.cmd_angles[i]);
+		VectorCopy (plane->s.angles, p->client->ps.viewangles);
+		VectorCopy (plane->s.angles, p->client->v_angle);
+	}
 
 	AngleVectors (plane->s.angles, forward, NULL, NULL);
 	VectorMA (plane->s.origin, -KAMIKAZE_CAM_BACK, forward, p->s.origin);
@@ -667,8 +681,6 @@ static void Kamikaze_LinkPilot (edict_t *plane)
 
 	Kamikaze_Follow (plane);
 }
-
-void Plane_Dive (edict_t *plane);
 
 // arranca la picada: no toca angulos ni velocidad, eso lo hace Plane_Dive de a poco
 static void Plane_StartDive (edict_t *plane)
