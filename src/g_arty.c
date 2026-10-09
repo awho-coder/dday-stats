@@ -615,7 +615,9 @@ void Kamikaze_Release (edict_t *p, qboolean to_spawn)
 void Kamikaze_Follow (edict_t *plane)
 {
 	edict_t *p = plane->owner;
-	vec3_t forward;
+	vec3_t forward, start, end;
+	vec3_t cam_mins = {-6, -6, -6}, cam_maxs = {6, 6, 6};	// margen para el near clip
+	trace_t tr;
 	int i;
 
 	if (!(plane->spawnflags & PLANE_KAMIKAZE) || !Kamikaze_IsPilot (plane, p))
@@ -632,9 +634,28 @@ void Kamikaze_Follow (edict_t *plane)
 		VectorCopy (plane->s.angles, p->client->v_angle);
 	}
 
+	// el avion vuela pegado a la superficie del cielo (arty_entry) y nace contra una pared:
+	// la camara se ubica con traces para que el ojo nunca quede dentro de un solido
+	// (si no, la pantalla se tine de rojo, p_view.c SV_CalcBlend)
 	AngleVectors (plane->s.angles, forward, NULL, NULL);
-	VectorMA (plane->s.origin, -KAMIKAZE_CAM_BACK, forward, p->s.origin);
-	p->s.origin[2] += KAMIKAZE_CAM_UP;
+	VectorMA (plane->s.origin, 16, forward, start);	// un poco adelante (lejos de la pared de salida)
+	start[2] -= 16;									// y abajo (lejos del cielo)
+
+	tr = gi.trace (start, cam_mins, cam_maxs, start, plane, MASK_SOLID);
+	if (tr.startsolid)
+		return;	// sin lugar seguro este frame: dejar la camara donde estaba
+
+	VectorMA (start, -KAMIKAZE_CAM_BACK, forward, end);	// hacia atras
+	tr = gi.trace (start, cam_mins, cam_maxs, end, plane, MASK_SOLID);
+	VectorCopy (tr.endpos, start);
+
+	VectorCopy (start, end);								// y hacia arriba
+	end[2] += KAMIKAZE_CAM_UP;
+	tr = gi.trace (start, cam_mins, cam_maxs, end, plane, MASK_SOLID);
+
+	// el ojo es origin + viewheight: bajar el origin para que el ojo quede en el punto seguro
+	VectorCopy (tr.endpos, p->s.origin);
+	p->s.origin[2] -= p->viewheight;
 	VectorClear (p->velocity);
 	p->client->ps.gunindex = 0;	// por si algun comando le cambio el arma
 	p->client->ps.pmove.pm_flags |= PMF_NO_PREDICTION;
