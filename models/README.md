@@ -16,7 +16,9 @@ The server also needs `models/items/healthpack/tris.md2` and `weapons/tnt/toss.w
 
 How to use it in game: bind a key to `use special` (the Medic has 2 healthpacks per life), then press fire to throw one.
 
-**Descarga automática:** los `.md2` nombran `skin.pcx`, pero solo existen los `skin.png`. Un jugador que baja el
-modelo desde el server recibe el `.md2` pero nunca la textura (la descarga pide `skin.pcx`), y tampoco el ícono, así que
-ve el botiquín sin textura. Hasta que haya versiones `.pcx` (paleta de Quake 2) o un pak para repartir, cada jugador
-tiene que copiar estos 5 archivos a mano.
+**Descarga automática:** los `.md2` nombran `skin.pcx` y la descarga automática del server pide `.pcx`, así que al lado
+de cada `skin.png` (y de `pics/w_healthpack.png`) hay una versión `.pcx` de 8 bits, con paleta propia de 255 colores
+(Q2PRO usa la paleta de cada `.pcx`; el índice 255 queda reservado, transparente en el ícono). Así el jugador que no
+tiene los archivos los baja solos al conectarse (`allow_download 1` en el server). Quien tenga los `.png` sigue viendo
+esa versión. Hay que subir los 8 archivos al server: los 2 `.md2`, las 2 texturas en `.png` y `.pcx`, y el ícono en
+los dos formatos.
