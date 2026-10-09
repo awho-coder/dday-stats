@@ -410,6 +410,10 @@ void InitGame (void)
 	kamikaze_arty   = gi.cvar("kamikaze_arty", "0", 0);
 	kamikaze_dmg    = gi.cvar("kamikaze_dmg", "1000", 0);    // bomba: 700
 	kamikaze_radius = gi.cvar("kamikaze_radius", "420", 0);  // bomba: 300
+	syringe_throw   = gi.cvar("syringe_throw", "0", 0);      // 1 = aim + fuego lanza la jeringa del Medic
+	syringe_count   = gi.cvar("syringe_count", "9", 0);      // jeringas lanzables por vida
+	syringe_heal    = gi.cvar("syringe_heal", "33", 0);      // vida que recupera el companero
+	syringe_poison  = gi.cvar("syringe_poison", "33", 0);    // dano del veneno por jeringa
 	fast_bleeding = gi.cvar("fast_bleeding", "0", 0);
 	fast_sniper = gi.cvar("fast_sniper", "1", 0);
 

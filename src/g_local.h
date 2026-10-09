@@ -692,6 +692,7 @@ extern	int	body_armor_index;
 #define	MOD_TANKHIT			54
 #define	MOD_SHOTGUN2		55
 #define	MOD_BROWNING		56	// Browning Hi-Power (the Medic's automatic pistol)
+#define	MOD_SYRINGE			57	// poison of a thrown Medic syringe
 
 extern	int	meansOfDeath;
 
@@ -866,6 +867,10 @@ extern cvar_t *fast_arty;
 extern cvar_t *kamikaze_arty;     // 1 = el Officer viaja en el avion del airstrike y se estrella (requiere airstrikes 1)
 extern cvar_t *kamikaze_dmg;       // dano del choque (bomba: 700)
 extern cvar_t *kamikaze_radius;    // radio del choque (bomba: 300)
+extern cvar_t *syringe_throw;      // 1 = el Medic lanza la jeringa con aim + fuego
+extern cvar_t *syringe_count;      // jeringas lanzables por vida (sin contar la de la mano)
+extern cvar_t *syringe_heal;       // vida que recupera el companero que recibe la jeringa
+extern cvar_t *syringe_poison;     // dano total del veneno por jeringa (se reparte en SYRINGE_POISON_TIME)
 extern cvar_t *fast_bleeding;
 extern cvar_t *fast_sniper;
 
@@ -1713,6 +1718,8 @@ struct gclient_s
 	float       last_fire_time;//faf
 
 	float       next_healthpack_time;	// Medic: level.time when he can throw the next healthpack
+	int         syringes;				// Medic: syringes left to throw (the one in the hand is not counted)
+	float       next_syringe_time;		// Medic: level.time when he can throw the next syringe
 
 	qboolean    tank_hit;//faf
 
@@ -2072,6 +2079,11 @@ extern int jpn_index;
 #define HEALTHPACK_FX_TIME		5		// seconds it throws green sparks after it is thrown, then it is just the crate
 #define HEALTHPACK_EDICT_MARGIN	64		// free entities that must be left to throw a pack
 
+// Medic syringe: with the syringe in hand, aim + fire throws it (see syringe_throw)
+#define SYRINGE_THROW_DELAY		0.6		// seconds between two throws (the cycle of the thrown knife)
+#define SYRINGE_POISON_TIME		2		// seconds that the poison of one syringe lasts
+#define SYRINGE_LIFE			5		// seconds before a syringe in the air is removed
+
 
 
 
@@ -2292,7 +2304,8 @@ typedef enum
 	PLANE,
 	BOMB,
 	WEAPON_HEALTHPACK,
-	HEALTHPACK
+	HEALTHPACK,
+	SYRINGE_POISON
 } classnameb_t;
 
 typedef enum
@@ -2338,6 +2351,8 @@ void SetupCampaign (qboolean restart);
 int PlayerCountForTeam (int team_number);
 void Weapon_Healthpack (edict_t *ent);
 void RemoveHealthpacks (edict_t *owner);
+qboolean Syringe_CanThrow (edict_t *ent);
+qboolean Healthpack_EdictsLeft (void);
 void Weapon_Generic (edict_t *ent, int FRAME_ACTIVATE_LAST, int FRAME_LFIRE_LAST, int FRAME_LIDLE_LAST, int FRAME_RELOAD_LAST, int FRAME_LASTRD_LAST,
 					 int FRAME_DEACTIVATE_LAST, int FRAME_RAISE_LAST,int FRAME_AFIRE_LAST, int FRAME_AIDLE_LAST,
 					 int *pause_frames, int *fire_frames, void (*fire)(edict_t *ent));
