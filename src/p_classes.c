@@ -124,6 +124,14 @@ void Give_Class_Weapon(edict_t *ent)
 	}
 
 
+	// Medic: syringes that he can throw this life (the one in the hand is not counted)
+	if (client->resp.mos == MEDIC)
+	{
+		client->syringes = (int)syringe_count->value;
+		if (client->syringes < 0)
+			client->syringes = 0;
+	}
+
 	// Free For All defines its own loadout: the legacy loadout overrides below do not apply to it
 	if (knifefest->value && !G_IsFFA())
 	{

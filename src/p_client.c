@@ -752,6 +752,9 @@ void ClientObituary (edict_t *self, edict_t *inflictor, edict_t *attacker)
 			case MOD_BROWNING:
 				message = "was browned by";
 				break;
+			case MOD_SYRINGE:
+				message = "was poisoned by";
+				break;
 			case MOD_SNIPER:
 				message = "was sniped by";
 				break;
@@ -4036,7 +4039,8 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 
 		if ((ent->client->aim && ent->stanceflags == STANCE_CRAWL &&
 			 ent->client->pers.weapon && ent->client->pers.weapon->position != LOC_GRENADES) ||
-			 (ent->client->pers.weapon && ent->client->pers.weapon->classnameb == WEAPON_MORPHINE))
+			 (ent->client->pers.weapon && ent->client->pers.weapon->classnameb == WEAPON_MORPHINE &&
+			  !(ent->client->aim && Syringe_CanThrow (ent))))	// the Medic moves while he throws syringes
 		{
 			// pbowens: this directly undermines the purpose of ClientSetMaxSpeed :(
 			for (i = 0; i < 3; i++) {
