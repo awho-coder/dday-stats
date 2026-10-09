@@ -551,7 +551,7 @@ void Plane_Fly_Off (edict_t *ent)
 
 #define KAMIKAZE_CAM_BACK		96		// camara detras del avion (ajustar en prueba)
 #define KAMIKAZE_CAM_UP			32		// y por encima
-#define KAMIKAZE_DIVE_PITCH		75		// grados bajo la horizontal al final de la picada
+#define KAMIKAZE_DIVE_START		40		// empieza a picar cuando el blanco queda estos grados bajo la horizontal
 #define KAMIKAZE_PITCH_STEP0	2		// grados por frame al empezar a picar
 #define KAMIKAZE_PITCH_STEP		8		// grados por frame a pleno (tope)
 #define KAMIKAZE_PITCH_RAMP		0.5		// segundos que tarda el paso en ir de STEP0 a STEP
@@ -704,6 +704,7 @@ static void Kamikaze_LinkPilot (edict_t *plane)
 }
 
 // arranca la picada: no toca angulos ni velocidad, eso lo hace Plane_Dive de a poco
+// (el kamikaze no suelta bombas: va directo al punto marcado con los binoculares)
 static void Plane_StartDive (edict_t *plane)
 {
 	plane->speed = VectorLength (plane->velocity);	// velocidad con la que venia
@@ -774,12 +775,40 @@ static float Kamikaze_Angle180 (float a)
 	return a;
 }
 
-// picada: la trompa baja de a poco, el avion acelera y cae hasta chocar
+// gira el angulo cur hacia goal, como mucho step grados
+static float Kamikaze_Approach (float cur, float goal, float step)
+{
+	float diff = Kamikaze_Angle180 (goal - cur);
+
+	if (diff > step)
+		diff = step;
+	else if (diff < -step)
+		diff = -step;
+	return cur + diff;
+}
+
+// hay que empezar la picada? cuando el blanco queda DIVE_START grados bajo la
+// horizontal (asi la picada no depende de la altura del cielo), o si ya lo paso
+static qboolean Kamikaze_ShouldDive (edict_t *plane)
+{
+	vec3_t d;
+	float h, hd;
+
+	VectorSubtract (plane->arty_target, plane->s.origin, d);
+	h = -d[2];
+	d[2] = 0;
+	if (DotProduct (d, plane->movedir) <= 0)
+		return true;
+	hd = VectorLength (d);
+	return atan2 (h, hd) * 180 / M_PI >= KAMIKAZE_DIVE_START;
+}
+
+// picada: la trompa gira de a poco hacia el blanco, el avion acelera y cae hasta chocar
 void Plane_Dive (edict_t *plane)
 {
-	vec3_t end, point, forward;
+	vec3_t end, point, forward, dir, aim;
 	trace_t tr;
-	float t, step, pitch, roll, speed;
+	float t, step, roll, speed;
 
 	// pitch: positivo = trompa abajo; el paso crece de STEP0 a STEP durante PITCH_RAMP
 	t = level.time - plane->timestamp - FRAMETIME;
@@ -789,14 +818,11 @@ void Plane_Dive (edict_t *plane)
 		t = KAMIKAZE_PITCH_RAMP;
 	step = KAMIKAZE_PITCH_STEP0 + (KAMIKAZE_PITCH_STEP - KAMIKAZE_PITCH_STEP0) * t / KAMIKAZE_PITCH_RAMP;
 
-	pitch = Kamikaze_Angle180 (plane->s.angles[PITCH]);
-	if (pitch < KAMIKAZE_DIVE_PITCH)
-	{
-		pitch += step;
-		if (pitch > KAMIKAZE_DIVE_PITCH)
-			pitch = KAMIKAZE_DIVE_PITCH;
-	}
-	plane->s.angles[PITCH] = pitch;
+	// rumbo al blanco: pitch y yaw giran hacia la linea de vista al punto marcado
+	VectorSubtract (plane->arty_target, plane->s.origin, dir);
+	vectoangles (dir, aim);
+	plane->s.angles[PITCH] = Kamikaze_Approach (Kamikaze_Angle180 (plane->s.angles[PITCH]), aim[PITCH], step);
+	plane->s.angles[YAW] = Kamikaze_Approach (plane->s.angles[YAW], aim[YAW], step);
 
 	// roll: se endereza de a poco; sin avelocity para que no siga el alabeo de Plane_Think
 	roll = Kamikaze_Angle180 (plane->s.angles[ROLL]);
@@ -845,13 +871,9 @@ void Plane_Fire (edict_t *ent)
 
 	if (ent->count >= 4)
 	{
-		if (ent->spawnflags & PLANE_KAMIKAZE)
-			Plane_StartDive (ent);
-		else
-		{
-			ent->think = Plane_Fly_Off;
-			ent->nextthink = level.time + .1;
-		}
+		ent->think = Plane_Fly_Off;
+		ent->nextthink = level.time + .1;
+
 	}
 	else
 	{
@@ -936,6 +958,16 @@ void Plane_Think (edict_t *ent)
 
 
 //	safe_bprintf (PRINT_HIGH, "%s \n", vtos(ent->s.angles));
+
+	// kamikaze: no bombardea; pica directo al blanco
+	if (ent->spawnflags & PLANE_KAMIKAZE)
+	{
+		if (Kamikaze_ShouldDive (ent))
+			Plane_StartDive (ent);
+		else
+			ent->nextthink = level.time + .1;
+		return;
+	}
 
 	// kernel: fast plane needs to drop bombs earlier
 	if (fast_arty->value)
