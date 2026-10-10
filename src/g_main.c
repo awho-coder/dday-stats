@@ -132,6 +132,7 @@ cvar_t  *ent_files;
 
 cvar_t *exbattleinfo; // ZeRo
 cvar_t *random_class;	// ZeRo
+cvar_t *tab_panel;
 cvar_t *officer_bonus; // ZeRo
 cvar_t *mauser_only;  //ddaylife
 cvar_t *sniper_only;  //ddaylife 

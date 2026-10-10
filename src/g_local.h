@@ -807,6 +807,7 @@ extern cvar_t  *ent_files;
 
 extern cvar_t  *exbattleinfo; // ZeRo - Activa datos de batalla adicionales: headshots, helmet saves y killing spree. Valores sobre 2 determinan las kills necesarias para la racha.
 extern cvar_t  *random_class; // ZeRo
+extern cvar_t  *tab_panel; // 1 = new team scoreboard (FFA-style panel, flags, Medic heal column); 0 = the classic one
 extern cvar_t  *officer_bonus; // ZeRo - Activa el bonus de cooldown para los airstrikes del officer. Cada kill resta 5 segundos.
 extern cvar_t  *sniper_only;
 extern cvar_t  *mauser_only;
@@ -1435,6 +1436,7 @@ typedef struct
 	client_persistant_t	coop_respawn;	// what to set client->pers to on a respawn
 	int			enterframe;			// level.framenum the client entered the game
 	int			score;				// frags, etc
+	int			heal_given;			// health the Medic gave back to teammates this level (scoreboard)
 	vec3_t		cmd_angles;			// angles sent over in the last command
 	int			game_helpchanged;
 	int			helpchanged;

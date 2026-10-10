@@ -1713,10 +1713,12 @@ void SP_worldspawn (edict_t *ent)
 
 	// pbowens: scoreboard
 	gi.imageindex ("scorehead");
+	// scoreboard panel: the FFA one and the team one (tab_panel) use it, always preloaded so a client already has it
+	// if tab_panel is turned on in the middle of a map
+	gi.imageindex (FFA_PIC_SCORE);
 	if (G_IsFFA())
 	{
-		// Free For All scoreboard panel and winner banner, so the clients load/download them
-		gi.imageindex (FFA_PIC_SCORE);
+		// Free For All winner banner, so the clients load/download it
 		gi.imageindex (FFA_PIC_WINNER);
 	}
 	gi.imageindex ("scoreleft");

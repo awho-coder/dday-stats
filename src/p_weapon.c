@@ -2403,6 +2403,15 @@ static void Syringe_Sparks (vec3_t pos, vec3_t dir, int count, int color)
 	gi.multicast (pos, MULTICAST_PVS);
 }
 
+// adds to the Medic the health a teammate really got back (shown in the scoreboard)
+static void Medic_AddHeal (edict_t *medic, edict_t *target, int health_before)
+{
+	if (!medic || !medic->inuse || !medic->client || medic == target)
+		return;
+	if (target->health > health_before)
+		medic->client->resp.heal_given += target->health - health_before;
+}
+
 static void syringe_touch (edict_t *self, edict_t *other, cplane_t *plane, csurface_t *surf)
 {
 	edict_t	*owner = self->owner;
@@ -2438,9 +2447,12 @@ static void syringe_touch (edict_t *self, edict_t *other, cplane_t *plane, csurf
 			// a teammate: health only, the wounds stay as they are
 			if (other->health < HEALTH_MAX)
 			{
+				int before = other->health;
+
 				other->health += (int)(head ? syringe_heal_head->value : syringe_heal->value);
 				if (other->health > HEALTH_MAX)
 					other->health = HEALTH_MAX;
+				Medic_AddHeal (owner, other, before);
 
 				if (other->health == HEALTH_MAX)
 					other->client->last_wound_inflictor = NULL;
@@ -2644,8 +2656,11 @@ void Weapon_Morphine_Use(edict_t *ent)
 		}
 		else 
 		{
+			int before = target->health;
+
 			full_recovery = ((HEALTH_MAX - target->health) >= HEALTH_INCREMENT) ? true : false;
 			target->health += (full_recovery) ? (HEALTH_MAX - target->health) : HEALTH_INCREMENT;
+			Medic_AddHeal (ent, target, before);
 
 			if (full_recovery && target != ent && invuln_medic->value == 0 && team_kill->value == 0 && target->wound_location ) {
 				safe_cprintf(target, PRINT_HIGH, "You have been fully recovered by %s.\n", ent->client->pers.netname);
@@ -2888,6 +2903,8 @@ qboolean Healthpack_EdictsLeft (void)
 
 static void healthpack_touch (edict_t *ent, edict_t *other, cplane_t *plane, csurface_t *surf)
 {
+	int		before;
+
 	if (!other->client || other == ent->owner)
 		return;
 
@@ -2907,9 +2924,11 @@ static void healthpack_touch (edict_t *ent, edict_t *other, cplane_t *plane, csu
 	other->wound_location = 0;
 	other->die_time = 0;
 
+	before = other->health;
 	other->health += HEALTHPACK_HEAL;
 	if (other->health > HEALTH_MAX)
 		other->health = HEALTH_MAX;
+	Medic_AddHeal (ent->owner, other, before);
 
 	if (other->health == HEALTH_MAX)
 		other->client->last_wound_inflictor = NULL;
