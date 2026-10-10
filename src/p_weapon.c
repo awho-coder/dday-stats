@@ -64,6 +64,7 @@ void TNT_Touch (edict_t *ent, edict_t *other, cplane_t *plane, csurface_t *surf)
 void Shrapnel_Dud (edict_t *ent);
 void Shrapnel_Touch (edict_t *ent, edict_t *other, cplane_t *plane, csurface_t *surf);
 void check_unscope (edict_t *ent);//faf
+void SpawnDamage (int type, vec3_t origin, vec3_t normal, int damage);
 
 void P_ProjectSource (gclient_t *client, vec3_t point, vec3_t distance, vec3_t forward, vec3_t right, vec3_t result)
 {
@@ -2359,9 +2360,22 @@ static void Syringe_Poison (edict_t *victim, edict_t *medic)
 	poison->nextthink = level.time + FRAMETIME;
 }
 
+// a burst of sparks of the palette color where the syringe hits a player
+static void Syringe_Sparks (vec3_t pos, vec3_t dir, int count, int color)
+{
+	gi.WriteByte (svc_temp_entity);
+	gi.WriteByte (TE_LASER_SPARKS);
+	gi.WriteByte (count);
+	gi.WritePosition (pos);
+	gi.WriteDir (dir);
+	gi.WriteByte (color);
+	gi.multicast (pos, MULTICAST_PVS);
+}
+
 static void syringe_touch (edict_t *self, edict_t *other, cplane_t *plane, csurface_t *surf)
 {
 	edict_t	*owner = self->owner;
+	vec3_t	back;
 
 	if (other == owner)
 		return;
@@ -2374,6 +2388,10 @@ static void syringe_touch (edict_t *self, edict_t *other, cplane_t *plane, csurf
 
 	if (owner && owner->client)
 		PlayerNoise (owner, self->s.origin, PNOISE_IMPACT);
+
+	// the effects go back toward where the syringe came from
+	VectorNegate (self->velocity, back);
+	VectorNormalize (back);
 
 	if (other->client && other->health > 0 && !other->deadflag && !other->flyingnun &&
 		other->client->resp.team_on)
@@ -2398,13 +2416,19 @@ static void syringe_touch (edict_t *self, edict_t *other, cplane_t *plane, csurf
 					safe_cprintf (other, PRINT_HIGH, "%s healed you with a syringe.\n", owner->client->pers.netname);
 					safe_cprintf (owner, PRINT_HIGH, "You healed %s with a syringe.\n", other->client->pers.netname);
 				}
-				gi.sound (other, CHAN_ITEM, gi.soundindex ("items/l_health.wav"), 1, ATTN_NORM, 0);
+				// one of the sounds of the syringe of the hand
+				gi.sound (other, CHAN_ITEM, gi.soundindex (va ("items/morphine%i.wav", 1 + (rand() % 3))), 1, ATTN_NORM, 0);
 			}
+			Syringe_Sparks (self->s.origin, back, 30, 0xd0);	// green
 		}
 		else
 		{
 			Syringe_Poison (other, owner);
-			gi.sound (other, CHAN_ITEM, gi.soundindex ("knife/hit.wav"), 1, ATTN_NORM, 0);
+
+			// it gets in the body: a hit sound as a bullet in the torso, some blood and a green cloud of poison
+			gi.sound (other, CHAN_ITEM, gi.soundindex ("misc/hittorso.wav"), 1, ATTN_NORM, 0);
+			SpawnDamage (TE_BLOOD, self->s.origin, back, 0);
+			Syringe_Sparks (self->s.origin, back, 50, 0xd0);	// green
 		}
 	}
 	else
