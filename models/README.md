@@ -22,3 +22,12 @@ de cada `skin.png` (y de `pics/w_healthpack.png`) hay una versión `.pcx` de 8 b
 tiene los archivos los baja solos al conectarse (`allow_download 1` en el server). Quien tenga los `.png` sigue viendo
 esa versión. Hay que subir los 8 archivos al server: los 2 `.md2`, las 2 texturas en `.png` y `.pcx`, y el ícono en
 los dos formatos.
+
+## Jeringa lanzable del Medic
+
+`models/weapons/g_syringe/tris.md2` es la jeringa en vuelo (ver `Syringe_Throw` en `src/p_weapon.c`). Es el frame 0 de
+`players/usa/w_morphine.md2` (la jeringa en la mano del jugador, en `pak1.pak`), centrado en el origen, escalado 3 veces
+(22 u de largo, como el cuchillo lanzado) y con un solo frame. El modelo de la mano está dibujado en la posición de la
+mano del jugador, así que usado tal cual salía corrido unas 11 u de la trayectoria real y se veía chico. Usa la
+textura que ya tienen todos (`players/usa/w_morphine.pcx`), así que solo hay que subir el `.md2` al server; los jugadores
+lo bajan solos con `allow_download 1`.

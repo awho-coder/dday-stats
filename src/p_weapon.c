@@ -2443,7 +2443,7 @@ static qboolean Syringe_Throw (edict_t *ent)
 	syringe->solid = SOLID_BBOX;
 	VectorSet (syringe->mins, -1, -1, -1);
 	VectorSet (syringe->maxs, 1, 1, 1);
-	syringe->s.modelindex = gi.modelindex ("players/usa/w_morphine.md2");
+	syringe->s.modelindex = gi.modelindex ("models/weapons/g_syringe/tris.md2");
 	syringe->s.frame = 0;
 	syringe->touch = syringe_touch;
 	syringe->think = G_FreeEdict;

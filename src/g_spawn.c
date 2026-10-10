@@ -1926,8 +1926,8 @@ void SP_worldspawn (edict_t *ent)
 	gi.soundindex ("weapons/gundrop.wav");
 	gi.soundindex ("weapons/ammodrop.wav");
 
-	// thrown syringe of the Medic (the model of the hand, which only USA and USM precache otherwise)
-	gi.modelindex ("players/usa/w_morphine.md2");
+	// thrown syringe of the Medic (models/weapons/g_syringe: the syringe of the hand, centered and bigger)
+	gi.modelindex ("models/weapons/g_syringe/tris.md2");
 	gi.soundindex ("weapons/hgrenb1a.wav");
 
 	// ZeRo - Sonidos del sistema de rachas.

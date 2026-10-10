@@ -80,8 +80,11 @@ lanzables por vida (el HUD muestra cuántas le quedan), además de la de la mano
 infinita y sigue sirviendo para inyectar de cerca. El Medic se puede mover mientras lanza
 (aim + cuerpo a tierra lo deja quieto, como con el cuchillo).
 
-El modelo de la jeringa en vuelo es el del juego (`players/usa/w_morphine.md2`, ya está en el
-`pak1.pak`): no hay archivos nuevos que subir. Sin jeringas lanzables, con un bot o con
+Saltar no lo saca del apuntado mientras le queden jeringas, igual que con el cuchillo.
+
+El modelo de la jeringa en vuelo es `models/weapons/g_syringe/tris.md2` (ver
+[`../models/README.md`](../models/README.md)): hay que subirlo al server, y los jugadores lo
+bajan solos con `allow_download 1`. Sin jeringas lanzables, con un bot o con
 `invuln_medic` distinto de 0, aim + fuego sigue autocurando como siempre.
 
 | Cvar | Por defecto | Qué hace |
