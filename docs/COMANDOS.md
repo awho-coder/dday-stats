@@ -54,6 +54,22 @@ Ramas de ddaychile integradas el 2026-10-09. Las dos del Medic van detrás de `m
 - **BAR y MP43** (sin cvar) (`lmg-recoil-spread`): el retroceso y el spread siguen subiendo mientras se
   mantiene el gatillo (`LMG_BLOOM_*` en `src/g_local.h`) y la BAR lleva 7 cargadores.
 
+## Juego: contador del airstrike y bonus del Officer (ZeRo)
+
+Rama `officer-improvements` de ddaychile, integrada por `Cambios-Zero` el 2026-10-10:
+
+- **Contador en el HUD** (sin cvar): mientras el equipo espera para volver a pedir un airstrike,
+  el Officer ve los segundos que faltan junto al ícono "NEXT ARTY". Aparece después de confirmar
+  el airstrike y hasta que se puede pedir otro. Necesita `pics/i_nextarty.pcx` en el server y en
+  cada cliente (los jugadores lo bajan solos con `allow_download 1`).
+- **Bonus por kill** (`officer_bonus`): cada kill de un Officer le resta 5 segundos a la espera
+  del airstrike de su equipo, y el aviso de la muerte agrega "AIRSTRIKE COOLDOWN BONUS -5
+  SECONDS". Cuentan todas sus kills, también las del propio airstrike.
+
+| Cvar | Por defecto | Qué hace |
+|---|---|---|
+| `officer_bonus` | `0` | `1` activa el bonus de -5 segundos por kill del Officer. |
+
 ## Servidor: airstrike kamikaze del Officer
 
 Feature de chiste, apagada por defecto. Con `kamikaze_arty 1` (y `airstrikes 1`), el
