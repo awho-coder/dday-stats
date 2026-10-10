@@ -534,6 +534,23 @@ def kamikaze_phrase(text):
         return "kamikaze on"
     return "kamikaze"
 
+MEDIC_ON_VERBS = ("activa", "prende", "enciende", "habilita", "pon ", "mete")
+MEDIC_CLASSIC = ("clasico", "clásico", "normal", "viejo", "original", "antiguo")
+
+def medic_phrase(text):
+    """Frases tipo 'admin activa el medic nuevo' -> 'medic on'; 'apaga el medic nuevo' o
+    'deja el medic clasico' -> 'medic off'; si solo nombran al medic -> estado. Mas estricto que el
+    kamikaze: 'quiero un medico' no prende nada (hace falta 'nuevo' o un verbo de activar).
+    None si no hablan del medic."""
+    low = " " + text.lower() + " "
+    if not re.search(r"\bm[eé]dic[oa]?s?\b", low):
+        return None
+    if any(w in low for w in MEDIC_CLASSIC) or any(w in low for w in KAMIKAZE_OFF):
+        return "medic off"
+    if re.search(r"\bnuevo\b|\bnew\b", low) or any(re.search(r"\b%s" % re.escape(w), low) for w in MEDIC_ON_VERBS):
+        return "medic on"
+    return "medic"
+
 COOLDOWN = {}
 
 def rate_ok(nick):
@@ -633,6 +650,17 @@ def handle_line(line, dry=False):
             say(resp)
             print("KAMIKAZE-PHRASE %s -> %s" % (nick, resp))
             return ("kamikazephrase", nick, text, resp)
+        # Medic nuevo/clasico en frase natural: local, sin LLM
+        med = medic_phrase(text)
+        if med:
+            if not rate_ok(nick):
+                say("[ADMIN] calma, espera unos segundos")
+                return ("rate", nick, text, None)
+            resp, _ = run_cmd(med, nick)
+            log_action(nick, "frase:" + med, resp)
+            say(resp)
+            print("MEDIC-PHRASE %s -> %s" % (nick, resp))
+            return ("medicphrase", nick, text, resp)
         reply, action, ok = ask_relay(nick, text)
         if not ok:
             # fallback: relay caído -> bandeja (Hermes vía cron, ~1 min)
