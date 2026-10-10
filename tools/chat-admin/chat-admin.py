@@ -131,7 +131,7 @@ def find_player(name):
 HELP = ("[ADMIN] comandos: estado, kick <quien>, kickban <quien>, ban <ip>, unban <ip>, "
         "mapa <nombre>, duelo <mapa>, publico, cuenta, reset, resetscore, tiempo, mapas, bans, "
         "bots on|off, kickbots, screenshot, stuff <cmd>, autostuff <cmd>, autostuffoff, "
-        "control <mapa>, ffa <mapa>, dm <mapa>, kamikaze on|off, medic on|off, medic bazooka on|off, officer bonus on|off, "
+        "control <mapa>, ffa <mapa>, dm <mapa>, kamikaze on|off, medic on|off, medic bazooka on|off, officer bonus on|off, tab nuevo on|off, "
         "lock, unlock, say <texto>, ayuda")
 
 def run_cmd(text, by):
@@ -272,6 +272,22 @@ def run_cmd(text, by):
         m = re.search(r'is\s+"(\d+)"', rcon("officer_bonus"))
         estado = "?" if not m else ("ON" if m.group(1) != "0" else "OFF")
         return "[ADMIN] bonus del Officer: %s (uso: officer bonus on|off)" % estado, True
+    if verb in ("tab", "scoreboard"):
+        # cvar de la DLL (no latched): el TAB de equipos nuevo (panel del FFA, banderas, columna Cura del Medic)
+        # rige al instante; un reinicio del server lo apaga
+        a = norm(arg)
+        if not (a.startswith("nuevo") or a.startswith("panel")):
+            return "[ADMIN] uso: tab nuevo on|off", True
+        b = a[len("nuevo"):] if a.startswith("nuevo") else a[len("panel"):]
+        if b in ("on", "1", "si", "activar", "activa", "prender", "prende", "encender", "enciende", "poner", "pon"):
+            rcon("set tab_panel 1")
+            return "[ADMIN] TAB nuevo activado: panel con las banderas, +/- y la curacion del Medic (TAB dos veces: rating y punteria)", True
+        if b in ("off", "0", "no", "desactivar", "desactiva", "apagar", "apaga", "quitar", "quita", "sacar", "saca"):
+            rcon("set tab_panel 0")
+            return "[ADMIN] TAB nuevo DESACTIVADO: vuelve el TAB clasico", True
+        m = re.search(r'is\s+"(\d+)"', rcon("tab_panel"))
+        estado = "?" if not m else ("ON" if m.group(1) != "0" else "OFF")
+        return "[ADMIN] TAB nuevo: %s (uso: tab nuevo on|off)" % estado, True
     if verb in ("medic", "medico", "mdico"):  # norm() borra los acentos: médico -> mdico
         # cvar latched de la DLL: el Medic nuevo (Browning, botiquin y jeringas lanzables) rige desde el
         # proximo mapa; un reinicio del server lo deja como diga server.cfg
@@ -584,6 +600,19 @@ def officer_phrase(text):
         return "officer bonus on"
     return "officer bonus"
 
+def tab_phrase(text):
+    """Frases tipo 'admin activa el tab nuevo' / 'pon el marcador nuevo' -> 'tab nuevo on' ('apaga...' -> off,
+    sin verbo -> estado). Hace falta 'tab'/'marcador'/'scoreboard' Y 'nuevo'/'panel': 'admin marcador' y
+    'admin score' siguen siendo los comandos que muestran el resultado. None si no hablan del TAB nuevo."""
+    low = " " + text.lower() + " "
+    if not re.search(r"\b(tab|marcador|scoreboard)\b", low) or not re.search(r"\b(nuevo|panel)\b", low):
+        return None
+    if any(w in low for w in KAMIKAZE_OFF):  # primero: 'desactiva' contiene 'activa'
+        return "tab nuevo off"
+    if any(re.search(r"\b%s" % re.escape(w), low) for w in KAMIKAZE_ON + ("dale", "da ")):
+        return "tab nuevo on"
+    return "tab nuevo"
+
 def medic_phrase(text):
     """Frases tipo 'admin activa el medic nuevo' -> 'medic on'; 'apaga el medic nuevo' o
     'deja el medic clasico' -> 'medic off'; si solo nombran al medic -> estado. Mas estricto que el
@@ -646,7 +675,7 @@ def looks_command(text):
     return v in {"ayuda","help","estado","status","jugadores","players","kick","kickea","echar",
                  "kickban","ban","unban","delban","desban","lock","unlock","bloquear","abrir",
                  "mapa","map","cambiamapa","duelo","duel","publico","publica","cuenta","startcount",
-                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","dm","kamikaze","kamikase","kamicase","medic","medico","mdico","officer","oficial","officers","oficiales","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
+                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","dm","kamikaze","kamikase","kamicase","medic","medico","mdico","officer","oficial","officers","oficiales","tab","scoreboard","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
                  "restart","reload"}
 
 def handle_line(line, dry=False):
@@ -715,6 +744,17 @@ def handle_line(line, dry=False):
             say(resp)
             print("OFFICER-PHRASE %s -> %s" % (nick, resp))
             return ("officerphrase", nick, text, resp)
+        # TAB de equipos nuevo en frase natural: local, sin LLM
+        tabp = tab_phrase(text)
+        if tabp:
+            if not rate_ok(nick):
+                say("[ADMIN] calma, espera unos segundos")
+                return ("rate", nick, text, None)
+            resp, _ = run_cmd(tabp, nick)
+            log_action(nick, "frase:" + tabp, resp)
+            say(resp)
+            print("TAB-PHRASE %s -> %s" % (nick, resp))
+            return ("tabphrase", nick, text, resp)
         # Medic nuevo/clasico en frase natural: local, sin LLM
         med = medic_phrase(text)
         if med:

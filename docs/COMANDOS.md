@@ -147,6 +147,26 @@ todas las facciones (modelos y sonidos que ya tiene todo el mundo). Funciona con
 |---|---|---|
 | `medic_bazooka` | `0` | `1` le da el lanzajeringas al Medic en el próximo mapa. |
 
+## Servidor: TAB de equipos nuevo (`tab_panel`)
+
+Apagado por defecto: con `tab_panel 0` el TAB de equipos es el de siempre. Con `tab_panel 1` usa el
+panel del Free For All (`pics/ffa_score.png`) con los dos equipos uno sobre otro: la bandera de cada
+bando (`pics/teams/<teamid>`) junto a su título (nombre, kills y puntos), y hasta 16 jugadores en
+total (8 por equipo si hay más; la última fila dice "and N more"). No es latched: rige al instante.
+
+- **Página 1** (primer TAB): `Ping`, `Player` (con `+` si es Medic), `Pts`, `+/-` (kills menos
+  muertes de las stats) y `Cura`. Tu fila se ve resaltada.
+- **Página 2** (segundo TAB): `Ping`, `Player`, rating (con `stats 1`) o precisión (`Acc%`), `Hit` y `Shot`.
+- **Cura:** la vida que el Medic devolvió a sus compañeros en el mapa, con la jeringa en la mano, la
+  lanzada y el botiquín (no cuenta la autocuración ni curar a alguien que ya estaba en 100). Va en
+  blanco si es 0 y en miles desde 1000 (`1k`, `12k`). Siempre se cuenta, pero solo se ve con `tab_panel 1`.
+- Al final del mapa el cartel de victoria va sobre el panel. El marcador de espectadores no cambia.
+- Desde el bot: `tab nuevo on|off` (o "admin activa el tab nuevo"); sin argumento dice el estado.
+
+| Cvar | Por defecto | Qué hace |
+|---|---|---|
+| `tab_panel` | `0` | `1` activa el TAB de equipos nuevo (panel del FFA, banderas, columna Cura). |
+
 ## Servidor: estadísticas
 
 Detalle: [`../stats/README.md`](../stats/README.md).
@@ -199,7 +219,7 @@ comando.
 - **Info:** `estado` `ayuda` `bans` `tiempo` `mapas` `infomapa` `marcador`
   `zona` `versiones` `lag` `tiempos`
 - **Juego:** `mapa <x>` `duelo <mapa>` `publico` `normal` `control <mapa>`
-  `ffa <mapa>` `dm <mapa>` `modo normal|control|ffa|dm|duelo [mapa]` `kamikaze on|off` `evento <nombre>` `cuenta`
+  `ffa <mapa>` `dm <mapa>` `modo normal|control|ffa|dm|duelo [mapa]` `kamikaze on|off` `tab nuevo on|off` `evento <nombre>` `cuenta`
   `reset` `resetscore` `torneo on|off` `freeze` `proximamapa` `lock` `unlock`
   `say <texto>`
 - `control <mapa>` (o `modo control <mapa>`) deja solo ese mapa y **apaga la

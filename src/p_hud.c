@@ -732,6 +732,22 @@ void TeamStats (edict_t *ent)
 #define FFA_ROWS		20
 #define FFA_TEXT_X		40
 
+// ping column of the scoreboard: BOT for the bots, the ping (at most 999) for the rest; pingstring holds 4 chars
+static void Scoreboard_PingString (int client, char *pingstring)
+{
+	edict_t	*cl_ent = g_edicts + 1 + client;
+
+	if (cl_ent->ai)
+		sprintf (pingstring, "BOT");
+	else if (game.clients[client].ping < 1000)
+	{
+		if (snprintf (pingstring, 4, "%3d", game.clients[client].ping % 1000) > 3)
+			sprintf (pingstring, "999");
+	}
+	else
+		sprintf (pingstring, "999");
+}
+
 // Free For All: one individual list sorted by score, no teams and no team counters.
 // During the intermission the winner is shown. The accuracy page (second press of the scores key)
 // uses the same panel with accuracy, hits and shots instead of kills and deaths.
@@ -816,15 +832,7 @@ static void FFA_ScoreboardMessage (edict_t *ent, qboolean accuracy_page)
 
 		cl_ent = g_edicts + 1 + sorted[i];
 
-		if (cl_ent->ai)
-			sprintf(pingstring, "BOT");
-		else if (game.clients[sorted[i]].ping < 1000)
-		{
-			if (snprintf(pingstring, 4, "%3d", game.clients[sorted[i]].ping % 1000) > 3)
-				sprintf(pingstring, "999");
-		}
-		else
-			sprintf(pingstring, "999");
+		Scoreboard_PingString (sorted[i], pingstring);
 
 		// the row of the player looking at the scoreboard is drawn with the alternate (orange) text
 		if (accuracy_page)
@@ -857,6 +865,220 @@ static void FFA_ScoreboardMessage (edict_t *ent, qboolean accuracy_page)
 	gi.WriteString(string);
 }
 
+// Team scoreboard (tab_panel 1): the Free For All panel (FFA_PIC_SCORE) with the two teams one over the other.
+// Each team has its flag (pics/teams/<teamid>, 32 x 32, the one of the HUD) at TEAM_X, and to its right the title
+// (name, kills and points), the column header and the rows. Rows are 33 characters (264 units) from TEAM_X:
+// ping(3) ' ' mark+name(16) and then the columns of the page. 16 rows in all; with 8 + 8 the last one ends right
+// at the bottom of the dark area of the panel (y 270 of the picture).
+#define TEAM_PANEL_Y		FFA_PANEL_Y
+#define TEAM_X				28
+#define TEAM_TEXT_X			(TEAM_X + 32)	// next to the flag, where the names start
+#define TEAM_FIRST_Y		(TEAM_PANEL_Y + 30)
+#define TEAM_ROWS			16
+#define TEAM_MIN_ROWS		8
+#define TEAM_HEADER_DY		21
+#define TEAM_ROWS_DY		36
+#define TEAM_ROW_H			10
+#define TEAM_BANNER_H		80		// the victory pictures are 320 x 80
+
+// rating (stats) or accuracy of a player, as the second page of the classic scoreboard shows it
+static int Scoreboard_Rating (int client)
+{
+	gclient_t	*cl = &game.clients[client];
+	edict_t		*cl_ent = g_edicts + 1 + client;
+	int			hits = cl->resp.accuracy_hits;
+	int			shots = hits + cl->resp.accuracy_misses;
+	int			total_deaths;
+
+	if (!stats->value)
+		return shots ? (int)(100.0 * hits / shots) : 0;
+
+	total_deaths = cl->pers.stat_human_kills + cl->pers.stat_bot_kills +
+		cl->resp.stat_human_plus + cl->resp.stat_bot_plus +
+		cl->pers.stat_human_deaths + cl->pers.stat_bot_deaths +
+		cl->resp.stat_human_minus + cl->resp.stat_bot_minus;
+
+	if (total_deaths != 0 && !cl_ent->ai)
+		return (int)(100.0 * (cl->pers.stat_human_kills + cl->pers.stat_bot_kills +
+							  cl->resp.stat_human_plus + cl->resp.stat_bot_plus) / total_deaths);
+	return 0;
+}
+
+// how many rows of 16 each team gets: all if they fit, if not at least 8 for the first one
+static void Team_PanelRows (int t1, int t2, int *a, int *b)
+{
+	if (t1 + t2 <= TEAM_ROWS)
+	{
+		*a = t1;
+		*b = t2;
+		return;
+	}
+	*a = (TEAM_ROWS - t2 > TEAM_MIN_ROWS) ? TEAM_ROWS - t2 : TEAM_MIN_ROWS;
+	if (*a > t1)
+		*a = t1;
+	*b = t2 < TEAM_ROWS - *a ? t2 : TEAM_ROWS - *a;
+}
+
+// Medic heal column: empty, the number up to 999 and then in thousands
+static void Team_HealString (int heal, char *out)
+{
+	if (heal <= 0)
+		sprintf (out, "     ");
+	else if (heal < 1000)
+		sprintf (out, "%5d", heal);
+	else
+		sprintf (out, "%4dk", heal / 1000 > 9999 ? 9999 : heal / 1000);
+}
+
+// builds the layout of the team scoreboard; the page 2 shows rating or accuracy, hits and shots instead of
+// points, +/- and heal. It is separate from the classic functions, which stay as they are (tab_panel 0).
+// Returns the length of the string
+int Team_PanelLayout (edict_t *viewer, qboolean second_page, char *string, int size)
+{
+	int			sorted[TEAM_TOP][MAX_CLIENTS];
+	int			sortedscores[TEAM_TOP][MAX_CLIENTS];
+	int			total[TEAM_TOP] = {0, 0};
+	int			shown[TEAM_TOP];
+	int			i, j, k, t, team, score, y;
+	char		pingstring[4], name[20], heal[8];
+	gclient_t	*cl;
+
+	for (i = 0; i < game.maxclients; i++)
+	{
+		if (!(g_edicts + 1 + i)->inuse || !game.clients[i].resp.team_on)
+			continue;
+
+		team = game.clients[i].resp.team_on->index;
+		score = game.clients[i].resp.score;
+		if (player_scores->value == 0)
+			j = total[team];
+		else
+		{
+			for (j = 0; j < total[team]; j++)
+				if (score > sortedscores[team][j])
+					break;
+			for (k = total[team]; k > j; k--)
+			{
+				sorted[team][k] = sorted[team][k - 1];
+				sortedscores[team][k] = sortedscores[team][k - 1];
+			}
+		}
+		sorted[team][j] = i;
+		sortedscores[team][j] = score;
+		total[team]++;
+	}
+
+	Team_PanelRows (total[TEAM1], total[TEAM2], &shown[TEAM1], &shown[TEAM2]);
+
+	// panel of the Free For All
+	Com_sprintf (string, size, "xv 0 yv %d picn " FFA_PIC_SCORE " ", TEAM_PANEL_Y);
+
+	// victory picture right above the panel (same logic as the classic scoreboard)
+	if (level.intermissiontime && Last_Team_Winner != 99 && Last_Team_Winner != -1)
+	{
+		if (campaign_winner == 0)
+			strcat (string, va("xv 0 yv %d picn allies_campaign ", TEAM_PANEL_Y - TEAM_BANNER_H - 4));
+		else if (campaign_winner == 1)
+			strcat (string, va("xv 0 yv %d picn axis_campaign ", TEAM_PANEL_Y - TEAM_BANNER_H - 4));
+		else
+			strcat (string, va("xv 0 yv %d picn victory_%s ", TEAM_PANEL_Y - TEAM_BANNER_H - 4,
+							   team_list[Last_Team_Winner]->teamid));
+	}
+	else if (level.intermissiontime && Last_Team_Winner == -1)
+		strcat (string, va("xv 0 yv %d picn victory_none ", TEAM_PANEL_Y - TEAM_BANNER_H - 4));
+
+	y = TEAM_FIRST_Y;
+	for (t = TEAM1; t <= TEAM2; t++)
+	{
+		int rows = shown[t], more = 0;
+
+		// the last visible row says how many are left
+		if (shown[t] < total[t])
+		{
+			more = total[t] - (shown[t] - 1);
+			rows = shown[t] - 1;
+		}
+
+		// flag, title (name, kills and points) and column header; x is set once for the title and the header
+		gi.imageindex (va("teams/%s", team_list[t]->teamid));
+		sprintf (string + strlen(string), "xv %d yv %d picn teams/%s xv %d yv %d string2 \"%-8.8s K %3d/%-3d%cP %3d/%-3d\" ",
+				 TEAM_X, y, team_list[t]->teamid,
+				 TEAM_TEXT_X, y + 5,
+				 team_list[t]->teamname,
+				 team_list[t]->kills, team_list[t]->need_kills,
+				 team_list[t]->kills_and_points ? '&' : ' ',
+				 team_list[t]->score, team_list[t]->need_points);
+		sprintf (string + strlen(string), "yv %d string \"%s\" ", y + TEAM_HEADER_DY,
+				 second_page ? (stats->value ? "Player          Rtg% Hit Shot" : "Player          Acc% Hit Shot")
+				 : (player_scores->value ? "Player           Pts +/- Cura" : "Player               +/- Cura"));
+
+		// the x of the rows is set once for the whole team
+		sprintf (string + strlen(string), "xv %d ", TEAM_X);
+
+		for (i = 0; i < rows; i++)
+		{
+			cl = &game.clients[sorted[t][i]];
+			Scoreboard_PingString (sorted[t][i], pingstring);
+			Com_sprintf (name, sizeof(name), "%c%.15s", (cl->resp.mos == MEDIC) ? '+' : ' ', cl->pers.netname);
+
+			if (second_page)
+			{
+				int hits = cl->resp.accuracy_hits;
+				int shots = hits + cl->resp.accuracy_misses;
+
+				sprintf (string + strlen(string), "yv %d %s \"%s %-16.16s%3d%%%4d%5d\" ",
+						 y + TEAM_ROWS_DY + i * TEAM_ROW_H,
+						 (sorted[t][i] == viewer - g_edicts - 1) ? "string2" : "string",
+						 pingstring, name, Scoreboard_Rating (sorted[t][i]),
+						 hits > 9999 ? 9999 : hits, shots > 99999 ? 99999 : shots);
+			}
+			else
+			{
+				char	pts[8];
+
+				if (player_scores->value)
+					sprintf (pts, "%4d", coop->value ? cl->resp.points : cl->resp.score);
+				else
+					sprintf (pts, "    ");
+				Team_HealString (cl->resp.heal_given, heal);
+
+				// +/- is the same as in the second page of the classic scoreboard
+				sprintf (string + strlen(string), "yv %d %s \"%s %-16.16s%s%+4d%s\" ",
+						 y + TEAM_ROWS_DY + i * TEAM_ROW_H,
+						 (sorted[t][i] == viewer - g_edicts - 1) ? "string2" : "string",
+						 pingstring, name, pts,
+						 cl->resp.stat_human_plus + cl->resp.stat_bot_plus -
+						 cl->resp.stat_human_minus - cl->resp.stat_bot_minus,
+						 heal);
+			}
+		}
+
+		if (more)
+		{
+			sprintf (string + strlen(string), "yv %d string \"    and %d more\" ",
+					 y + TEAM_ROWS_DY + rows * TEAM_ROW_H, more);
+			rows++;
+		}
+
+		// next team: after the last row, with a gap
+		y += TEAM_ROWS_DY + rows * TEAM_ROW_H + TEAM_ROW_H;
+	}
+
+	if (strlen(string) > 1300)	// for debugging...
+		gi.dprintf ("Warning: scoreboard string neared or exceeded max length\nDump:\n%s\n---\n", string);
+
+	return (int)strlen(string);
+}
+
+static void Team_PanelScoreboard (edict_t *ent, qboolean second_page)
+{
+	char	string[1400];
+
+	Team_PanelLayout (ent, second_page, string, sizeof(string));
+	gi.WriteByte (svc_layout);
+	gi.WriteString (string);
+}
+
 void A_ScoreboardMessage (edict_t *ent)//, edict_t *killer)
 {
 //	char scoreleftpic[256];   //faf:  for team dll support
@@ -885,6 +1107,12 @@ void A_ScoreboardMessage (edict_t *ent)//, edict_t *killer)
 	if (G_IsFFA())
 	{
 		FFA_ScoreboardMessage(ent, false);
+		return;
+	}
+
+	if (tab_panel->value)
+	{
+		Team_PanelScoreboard (ent, false);
 		return;
 	}
 
@@ -1193,6 +1421,12 @@ void A_ScoreboardMessage2 (edict_t *ent)//, edict_t *killer)
 	if (G_IsFFA())
 	{
 		FFA_ScoreboardMessage(ent, true);
+		return;
+	}
+
+	if (tab_panel->value)
+	{
+		Team_PanelScoreboard (ent, true);
 		return;
 	}
 

@@ -345,6 +345,7 @@ void InitGame (void)
 
 	exbattleinfo =  gi.cvar ("exbattleinfo", "0", 0); // ZeRo
 	random_class = gi.cvar ("random_class", "0", 0); // ZeRo
+	tab_panel = gi.cvar ("tab_panel", "0", 0);
 	officer_bonus = gi.cvar ("officer_bonus", "0", 0); // ZeRo
 	mauser_only = gi.cvar ("mauser_only", "0", 0);
 	swords = gi.cvar ("swords", "0", 0);
