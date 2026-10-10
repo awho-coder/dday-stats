@@ -66,7 +66,7 @@ de airstrike a su nombre. Los aviones de los mapas (`misc_airstrike`) no cambian
 |---|---|---|
 | `kamikaze_arty` | `0` | `1` activa el kamikaze en el próximo airstrike (un vuelo ya en curso no cambia). |
 | `kamikaze_dmg` | `1000` | Daño del choque (una bomba normal hace 700). |
-| `kamikaze_radius` | `420` | Radio del choque (una bomba normal: 300). |
+| `kamikaze_radius` | `700` | Radio del choque (una bomba normal: 300). Un anillo de explosiones a media distancia muestra el área. |
 
 ## Servidor: Medic nuevo (`medic_new`)
 

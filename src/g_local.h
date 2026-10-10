@@ -1047,6 +1047,7 @@ void MoveToTheirSpawnPoint(edict_t *ent);
 
 // kamikaze (g_arty.c): el Officer viaja en el avion del airstrike y se estrella
 #define PLANE_KAMIKAZE 1 // spawnflags del avion del Officer cuando lleva piloto
+#define KAMIKAZE_RING 8 // explosiones en anillo alrededor del choque (muestran el area de kamikaze_radius)
 void Kamikaze_Release (edict_t *p, qboolean to_spawn);
 qboolean Kamikaze_PlaneValid (edict_t *p);
 void Kamikaze_Follow (edict_t *plane);

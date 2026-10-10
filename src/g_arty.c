@@ -719,6 +719,8 @@ static void Plane_Crash (edict_t *plane, vec3_t point)
 {
 	edict_t *p = plane->owner;
 	int n;
+	vec3_t ring, up;
+	trace_t tr;
 
 	VectorCopy (point, plane->s.origin);
 	VectorClear (plane->velocity);
@@ -755,6 +757,23 @@ static void Plane_Crash (edict_t *plane, vec3_t point)
 	gi.WriteByte (TE_EXPLOSION2);
 	gi.WritePosition (point);
 	gi.multicast (point, MULTICAST_PHS);
+
+	// anillo de explosiones a media distancia del radio, para que se vea el area del choque
+	// (cada una se corta contra las paredes: no aparece del otro lado de un muro)
+	VectorCopy (point, up);
+	up[2] += 16;
+	for (n = 0; n < KAMIKAZE_RING; n++)
+	{
+		float a = (n * 2 * M_PI) / KAMIKAZE_RING + crandom () * 0.3;
+		float d = kamikaze_radius->value * (0.4 + random () * 0.2);
+
+		VectorSet (ring, up[0] + cos (a) * d, up[1] + sin (a) * d, up[2]);
+		tr = gi.trace (up, NULL, NULL, ring, plane, MASK_SOLID);
+		gi.WriteByte (svc_temp_entity);
+		gi.WriteByte (TE_EXPLOSION1);
+		gi.WritePosition (tr.endpos);
+		gi.multicast (tr.endpos, MULTICAST_PHS);
+	}
 
 	n = 3 + rand() % 3;
 	while (n--)
