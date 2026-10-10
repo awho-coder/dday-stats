@@ -1716,8 +1716,8 @@ void SP_worldspawn (edict_t *ent)
 	if (G_IsFFA())
 	{
 		// Free For All scoreboard panel and winner banner, so the clients load/download them
-		gi.imageindex ("ffa_score");
-		gi.imageindex ("ffa_winner");
+		gi.imageindex (FFA_PIC_SCORE);
+		gi.imageindex (FFA_PIC_WINNER);
 	}
 	gi.imageindex ("scoreleft");
 	gi.imageindex ("scoreright");

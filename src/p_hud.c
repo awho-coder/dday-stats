@@ -767,7 +767,7 @@ static void FFA_ScoreboardMessage (edict_t *ent, qboolean accuracy_page)
 	}
 
 	// own panel (pics/ffa_score.png) as background: the team ones carry team logos and flags
-	sprintf (string, "xv 0 yv %d picn ffa_score ", FFA_PANEL_Y);
+	sprintf (string, "xv 0 yv %d picn " FFA_PIC_SCORE " ", FFA_PANEL_Y);
 
 	// the text stays inside the dark area of the panel
 	if (accuracy_page)
@@ -792,7 +792,7 @@ static void FFA_ScoreboardMessage (edict_t *ent, qboolean accuracy_page)
 			Com_sprintf (title, sizeof(title), "%.12s WINS!", game.clients[sorted[0]].pers.netname);
 
 		// winner banner right above the panel; the number is the top score (stat 24)
-		sprintf (string + strlen(string), "xv 0 yv %d picn ffa_winner ", FFA_PANEL_Y - FFA_BANNER_H - 4);
+		sprintf (string + strlen(string), "xv 0 yv %d picn " FFA_PIC_WINNER " ", FFA_PANEL_Y - FFA_BANNER_H - 4);
 		sprintf (string + strlen(string), "xv %d yv %d string2 \"%s\" ", 160 - 4 * (int)strlen(title),
 				 FFA_PANEL_Y - FFA_BANNER_H - 4 + FFA_BANNER_TITLE_Y, title);
 		if (sortedscores[0] > 0)
