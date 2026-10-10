@@ -1941,7 +1941,20 @@ void G_SetStats (edict_t *ent)
 	{
 		ent->client->ps.stats[STAT_TIMER_ICON] = gi.imageindex ("i_dday");
 		ent->client->ps.stats[STAT_TIMER] = ((int)(15 + level.map_vote_time - level.time));
+	}
+	// Mostrar cooldown del ataque aéreo - ZeRo
+	else if (ent->client->resp.mos == OFFICER &&
+			 ent->client->resp.team_on &&
+			 ent->client->resp.AlreadySpawned &&
+			 !ent->deadflag &&
+			 ent->client->resp.team_on->arty_num >= (int)arty_max->value &&
+			 ent->client->resp.team_on->arty_time_restrict > level.time &&
+			 level.time >= ent->client->resp.team_on->arty_time_restrict - arty_time->value - arty_delay->value)
+	{
+		float airstrikecd = ent->client->resp.team_on->arty_time_restrict - level.time;
 
+		ent->client->ps.stats[STAT_TIMER_ICON] = gi.imageindex("i_nextarty");
+		ent->client->ps.stats[STAT_TIMER] = (int)airstrikecd + 1;
 	}
 
 

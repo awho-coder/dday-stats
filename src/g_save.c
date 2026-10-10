@@ -345,6 +345,7 @@ void InitGame (void)
 
 	exbattleinfo =  gi.cvar ("exbattleinfo", "0", 0); // ZeRo
 	random_class = gi.cvar ("random_class", "0", 0); // ZeRo
+	officer_bonus = gi.cvar ("officer_bonus", "0", 0); // ZeRo
 	mauser_only = gi.cvar ("mauser_only", "0", 0);
 	swords = gi.cvar ("swords", "0", 0);
 	sniper_only = gi.cvar ("sniper_only", "0", 0);
@@ -1080,4 +1081,3 @@ void ReadLevel (char *filename)
 				ent->nextthink = level.time + ent->delay;
 	}
 }
-
