@@ -1620,6 +1620,39 @@ Medic only: it is selected like a weapon (use special) and thrown with fire (see
 
 	},
 
+/* weapon_syringelauncher: the joke bazooka of the Medic with medic_bazooka (see Weapon_SyringeLauncher).
+   It uses the bazooka of USA for every faction and it can not be picked up nor dropped. As the Morphine, it is
+   its own ammo (Weapon_Generic does nothing for a weapon without ammo); its shots are client->launcher_shots
+*/
+	{
+		"weapon_syringelauncher",
+		WEAPON_SYRINGE_LAUNCHER,
+		NULL,
+		Use_Weapon,
+		NULL,
+		Weapon_SyringeLauncher,
+		"misc/w_pkup.wav",
+		"models/weapons/usa/g_bazooka/tris.md2",
+		0,
+		"models/weapons/usa/v_bazooka/tris.md2",
+/* icon */		"w_bazooka",
+/* pickup */	"Syringe Launcher",
+/* width */		0,
+		1,
+		"Syringe Launcher",
+		IT_WEAPON|IT_AMMO,
+		NULL,
+		0,
+		LOC_PISTOL,
+		0,
+		0,
+		0,
+		0,
+/* precache */ "usa/bazooka/fire.wav",
+		""
+
+	},
+
 /*QUAKED weapon_Morphine(.3 .3 1) (-16 -16 -16) (16 16 16)
 */
 	{

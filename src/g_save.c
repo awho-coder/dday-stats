@@ -411,6 +411,7 @@ void InitGame (void)
 	kamikaze_dmg    = gi.cvar("kamikaze_dmg", "1000", 0);    // bomba: 700
 	kamikaze_radius = gi.cvar("kamikaze_radius", "700", 0);  // bomba: 300
 	medic_new       = gi.cvar("medic_new", "0", CVAR_LATCH); // 1 = Medic nuevo (Browning, botiquin, jeringas); se aplica en el proximo mapa
+	medic_bazooka   = gi.cvar("medic_bazooka", "0", CVAR_LATCH); // 1 = lanzajeringas en lugar de la pistola del Medic; se aplica en el proximo mapa
 	syringe_count   = gi.cvar("syringe_count", "9", 0);      // jeringas lanzables por vida
 	syringe_heal    = gi.cvar("syringe_heal", "33", 0);      // vida que recupera el companero
 	syringe_heal_head = gi.cvar("syringe_heal_head", "45", 0); // vida que recupera el companero si le pega en la cabeza

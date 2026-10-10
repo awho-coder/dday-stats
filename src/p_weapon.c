@@ -2408,7 +2408,9 @@ static void syringe_touch (edict_t *self, edict_t *other, cplane_t *plane, csurf
 	edict_t	*owner = self->owner;
 	vec3_t	back;
 
-	if (other == owner)
+	// the Medic, and the other syringes: the ones of a shot of the launcher start at the same point and, as they
+	// move, G_TouchTriggers makes them touch each other
+	if (other == owner || other->classnameb == SYRINGE)
 		return;
 
 	if (surf && (surf->flags & SURF_SKY))
@@ -2484,12 +2486,52 @@ static void syringe_touch (edict_t *self, edict_t *other, cplane_t *plane, csurf
 	G_FreeEdict (self);
 }
 
+// one syringe in the air from start toward dir (normalized), thrown by ent at speed, with gravity (1 = normal);
+// the thrown syringe and the syringe launcher use it. ent must have a team. solid is SOLID_BBOX for a thrown
+// syringe; the launcher uses SOLID_TRIGGER: the syringes of a shot start at the same point and, solid, they hit each other
+// (SV_Impact) and broke at the muzzle (syringe_touch also ignores the other syringes). Its own move still hits the
+// players and the walls
+static void Syringe_Launch (edict_t *ent, vec3_t start, vec3_t dir, float speed, float gravity, solid_t solid)
+{
+	edict_t	*syringe;
+	trace_t	tr;
+
+	syringe = G_Spawn ();
+	syringe->classname = "syringe";
+	syringe->classnameb = SYRINGE;
+	syringe->owner = ent;
+	syringe->obj_owner = ent->client->resp.team_on->index;	// the team when it is thrown
+	VectorCopy (start, syringe->s.origin);
+	VectorCopy (start, syringe->s.old_origin);
+	vectoangles (dir, syringe->s.angles);
+	VectorScale (dir, speed, syringe->velocity);
+	VectorClear (syringe->avelocity);	// it flies point first, as a dart
+	syringe->movetype = MOVETYPE_TOSS;
+	syringe->gravity = gravity;
+	syringe->clipmask = MASK_SHOT;
+	syringe->solid = solid;
+	VectorSet (syringe->mins, -1, -1, -1);
+	VectorSet (syringe->maxs, 1, 1, 1);
+	syringe->s.modelindex = gi.modelindex ("models/weapons/g_syringe/tris.md2");
+	syringe->s.frame = 0;
+	syringe->touch = syringe_touch;
+	syringe->think = G_FreeEdict;
+	syringe->nextthink = level.time + SYRINGE_LIFE;
+	gi.linkentity (syringe);
+
+	// do not go through a wall that is right in front of the Medic
+	tr = gi.trace (ent->s.origin, NULL, NULL, syringe->s.origin, syringe, MASK_SHOT);
+	if (tr.fraction < 1.0)
+	{
+		VectorMA (syringe->s.origin, -10, dir, syringe->s.origin);
+		syringe->touch (syringe, tr.ent, NULL, NULL);
+	}
+}
+
 // throws a syringe in the direction the Medic is aiming (as Knife_Throw); returns false if it could not be thrown
 static qboolean Syringe_Throw (edict_t *ent)
 {
-	edict_t	*syringe;
 	vec3_t	forward, right, offset, start;
-	trace_t	tr;
 
 	if (!ent->client->resp.team_on)
 		return false;
@@ -2500,26 +2542,7 @@ static qboolean Syringe_Throw (edict_t *ent)
 	start[2] += 5;
 	VectorNormalize (forward);
 
-	syringe = G_Spawn ();
-	syringe->classname = "syringe";
-	syringe->owner = ent;
-	syringe->obj_owner = ent->client->resp.team_on->index;	// the team when it is thrown
-	VectorCopy (start, syringe->s.origin);
-	VectorCopy (start, syringe->s.old_origin);
-	vectoangles (forward, syringe->s.angles);
-	VectorScale (forward, KNIFE_THROW_SPEED, syringe->velocity);
-	VectorClear (syringe->avelocity);	// it flies point first, as a dart
-	syringe->movetype = MOVETYPE_TOSS;
-	syringe->clipmask = MASK_SHOT;
-	syringe->solid = SOLID_BBOX;
-	VectorSet (syringe->mins, -1, -1, -1);
-	VectorSet (syringe->maxs, 1, 1, 1);
-	syringe->s.modelindex = gi.modelindex ("models/weapons/g_syringe/tris.md2");
-	syringe->s.frame = 0;
-	syringe->touch = syringe_touch;
-	syringe->think = G_FreeEdict;
-	syringe->nextthink = level.time + SYRINGE_LIFE;
-	gi.linkentity (syringe);
+	Syringe_Launch (ent, start, forward, KNIFE_THROW_SPEED, 1.0, SOLID_BBOX);
 
 	Play_WepSound (ent, "knife/fire.wav");
 	PlayerNoise (ent, ent->s.origin, PNOISE_SELF);
@@ -2542,14 +2565,6 @@ static qboolean Syringe_Throw (edict_t *ent)
 		ent->client->anim_priority = ANIM_WAVE;
 		ent->s.frame = 222;
 		ent->client->anim_end = 225;
-	}
-
-	// do not go through a wall that is right in front of the Medic
-	tr = gi.trace (ent->s.origin, NULL, NULL, syringe->s.origin, syringe, MASK_SHOT);
-	if (tr.fraction < 1.0)
-	{
-		VectorMA (syringe->s.origin, -10, forward, syringe->s.origin);
-		syringe->touch (syringe, tr.ent, NULL, NULL);
 	}
 
 	return true;
@@ -2728,6 +2743,81 @@ void Weapon_Morphine(edict_t *ent)
 		45, 45, 49, 
 		52, 55, 66, 
 		pause_frames,fire_frames,Weapon_Morphine_Use);
+}
+
+/*
+======================================================================
+
+SYRINGE LAUNCHER
+
+A joke for medic_bazooka: the Medic carries it instead of his pistol. Every shot fires SYRINGE_LAUNCHER_COUNT
+syringes at once, spread as a shotgun, and each one is a thrown syringe (it heals the teammates and poisons the
+enemies). SYRINGE_LAUNCHER_SHOTS shots per life, it is not reloaded. It fires standing, moving and without aim.
+It looks like the bazooka of USA for every faction (the models and sounds every player already has).
+
+======================================================================
+*/
+
+static void Weapon_SyringeLauncher_Fire (edict_t *ent)
+{
+	vec3_t	forward, right, up, offset, start, dir;
+	int		i;
+
+	ent->client->ps.gunframe++;
+
+	if (level.time < ent->client->next_launcher_time)
+		return;
+
+	if (ent->client->launcher_shots <= 0 || !ent->client->resp.team_on)
+	{
+		if (level.time >= ent->pain_debounce_time)
+		{
+			gi.sound (ent, CHAN_VOICE, gi.soundindex ("weapons/noammo.wav"), 1, ATTN_NORM, 0);
+			ent->pain_debounce_time = level.time + 1;
+		}
+		return;
+	}
+
+	if (!Healthpack_EdictsLeft ())	// a shot of syringes and their poisons: leave entities for the server
+		return;
+
+	AngleVectors (ent->client->v_angle, forward, right, up);
+	VectorSet (offset, 16, 8, ent->viewheight - 8);
+	P_ProjectSource (ent->client, ent->s.origin, offset, forward, right, start);
+
+	for (i = 0; i < SYRINGE_LAUNCHER_COUNT; i++)
+	{
+		VectorMA (forward, crandom () * SYRINGE_LAUNCHER_SPREAD, right, dir);
+		VectorMA (dir, crandom () * SYRINGE_LAUNCHER_SPREAD, up, dir);
+		VectorNormalize (dir);
+		Syringe_Launch (ent, start, dir, SYRINGE_LAUNCHER_SPEED, SYRINGE_LAUNCHER_GRAVITY, SOLID_TRIGGER);
+	}
+
+	ent->client->launcher_shots--;
+	ent->client->next_launcher_time = level.time + SYRINGE_LAUNCHER_DELAY;
+
+	gi.sound (ent, CHAN_WEAPON, gi.soundindex ("usa/bazooka/fire.wav"), 1, ATTN_NORM, 0);
+	VectorScale (forward, -4, ent->client->kick_origin);
+	ent->client->kick_angles[0] = -6;
+	PlayerNoise (ent, ent->s.origin, PNOISE_WEAPON);
+}
+
+void Weapon_SyringeLauncher (edict_t *ent)
+{
+	static int	pause_frames[] = {0};
+	static int	fire_frames[1];
+
+	// the frames of the bazooka of USA (Weapon_Bazooka)
+	fire_frames[0] = (ent->client->aim) ? 73 : 4;
+
+	ent->client->p_rnd = &ent->client->launcher_shots;	// the HUD shows the shots that are left
+	ent->client->crosshair = true;
+
+	Weapon_Generic (ent,
+		 3,  5, 45,
+		65, 65, 69,
+		72, 80, 86,
+		pause_frames, fire_frames, Weapon_SyringeLauncher_Fire);
 }
 
 //6 minutes for bandage

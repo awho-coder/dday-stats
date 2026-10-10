@@ -1966,6 +1966,7 @@ void SP_worldspawn (edict_t *ent)
 
 	// pbowens: precache these here b/c players use them
 	PrecacheItem ( FindItem("Morphine")		);
+	PrecacheItem ( FindItem("Syringe Launcher") );	// medic_bazooka: models of the bazooka of USA, for every faction
 	PrecacheItem ( FindItem("Healthpack")	);
 	PrecacheItem ( FindItem("Helmet")		);
 	PrecacheItem ( FindItem("Fists")		);

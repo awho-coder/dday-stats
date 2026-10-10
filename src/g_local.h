@@ -867,6 +867,7 @@ extern cvar_t *fast_arty;
 extern cvar_t *kamikaze_arty;     // 1 = el Officer viaja en el avion del airstrike y se estrella (requiere airstrikes 1)
 extern cvar_t *kamikaze_dmg;       // dano del choque (bomba: 700)
 extern cvar_t *kamikaze_radius;    // radio del choque (bomba: 300)
+extern cvar_t *medic_bazooka;      // 1 = el Medic lleva el lanzajeringas en lugar de la pistola (latched)
 extern cvar_t *medic_new;          // 1 = Medic nuevo: Browning, botiquin lanzable y jeringas lanzables (latched)
 extern cvar_t *syringe_count;      // jeringas lanzables por vida (sin contar la de la mano)
 extern cvar_t *syringe_heal;       // vida que recupera el companero que recibe la jeringa
@@ -1723,6 +1724,8 @@ struct gclient_s
 	float       next_healthpack_time;	// Medic: level.time when he can throw the next healthpack
 	int         syringes;				// Medic: syringes left to throw (the one in the hand is not counted)
 	float       next_syringe_time;		// Medic: level.time when he can throw the next syringe
+	int         launcher_shots;			// Medic with medic_bazooka: shots left in the syringe launcher
+	float       next_launcher_time;		// Medic with medic_bazooka: level.time when he can fire it again
 	float       last_damage_time;		// level.time of the last damage taken (the Medic heals himself after MEDIC_REGEN_DELAY)
 
 	qboolean    tank_hit;//faf
@@ -2089,6 +2092,14 @@ extern int jpn_index;
 #define SYRINGE_POISON_TIME		2		// seconds that the poison of one syringe lasts
 #define SYRINGE_LIFE			5		// seconds before a syringe in the air is removed
 
+// syringe launcher (medic_bazooka): a joke bazooka that fires SYRINGE_LAUNCHER_COUNT syringes at once, as a shotgun
+#define SYRINGE_LAUNCHER_SHOTS	5		// shots per life, it is not reloaded
+#define SYRINGE_LAUNCHER_COUNT	15		// syringes of every shot
+#define SYRINGE_LAUNCHER_SPREAD	0.08	// spread of the syringes (sideways and up, in units of the forward vector: ~4.6 degrees)
+#define SYRINGE_LAUNCHER_SPEED	1600	// speed of its syringes (a thrown one flies at KNIFE_THROW_SPEED, 950)
+#define SYRINGE_LAUNCHER_GRAVITY	0.35	// gravity of its syringes (1 = the thrown one), so they fly farther
+#define SYRINGE_LAUNCHER_DELAY	1.0		// seconds between two shots
+
 // Medic regeneration (medic_new): without damage for MEDIC_REGEN_DELAY seconds he recovers MEDIC_REGEN_RATE health a second
 #define MEDIC_REGEN_DELAY		3		// seconds without damage before he starts to heal
 #define MEDIC_REGEN_RATE		10		// health a second, up to HEALTH_MAX
@@ -2314,7 +2325,9 @@ typedef enum
 	BOMB,
 	WEAPON_HEALTHPACK,
 	HEALTHPACK,
-	SYRINGE_POISON
+	SYRINGE_POISON,
+	WEAPON_SYRINGE_LAUNCHER,
+	SYRINGE
 } classnameb_t;
 
 typedef enum
@@ -2363,6 +2376,7 @@ void RemoveHealthpacks (edict_t *owner);
 qboolean Syringe_CanThrow (edict_t *ent);
 qboolean Healthpack_EdictsLeft (void);
 void Medic_Regen (edict_t *ent);
+void Weapon_SyringeLauncher (edict_t *ent);
 void Weapon_Generic (edict_t *ent, int FRAME_ACTIVATE_LAST, int FRAME_LFIRE_LAST, int FRAME_LIDLE_LAST, int FRAME_RELOAD_LAST, int FRAME_LASTRD_LAST,
 					 int FRAME_DEACTIVATE_LAST, int FRAME_RAISE_LAST,int FRAME_AFIRE_LAST, int FRAME_AIDLE_LAST,
 					 int *pause_frames, int *fire_frames, void (*fire)(edict_t *ent));
