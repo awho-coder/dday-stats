@@ -413,7 +413,9 @@ void InitGame (void)
 	medic_new       = gi.cvar("medic_new", "0", CVAR_LATCH); // 1 = Medic nuevo (Browning, botiquin, jeringas); se aplica en el proximo mapa
 	syringe_count   = gi.cvar("syringe_count", "9", 0);      // jeringas lanzables por vida
 	syringe_heal    = gi.cvar("syringe_heal", "33", 0);      // vida que recupera el companero
+	syringe_heal_head = gi.cvar("syringe_heal_head", "45", 0); // vida que recupera el companero si le pega en la cabeza
 	syringe_poison  = gi.cvar("syringe_poison", "33", 0);    // dano del veneno por jeringa
+	syringe_poison_head = gi.cvar("syringe_poison_head", "50", 0); // dano del veneno de una jeringa en la cabeza
 	fast_bleeding = gi.cvar("fast_bleeding", "0", 0);
 	fast_sniper = gi.cvar("fast_sniper", "1", 0);
 
