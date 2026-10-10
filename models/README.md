@@ -25,9 +25,17 @@ los dos formatos.
 
 ## Jeringa lanzable del Medic
 
-`models/weapons/g_syringe/tris.md2` es la jeringa en vuelo (ver `Syringe_Throw` en `src/p_weapon.c`). Es el frame 0 de
-`players/usa/w_morphine.md2` (la jeringa en la mano del jugador, en `pak1.pak`), centrado en el origen, escalado 3 veces
-(22 u de largo, como el cuchillo lanzado) y con un solo frame. El modelo de la mano está dibujado en la posición de la
-mano del jugador, así que usado tal cual salía corrido unas 11 u de la trayectoria real y se veía chico. Usa la
-textura que ya tienen todos (`players/usa/w_morphine.pcx`), así que solo hay que subir el `.md2` al server; los jugadores
-lo bajan solos con `allow_download 1`.
+Files used by the syringes the Medic throws with `medic_new 1` (see `Syringe_Throw` in `src/p_weapon.c`). Copy them to
+the `dday` folder of the server; players download them on their own with `allow_download 1` (the `.md2` names
+`skin.pcx`, which is what the download asks for; Q2PRO uses the `skin.png` next to it when it has one).
+
+| File | What it is |
+|---|---|
+| `models/weapons/g_syringe/tris.md2` | The syringe in the air: 22 u long (as the thrown knife), centered on the origin, needle toward +X, one frame. |
+| `models/weapons/g_syringe/skin.png` + `skin.pcx` | 64x64 skin with the 4 plain colors of the parts (black, green, white plastic, metal). |
+
+**Credit:** "Medical Syringe" by **assetfactory** (https://sketchfab.com/assetfactory), from Sketchfab
+(https://sketchfab.com/3d-models/medical-syringe-244ab35976ca46758fda5ae9c5ecc9ee), under the Sketchfab Standard
+license (https://sketchfab.com/licenses). Converted from the `.glb` to `.md2` (3260 triangles): the parts keep their
+color, the graduation decal and the transparency of the barrel were dropped (md2 has no transparency, the barrel is
+opaque light blue-white).
