@@ -2258,7 +2258,7 @@ void Weapon_Antidote(edict_t *ent)
 
 SYRINGE
 
-With syringe_throw on, the Medic throws the syringe in his hand with aim + fire, as the knife. A teammate it
+With medic_new on, the Medic throws the syringe in his hand with aim + fire, as the knife. A teammate it
 hits recovers syringe_heal health (wounds are not cured); an enemy is poisoned: syringe_poison damage spread
 over SYRINGE_POISON_TIME seconds, which stacks with every syringe and can kill (MOD_SYRINGE). The syringe of
 the hand is never used up; he carries syringe_count more to throw.
@@ -2266,11 +2266,11 @@ the hand is never used up; he carries syringe_count more to throw.
 ======================================================================
 */
 
-// syringe_throw is on and this Medic may throw (the bots heal themselves with aim + fire and an invulnerable
+// medic_new is on and this Medic may throw (the bots heal themselves with aim + fire and an invulnerable
 // Medic must not poison anybody); the count of syringes is not looked at
 static qboolean Syringe_Enabled (edict_t *ent)
 {
-	return (syringe_throw->value && !ent->ai && !invuln_medic->value);
+	return (medic_new->value && !ent->ai && !invuln_medic->value);
 }
 
 // true when this aim + fire throws a syringe instead of healing the Medic himself
@@ -2520,7 +2520,7 @@ void Weapon_Morphine_Use(edict_t *ent)
 
 	if (ent->client->aim)
 	{
-		// syringe_throw: aim + fire throws a syringe (no self healing, not even while he waits to throw the next)
+		// medic_new: aim + fire throws a syringe (no self healing, not even while he waits to throw the next)
 		if (Syringe_CanThrow (ent))
 		{
 			if (level.time < ent->client->next_syringe_time)

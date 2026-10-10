@@ -867,7 +867,7 @@ extern cvar_t *fast_arty;
 extern cvar_t *kamikaze_arty;     // 1 = el Officer viaja en el avion del airstrike y se estrella (requiere airstrikes 1)
 extern cvar_t *kamikaze_dmg;       // dano del choque (bomba: 700)
 extern cvar_t *kamikaze_radius;    // radio del choque (bomba: 300)
-extern cvar_t *syringe_throw;      // 1 = el Medic lanza la jeringa con aim + fuego
+extern cvar_t *medic_new;          // 1 = Medic nuevo: Browning, botiquin lanzable y jeringas lanzables (latched)
 extern cvar_t *syringe_count;      // jeringas lanzables por vida (sin contar la de la mano)
 extern cvar_t *syringe_heal;       // vida que recupera el companero que recibe la jeringa
 extern cvar_t *syringe_poison;     // dano total del veneno por jeringa (se reparte en SYRINGE_POISON_TIME)
@@ -2073,13 +2073,14 @@ extern int jpn_index;
 #define BROWNING_HEAD_BONUS		120		// % of damage of a head hit, which then counts as a chest hit
 
 // Medic healthpack: a pack the Medic throws, any teammate that touches it recovers health
+#define MEDIC_NEW_HEALTHPACKS	2		// healthpacks of the Medic per life with medic_new 1
 #define HEALTHPACK_HEAL			25		// health that a teammate recovers
 #define HEALTHPACK_DELAY		3		// seconds between two throws
 #define HEALTHPACK_LIFE			60		// seconds a pack stays on the ground
 #define HEALTHPACK_FX_TIME		5		// seconds it throws green sparks after it is thrown, then it is just the crate
 #define HEALTHPACK_EDICT_MARGIN	64		// free entities that must be left to throw a pack
 
-// Medic syringe: with the syringe in hand, aim + fire throws it (see syringe_throw)
+// Medic syringe: with the syringe in hand, aim + fire throws it (see medic_new)
 #define SYRINGE_THROW_DELAY		0.6		// seconds between two throws (the cycle of the thrown knife)
 #define SYRINGE_POISON_TIME		2		// seconds that the poison of one syringe lasts
 #define SYRINGE_LIFE			5		// seconds before a syringe in the air is removed

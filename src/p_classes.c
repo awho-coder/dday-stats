@@ -408,6 +408,16 @@ void InitMOS_List(TeamS_t *team, SMos_t *mos_list)
 		MOS[i]->speed_mod=mos_list[i].speed_mod;
 		MOS[i]->MOS_Spaw_Point=mos_list[i].MOS_Spaw_Point;
 		MOS[i]->skinname=mos_list[i].skinname;
+
+		// medic_new: the new Medic of every faction, the Browning Hi-Power instead of the pistol of the faction
+		// and healthpacks to throw (the syringes to throw also depend on medic_new, see Syringe_Enabled).
+		// medic_new is latched, so the whole level has the same Medic
+		if (i == MEDIC && medic_new->value)
+		{
+			strcpy(MOS[i]->weapon2, "Browning Hi-Power");
+			strcpy(MOS[i]->special, "Healthpack");
+			MOS[i]->specnum = MEDIC_NEW_HEALTHPACKS;
+		}
 	}
 
 	//team->language = language;

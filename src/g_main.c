@@ -194,7 +194,7 @@ cvar_t *fast_arty;
 cvar_t *kamikaze_arty;
 cvar_t *kamikaze_dmg;
 cvar_t *kamikaze_radius;
-cvar_t *syringe_throw;
+cvar_t *medic_new;
 cvar_t *syringe_count;
 cvar_t *syringe_heal;
 cvar_t *syringe_poison;

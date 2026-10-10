@@ -14,7 +14,7 @@ name their skin as `skin.pcx` and the client loads the `skin.png` next to them, 
 `.png` inside the `.md2` or a bigger skin (1024x512) made Q2PRO r1504 reject the model with "Invalid file format".
 The server also needs `models/items/healthpack/tris.md2` and `weapons/tnt/toss.wav` (already in the game) to precache them.
 
-How to use it in game: bind a key to `use special` (the Medic has 2 healthpacks per life), then press fire to throw one.
+How to use it in game: with `medic_new 1` (see `docs/COMANDOS.md`), bind a key to `use special` (the Medic has 2 healthpacks per life), then press fire to throw one.
 
 **Descarga automática:** los `.md2` nombran `skin.pcx` y la descarga automática del server pide `.pcx`, así que al lado
 de cada `skin.png` (y de `pics/w_healthpack.png`) hay una versión `.pcx` de 8 bits, con paleta propia de 255 colores
