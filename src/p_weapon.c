@@ -2273,6 +2273,35 @@ static qboolean Syringe_Enabled (edict_t *ent)
 	return (medic_new->value && !ent->ai && !invuln_medic->value);
 }
 
+// medic_new: as he no longer heals himself with aim + fire while he has syringes to throw, the Medic recovers
+// MEDIC_REGEN_RATE health a second (up to HEALTH_MAX) once he has spent MEDIC_REGEN_DELAY seconds without damage.
+// It does not cure the wounds: the bleeding damages him and starts the delay again
+void Medic_Regen (edict_t *ent)
+{
+	gclient_t	*client = ent->client;
+	int			add;
+
+	if (!medic_new->value || !client || client->resp.mos != MEDIC || !client->resp.team_on)
+		return;
+
+	if (ent->health <= 0 || ent->health >= HEALTH_MAX || ent->deadflag || ent->flyingnun || client->limbo_mode)
+		return;
+
+	if (level.time < client->last_damage_time + MEDIC_REGEN_DELAY)
+		return;
+
+	add = (int)(MEDIC_REGEN_RATE * FRAMETIME + 0.5);	// this runs once a frame
+	if (add < 1)
+		add = 1;
+
+	ent->health += add;
+	if (ent->health >= HEALTH_MAX)
+	{
+		ent->health = HEALTH_MAX;
+		client->last_wound_inflictor = NULL;	// as the syringe: at full health nobody is credited for his wounds
+	}
+}
+
 // true when this aim + fire throws a syringe instead of healing the Medic himself
 qboolean Syringe_CanThrow (edict_t *ent)
 {

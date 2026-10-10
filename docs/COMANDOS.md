@@ -75,7 +75,11 @@ solo la jeringa). Con `medic_new 1` el Medic de todas las facciones lleva:
 
 - la **Browning Hi-Power** en lugar de la pistola de su facción;
 - **2 botiquines lanzables** por vida (`use special` y fuego);
-- **jeringas lanzables** (abajo).
+- **jeringas lanzables** (abajo);
+- **regeneración**: como ya no se cura con aim + fuego mientras tenga jeringas para lanzar,
+  después de 3 segundos sin recibir daño recupera 10 de vida por segundo hasta 100
+  (`MEDIC_REGEN_*` en `src/g_local.h`). No cura heridas: cada vez que el sangrado le hace daño,
+  los 3 segundos vuelven a empezar.
 
 Es latched, como `ffa`: `set medic_new 1` se aplica en el **próximo mapa**, y todo el mapa
 tiene el mismo Medic. Desde el bot: `medic on|off` (sin argumento dice el estado).

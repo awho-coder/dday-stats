@@ -1720,6 +1720,7 @@ struct gclient_s
 	float       next_healthpack_time;	// Medic: level.time when he can throw the next healthpack
 	int         syringes;				// Medic: syringes left to throw (the one in the hand is not counted)
 	float       next_syringe_time;		// Medic: level.time when he can throw the next syringe
+	float       last_damage_time;		// level.time of the last damage taken (the Medic heals himself after MEDIC_REGEN_DELAY)
 
 	qboolean    tank_hit;//faf
 
@@ -2085,6 +2086,10 @@ extern int jpn_index;
 #define SYRINGE_POISON_TIME		2		// seconds that the poison of one syringe lasts
 #define SYRINGE_LIFE			5		// seconds before a syringe in the air is removed
 
+// Medic regeneration (medic_new): without damage for MEDIC_REGEN_DELAY seconds he recovers MEDIC_REGEN_RATE health a second
+#define MEDIC_REGEN_DELAY		3		// seconds without damage before he starts to heal
+#define MEDIC_REGEN_RATE		10		// health a second, up to HEALTH_MAX
+
 
 
 
@@ -2354,6 +2359,7 @@ void Weapon_Healthpack (edict_t *ent);
 void RemoveHealthpacks (edict_t *owner);
 qboolean Syringe_CanThrow (edict_t *ent);
 qboolean Healthpack_EdictsLeft (void);
+void Medic_Regen (edict_t *ent);
 void Weapon_Generic (edict_t *ent, int FRAME_ACTIVATE_LAST, int FRAME_LFIRE_LAST, int FRAME_LIDLE_LAST, int FRAME_RELOAD_LAST, int FRAME_LASTRD_LAST,
 					 int FRAME_DEACTIVATE_LAST, int FRAME_RAISE_LAST,int FRAME_AFIRE_LAST, int FRAME_AIDLE_LAST,
 					 int *pause_frames, int *fire_frames, void (*fire)(edict_t *ent));
