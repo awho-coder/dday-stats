@@ -17,8 +17,9 @@ The server also needs `models/items/healthpack/tris.md2` and `weapons/tnt/toss.w
 How to use it in game: with `medic_new 1` (see `docs/COMANDOS.md`), bind a key to `use special` (the Medic has 2 healthpacks per life), then press fire to throw one.
 
 **Descarga automática:** los `.md2` nombran `skin.pcx` y la descarga automática del server pide `.pcx`, así que al lado
-de cada `skin.png` (y de `pics/w_healthpack.png`) hay una versión `.pcx` de 8 bits, con paleta propia de 255 colores
-(Q2PRO usa la paleta de cada `.pcx`; el índice 255 queda reservado, transparente en el ícono). Así el jugador que no
+de cada `skin.png` (y de `pics/w_healthpack.png`) hay una versión `.pcx` de 8 bits con la **paleta de Quake 2**
+(`pics/colormap.pcx`): Q2PRO dibuja los `.pcx` de 8 bits con esa paleta e ignora la que trae el archivo, así que un
+`.pcx` con paleta propia sale con los colores rotos. El índice 255 queda reservado (transparente en el ícono). Así el jugador que no
 tiene los archivos los baja solos al conectarse (`allow_download 1` en el server). Quien tenga los `.png` sigue viendo
 esa versión. Hay que subir los 8 archivos al server: los 2 `.md2`, las 2 texturas en `.png` y `.pcx`, y el ícono en
 los dos formatos.
@@ -27,7 +28,7 @@ los dos formatos.
 
 Files used by the syringes the Medic throws with `medic_new 1` (see `Syringe_Throw` in `src/p_weapon.c`). Copy them to
 the `dday` folder of the server; players download them on their own with `allow_download 1` (the `.md2` names
-`skin.pcx`, which is what the download asks for; Q2PRO uses the `skin.png` next to it when it has one).
+`skin.pcx`, which is what the download asks for, with the Quake 2 palette; Q2PRO uses the `skin.png` next to it when it has one).
 
 | File | What it is |
 |---|---|
