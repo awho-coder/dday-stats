@@ -2461,7 +2461,19 @@ static void syringe_touch (edict_t *self, edict_t *other, cplane_t *plane, csurf
 		}
 	}
 	else
-		gi.sound (self, CHAN_VOICE, gi.soundindex ("weapons/hgrenb1a.wav"), 1, ATTN_NORM, 0);
+	{
+		// it breaks against a wall, an objective or a body: glass, sparks and a few drops of what was inside
+		vec3_t	dir;
+
+		if (plane)
+			VectorCopy (plane->normal, dir);
+		else
+			VectorCopy (back, dir);
+
+		gi.sound (self, CHAN_VOICE, gi.soundindex (va ("bullet/glass%i.wav", 1 + (rand() % 3))), 1, ATTN_NORM, 0);
+		SpawnDamage (TE_SPARKS, self->s.origin, dir, 0);
+		Syringe_Sparks (self->s.origin, dir, 15, 0xd0);	// green
+	}
 
 	G_FreeEdict (self);
 }

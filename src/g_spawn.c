@@ -1928,7 +1928,9 @@ void SP_worldspawn (edict_t *ent)
 
 	// thrown syringe of the Medic (models/weapons/g_syringe: the syringe of the hand, centered and bigger)
 	gi.modelindex ("models/weapons/g_syringe/tris.md2");
-	gi.soundindex ("weapons/hgrenb1a.wav");
+	gi.soundindex ("bullet/glass1.wav");
+	gi.soundindex ("bullet/glass2.wav");
+	gi.soundindex ("bullet/glass3.wav");
 	gi.soundindex ("items/morphine1.wav");
 	gi.soundindex ("items/morphine2.wav");
 	gi.soundindex ("items/morphine3.wav");
