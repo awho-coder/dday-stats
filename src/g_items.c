@@ -117,6 +117,10 @@ gitem_t	*FindItem (char *pickup_name)
 	int		i;
 	gitem_t	*it;
 
+	// an item without ammo (the syringe, the healthpack...) asks for a NULL name; strcasecmp crashes with it
+	if (!pickup_name)
+		return NULL;
+
 	it = itemlist;
 	for (i = 0; i <= game.num_items; i++, it++)
 	{
@@ -150,6 +154,10 @@ gitem_t	*FindItemInTeam(char *pickup_name, char *dllname)
 {
 	int		i;
 	gitem_t	*it;
+
+	// as FindItem: a NULL name (the ammo of a weapon that has none) finds nothing instead of crashing
+	if (!pickup_name)
+		return NULL;
 
 	it = itemlist;
 	for (i = 0; i <= game.num_items; i++, it++)
