@@ -21,4 +21,6 @@ Las posiciones del texto están en las constantes `FFA_PANEL_*`, `FFA_TEXT_X`, `
 
 | Archivo | Tamaño | Uso |
 |---|---|---|
-| `i_nextarty.pcx` | 48 x 24 px, PCX 8 bits | Ícono "NEXT ARTY" junto al contador del HUD (`STAT_TIMER_ICON`, `G_SetStats` en `src/p_hud.c`) mientras el equipo espera para volver a pedir un airstrike. Lo hizo ZeRo. Va en `dday/pics/` del servidor; los jugadores lo bajan solos con `allow_download_pics`. |
+| `i_nextarty.pcx` | 48 x 24 px, PCX 8 bits con la paleta de Quake 2 | Ícono "NEXT ARTY" junto al contador del HUD (`STAT_TIMER_ICON`, `G_SetStats` en `src/p_hud.c`) mientras el equipo espera para volver a pedir un airstrike. Lo hizo ZeRo. Va en `dday/pics/` del servidor; los jugadores lo bajan solos con `allow_download_pics`. |
+
+Los `.pcx` de 8 bits (`i_nextarty.pcx`, `w_healthpack.pcx`) tienen que usar la paleta de Quake 2 (`pics/colormap.pcx`): Q2PRO ignora la paleta que trae el archivo. El índice 255 es transparente.
