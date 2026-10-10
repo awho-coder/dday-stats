@@ -16,3 +16,9 @@ Las posiciones del texto están en las constantes `FFA_PANEL_*`, `FFA_TEXT_X`, `
 - Se usan como PNG (el cliente debe soportarlo, como Q2PRO). En motores sin soporte PNG el fondo no se verá.
 - Cada píxel de la imagen equivale a 1 unidad del layout (320 x 240); el motor lo escala a la pantalla.
 - `ffa_score.png` incluye el logo de la Comunidad D-Day Normandy Chile en la franja inferior.
+
+## Contador del airstrike del Officer
+
+| Archivo | Tamaño | Uso |
+|---|---|---|
+| `i_nextarty.pcx` | 48 x 24 px, PCX 8 bits | Ícono "NEXT ARTY" junto al contador del HUD (`STAT_TIMER_ICON`, `G_SetStats` en `src/p_hud.c`) mientras el equipo espera para volver a pedir un airstrike. Lo hizo ZeRo. Va en `dday/pics/` del servidor; los jugadores lo bajan solos con `allow_download_pics`. |
