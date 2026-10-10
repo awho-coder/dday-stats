@@ -131,7 +131,7 @@ def find_player(name):
 HELP = ("[ADMIN] comandos: estado, kick <quien>, kickban <quien>, ban <ip>, unban <ip>, "
         "mapa <nombre>, duelo <mapa>, publico, cuenta, reset, resetscore, tiempo, mapas, bans, "
         "bots on|off, kickbots, screenshot, stuff <cmd>, autostuff <cmd>, autostuffoff, "
-        "control <mapa>, ffa <mapa>, dm <mapa>, kamikaze on|off, medic on|off, medic bazooka on|off, "
+        "control <mapa>, ffa <mapa>, dm <mapa>, kamikaze on|off, medic on|off, medic bazooka on|off, officer bonus on|off, "
         "lock, unlock, say <texto>, ayuda")
 
 def run_cmd(text, by):
@@ -256,6 +256,22 @@ def run_cmd(text, by):
         m = re.search(r'is\s+"(\d+)"', rcon("kamikaze_arty"))
         estado = "?" if not m else ("ON" if m.group(1) != "0" else "OFF")
         return "[ADMIN] arty kamikaze: %s (uso: kamikaze on|off)" % estado, True
+    if verb in ("officer", "oficial", "officers", "oficiales"):
+        # cvar de la DLL (no latched): rige al instante; un reinicio del server lo apaga
+        a = norm(arg)
+        if not a.startswith("bonus"):
+            return "[ADMIN] uso: officer bonus on|off", True
+        b = a[len("bonus"):]
+        if b in ("on", "1", "si", "activar", "activa", "prender", "prende", "encender", "enciende", "poner", "pon"):
+            rcon("set officer_bonus 1")
+            return ("[ADMIN] BONUS del Officer activado: cada kill de un Officer le resta 5 segundos "
+                    "a la espera del airstrike de su equipo"), True
+        if b in ("off", "0", "no", "desactivar", "desactiva", "apagar", "apaga", "quitar", "quita", "sacar", "saca"):
+            rcon("set officer_bonus 0")
+            return "[ADMIN] bonus del Officer DESACTIVADO: la espera del airstrike vuelve a ser normal", True
+        m = re.search(r'is\s+"(\d+)"', rcon("officer_bonus"))
+        estado = "?" if not m else ("ON" if m.group(1) != "0" else "OFF")
+        return "[ADMIN] bonus del Officer: %s (uso: officer bonus on|off)" % estado, True
     if verb in ("medic", "medico", "mdico"):  # norm() borra los acentos: médico -> mdico
         # cvar latched de la DLL: el Medic nuevo (Browning, botiquin y jeringas lanzables) rige desde el
         # proximo mapa; un reinicio del server lo deja como diga server.cfg
@@ -554,6 +570,20 @@ def kamikaze_phrase(text):
 MEDIC_ON_VERBS = ("activa", "prende", "enciende", "habilita", "pon ", "mete")
 MEDIC_CLASSIC = ("clasico", "clásico", "normal", "viejo", "original", "antiguo")
 
+def officer_phrase(text):
+    """Frases tipo 'admin activa el bonus del officer' / 'apaga el bonus de arty' -> 'officer bonus on|off'
+    (sin verbo -> estado). Hace falta 'bonus' y nombrar al officer, el arty o el airstrike.
+    None si no hablan del bonus."""
+    low = " " + text.lower() + " "
+    if not re.search(r"\bbonus\b", low) or not re.search(r"officer|oficial|\barty\b|airstrike|cooldown|bombardeo", low):
+        return None
+    low = re.sub(r"officers?|oficial(es)?", " ", low)  # 'officer' contiene 'off', que es un verbo de apagar
+    if any(w in low for w in KAMIKAZE_OFF):
+        return "officer bonus off"
+    if any(re.search(r"\b%s" % re.escape(w), low) for w in KAMIKAZE_ON + ("dale", "da ")):
+        return "officer bonus on"
+    return "officer bonus"
+
 def medic_phrase(text):
     """Frases tipo 'admin activa el medic nuevo' -> 'medic on'; 'apaga el medic nuevo' o
     'deja el medic clasico' -> 'medic off'; si solo nombran al medic -> estado. Mas estricto que el
@@ -616,7 +646,7 @@ def looks_command(text):
     return v in {"ayuda","help","estado","status","jugadores","players","kick","kickea","echar",
                  "kickban","ban","unban","delban","desban","lock","unlock","bloquear","abrir",
                  "mapa","map","cambiamapa","duelo","duel","publico","publica","cuenta","startcount",
-                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","dm","kamikaze","kamikase","kamicase","medic","medico","mdico","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
+                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","dm","kamikaze","kamikase","kamicase","medic","medico","mdico","officer","oficial","officers","oficiales","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
                  "restart","reload"}
 
 def handle_line(line, dry=False):
@@ -674,6 +704,17 @@ def handle_line(line, dry=False):
             say(resp)
             print("KAMIKAZE-PHRASE %s -> %s" % (nick, resp))
             return ("kamikazephrase", nick, text, resp)
+        # bonus del Officer en frase natural: local, sin LLM
+        off = officer_phrase(text)
+        if off:
+            if not rate_ok(nick):
+                say("[ADMIN] calma, espera unos segundos")
+                return ("rate", nick, text, None)
+            resp, _ = run_cmd(off, nick)
+            log_action(nick, "frase:" + off, resp)
+            say(resp)
+            print("OFFICER-PHRASE %s -> %s" % (nick, resp))
+            return ("officerphrase", nick, text, resp)
         # Medic nuevo/clasico en frase natural: local, sin LLM
         med = medic_phrase(text)
         if med:
