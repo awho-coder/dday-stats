@@ -64,6 +64,7 @@ void TNT_Touch (edict_t *ent, edict_t *other, cplane_t *plane, csurface_t *surf)
 void Shrapnel_Dud (edict_t *ent);
 void Shrapnel_Touch (edict_t *ent, edict_t *other, cplane_t *plane, csurface_t *surf);
 void check_unscope (edict_t *ent);//faf
+void SpawnDamage (int type, vec3_t origin, vec3_t normal, int damage);
 
 void P_ProjectSource (gclient_t *client, vec3_t point, vec3_t distance, vec3_t forward, vec3_t right, vec3_t result)
 {
@@ -2252,6 +2253,290 @@ void Weapon_Antidote(edict_t *ent)
 	Weapon_Generic(ent,3,8,48,52,48,48,0,0,0,pause_frames,fire_frames,Weapon_Antidote_Use);
 }
 
+/*
+======================================================================
+
+SYRINGE
+
+With medic_new on, the Medic throws the syringe in his hand with aim + fire, as the knife. A teammate it
+hits recovers syringe_heal health (wounds are not cured); an enemy is poisoned: syringe_poison damage spread
+over SYRINGE_POISON_TIME seconds, which stacks with every syringe and can kill (MOD_SYRINGE). The syringe of
+the hand is never used up; he carries syringe_count more to throw.
+
+======================================================================
+*/
+
+// medic_new is on and this Medic may throw (the bots heal themselves with aim + fire and an invulnerable
+// Medic must not poison anybody); the count of syringes is not looked at
+static qboolean Syringe_Enabled (edict_t *ent)
+{
+	return (medic_new->value && !ent->ai && !invuln_medic->value);
+}
+
+// medic_new: as he no longer heals himself with aim + fire while he has syringes to throw, the Medic recovers
+// MEDIC_REGEN_RATE health a second (up to HEALTH_MAX) once he has spent MEDIC_REGEN_DELAY seconds without damage.
+// It does not cure the wounds: the bleeding damages him and starts the delay again
+void Medic_Regen (edict_t *ent)
+{
+	gclient_t	*client = ent->client;
+	int			add;
+
+	if (!medic_new->value || !client || client->resp.mos != MEDIC || !client->resp.team_on)
+		return;
+
+	if (ent->health <= 0 || ent->health >= HEALTH_MAX || ent->deadflag || ent->flyingnun || client->limbo_mode)
+		return;
+
+	if (level.time < client->last_damage_time + MEDIC_REGEN_DELAY)
+		return;
+
+	add = (int)(MEDIC_REGEN_RATE * FRAMETIME + 0.5);	// this runs once a frame
+	if (add < 1)
+		add = 1;
+
+	ent->health += add;
+	if (ent->health >= HEALTH_MAX)
+	{
+		ent->health = HEALTH_MAX;
+		client->last_wound_inflictor = NULL;	// as the syringe: at full health nobody is credited for his wounds
+	}
+}
+
+// true when this aim + fire throws a syringe instead of healing the Medic himself
+qboolean Syringe_CanThrow (edict_t *ent)
+{
+	return (ent->client && Syringe_Enabled (ent) && ent->client->syringes > 0);
+}
+
+// the poison of one syringe: it does syringe_poison damage in SYRINGE_POISON_TIME seconds, in steps of
+// FRAMETIME, and credits the Medic with the kill. There is one entity per syringe so the poisons stack
+static void syringe_poison_think (edict_t *ent)
+{
+	edict_t	*victim = ent->enemy;
+	edict_t	*attacker;
+	vec3_t	pos, up;
+	int		ticks = (int)(SYRINGE_POISON_TIME / FRAMETIME + 0.5);
+	int		tick, goal, d;
+
+	if (!victim || !victim->inuse || !victim->client || victim->health <= 0 || victim->deadflag)
+	{
+		G_FreeEdict (ent);
+		return;
+	}
+
+	// the Medic may be gone and his slot taken by someone else: then the damage is nobody's
+	attacker = ent->activator;
+	if (!attacker || !attacker->inuse || !attacker->client)
+		attacker = world;
+
+	tick = (int)((level.time - ent->timestamp) / FRAMETIME + 0.5);
+	if (tick > ticks)
+		tick = ticks;
+
+	// whole points only, and all of them when the last tick is reached
+	goal = ent->dmg * tick / ticks;
+	d = goal - ent->count;
+	if (d > 0)
+	{
+		ent->count = goal;
+		T_Damage (victim, ent, attacker, vec3_origin, victim->s.origin, vec3_origin, d, 0,
+			DAMAGE_NO_KNOCKBACK | DAMAGE_NO_ARMOR, MOD_SYRINGE);
+	}
+
+	// green sparks over the victim every half second, so it is easy to see that he is poisoned
+	if (victim->health > 0 && !(tick % 5))
+	{
+		VectorCopy (victim->s.origin, pos);
+		pos[2] += 8;
+		VectorSet (up, 0, 0, 1);
+
+		gi.WriteByte (svc_temp_entity);
+		gi.WriteByte (TE_LASER_SPARKS);
+		gi.WriteByte (20);
+		gi.WritePosition (pos);
+		gi.WriteDir (up);
+		gi.WriteByte (0xd0);	// green of the palette (the color of the slime)
+		gi.multicast (pos, MULTICAST_PVS);
+	}
+
+	if (tick >= ticks)
+	{
+		G_FreeEdict (ent);
+		return;
+	}
+
+	ent->nextthink = level.time + FRAMETIME;
+}
+
+// poisons the victim; the entity has no model and no collision, it only carries the damage
+static void Syringe_Poison (edict_t *victim, edict_t *medic)
+{
+	edict_t	*poison;
+
+	if (!Healthpack_EdictsLeft ())
+		return;
+
+	poison = G_Spawn ();
+	poison->classname = "syringe_poison";
+	poison->classnameb = SYRINGE_POISON;
+	poison->enemy = victim;
+	poison->activator = medic;
+	poison->dmg = (int)syringe_poison->value;
+	poison->count = 0;	// damage done so far
+	poison->timestamp = level.time;
+	poison->svflags |= SVF_NOCLIENT;
+	poison->think = syringe_poison_think;
+	poison->nextthink = level.time + FRAMETIME;
+}
+
+// a burst of sparks of the palette color where the syringe hits a player
+static void Syringe_Sparks (vec3_t pos, vec3_t dir, int count, int color)
+{
+	gi.WriteByte (svc_temp_entity);
+	gi.WriteByte (TE_LASER_SPARKS);
+	gi.WriteByte (count);
+	gi.WritePosition (pos);
+	gi.WriteDir (dir);
+	gi.WriteByte (color);
+	gi.multicast (pos, MULTICAST_PVS);
+}
+
+static void syringe_touch (edict_t *self, edict_t *other, cplane_t *plane, csurface_t *surf)
+{
+	edict_t	*owner = self->owner;
+	vec3_t	back;
+
+	if (other == owner)
+		return;
+
+	if (surf && (surf->flags & SURF_SKY))
+	{
+		G_FreeEdict (self);
+		return;
+	}
+
+	if (owner && owner->client)
+		PlayerNoise (owner, self->s.origin, PNOISE_IMPACT);
+
+	// the effects go back toward where the syringe came from
+	VectorNegate (self->velocity, back);
+	VectorNormalize (back);
+
+	if (other->client && other->health > 0 && !other->deadflag && !other->flyingnun &&
+		other->client->resp.team_on)
+	{
+		if (!G_IsFFA() && other->client->resp.team_on->index == self->obj_owner)
+		{
+			// a teammate: health only, the wounds stay as they are
+			if (other->health < HEALTH_MAX)
+			{
+				other->health += (int)syringe_heal->value;
+				if (other->health > HEALTH_MAX)
+					other->health = HEALTH_MAX;
+
+				if (other->health == HEALTH_MAX)
+					other->client->last_wound_inflictor = NULL;
+
+				if (other->ai)
+					other->ai->med_heal_time = level.time;
+
+				if (owner && owner->inuse && owner->client)
+				{
+					safe_cprintf (other, PRINT_HIGH, "%s healed you with a syringe.\n", owner->client->pers.netname);
+					safe_cprintf (owner, PRINT_HIGH, "You healed %s with a syringe.\n", other->client->pers.netname);
+				}
+				// one of the sounds of the syringe of the hand
+				gi.sound (other, CHAN_ITEM, gi.soundindex (va ("items/morphine%i.wav", 1 + (rand() % 3))), 1, ATTN_NORM, 0);
+			}
+			Syringe_Sparks (self->s.origin, back, 30, 0xd0);	// green
+		}
+		else
+		{
+			Syringe_Poison (other, owner);
+
+			// it gets in the body: a hit sound as a bullet in the torso, some blood and a green cloud of poison
+			gi.sound (other, CHAN_ITEM, gi.soundindex ("misc/hittorso.wav"), 1, ATTN_NORM, 0);
+			SpawnDamage (TE_BLOOD, self->s.origin, back, 0);
+			Syringe_Sparks (self->s.origin, back, 50, 0xd0);	// green
+		}
+	}
+	else
+		gi.sound (self, CHAN_VOICE, gi.soundindex ("weapons/hgrenb1a.wav"), 1, ATTN_NORM, 0);
+
+	G_FreeEdict (self);
+}
+
+// throws a syringe in the direction the Medic is aiming (as Knife_Throw); returns false if it could not be thrown
+static qboolean Syringe_Throw (edict_t *ent)
+{
+	edict_t	*syringe;
+	vec3_t	forward, right, offset, start;
+	trace_t	tr;
+
+	if (!ent->client->resp.team_on)
+		return false;
+
+	AngleVectors (ent->client->v_angle, forward, right, NULL);
+	VectorSet (offset, 24, 8, ent->viewheight - 8);
+	P_ProjectSource (ent->client, ent->s.origin, offset, forward, right, start);
+	start[2] += 5;
+	VectorNormalize (forward);
+
+	syringe = G_Spawn ();
+	syringe->classname = "syringe";
+	syringe->owner = ent;
+	syringe->obj_owner = ent->client->resp.team_on->index;	// the team when it is thrown
+	VectorCopy (start, syringe->s.origin);
+	VectorCopy (start, syringe->s.old_origin);
+	vectoangles (forward, syringe->s.angles);
+	VectorScale (forward, KNIFE_THROW_SPEED, syringe->velocity);
+	VectorClear (syringe->avelocity);	// it flies point first, as a dart
+	syringe->movetype = MOVETYPE_TOSS;
+	syringe->clipmask = MASK_SHOT;
+	syringe->solid = SOLID_BBOX;
+	VectorSet (syringe->mins, -1, -1, -1);
+	VectorSet (syringe->maxs, 1, 1, 1);
+	syringe->s.modelindex = gi.modelindex ("models/weapons/g_syringe/tris.md2");
+	syringe->s.frame = 0;
+	syringe->touch = syringe_touch;
+	syringe->think = G_FreeEdict;
+	syringe->nextthink = level.time + SYRINGE_LIFE;
+	gi.linkentity (syringe);
+
+	Play_WepSound (ent, "knife/fire.wav");
+	PlayerNoise (ent, ent->s.origin, PNOISE_SELF);
+
+	// part of the wave animation, as when the healthpack is thrown
+	if (ent->stanceflags == STANCE_STAND)
+	{
+		ent->client->anim_priority = ANIM_WAVE;
+		ent->s.frame = 116;
+		ent->client->anim_end = 121;
+	}
+	else if (ent->stanceflags == STANCE_DUCK)
+	{
+		ent->client->anim_priority = ANIM_WAVE;
+		ent->s.frame = 169;
+		ent->client->anim_end = 172;
+	}
+	else if (ent->stanceflags == STANCE_CRAWL)
+	{
+		ent->client->anim_priority = ANIM_WAVE;
+		ent->s.frame = 222;
+		ent->client->anim_end = 225;
+	}
+
+	// do not go through a wall that is right in front of the Medic
+	tr = gi.trace (ent->s.origin, NULL, NULL, syringe->s.origin, syringe, MASK_SHOT);
+	if (tr.fraction < 1.0)
+	{
+		VectorMA (syringe->s.origin, -10, forward, syringe->s.origin);
+		syringe->touch (syringe, tr.ent, NULL, NULL);
+	}
+
+	return true;
+}
+
 void Weapon_Morphine_Use(edict_t *ent)
 {
 //bcass start - medic sound thing
@@ -2263,7 +2548,23 @@ void Weapon_Morphine_Use(edict_t *ent)
 	ent->client->ps.gunframe++;
 
 	if (ent->client->aim)
+	{
+		// medic_new: aim + fire throws a syringe (no self healing, not even while he waits to throw the next)
+		if (Syringe_CanThrow (ent))
+		{
+			if (level.time < ent->client->next_syringe_time)
+				return;
+
+			if (Syringe_Throw (ent))
+			{
+				ent->client->syringes--;
+				ent->client->next_syringe_time = level.time + SYRINGE_THROW_DELAY;
+			}
+			return;
+		}
+
 		target = ent;
+	}
 	else 
 	{
 		if (!(target=ApplyFirstAid(ent)))
@@ -2401,6 +2702,9 @@ void Weapon_Morphine(edict_t *ent)
 
 	ent->client->crosshair = true;
 
+	// the HUD shows the syringes that are left to throw
+	ent->client->p_rnd = Syringe_Enabled (ent) ? &ent->client->syringes : NULL;
+
 	Weapon_Generic(ent,
 		3,  10, 45, 
 		45, 45, 49, 
@@ -2460,7 +2764,7 @@ Packs belong to the Medic that threw them and are removed when he dies or leaves
 */
 
 // true when there are enough free entities to spawn a pack (the server stops when it runs out of them)
-static qboolean Healthpack_EdictsLeft (void)
+qboolean Healthpack_EdictsLeft (void)
 {
 	int		i, left;
 

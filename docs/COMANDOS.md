@@ -40,9 +40,10 @@ lejos de los demás, puntaje individual, marcador propio y anuncios del líder. 
 `fraglimit` (30 si el server usa 0) o `timelimit`. No funciona junto con `tournament` y las
 stats persistentes (`stats 1`) no lo distinguen. Desde el bot: `ffa <mapa>`.
 
-## Juego: cambios de clases y armas (sin cvar)
+## Juego: cambios de clases y armas
 
-Ramas de ddaychile integradas el 2026-10-09:
+Ramas de ddaychile integradas el 2026-10-09. Las dos del Medic van detrás de `medic_new`
+(ver [Medic nuevo](#servidor-medic-nuevo-medic_new)):
 
 - **Medic: Browning Hi-Power** (`browning-medic`): reemplaza a la pistola del Medic en todas
   las facciones. Automática, 10 balas, 5 disparos por segundo, 17 de daño; el spread crece
@@ -50,7 +51,7 @@ Ramas de ddaychile integradas el 2026-10-09:
 - **Medic: botiquín lanzable** (`medic-healthpack`): 2 por vida, se usa con `use special`
   y fuego; cura 25 al compañero que lo toma. Necesita los modelos y texturas de
   [`../models/README.md`](../models/README.md) en el server y en cada cliente.
-- **BAR y MP43** (`lmg-recoil-spread`): el retroceso y el spread siguen subiendo mientras se
+- **BAR y MP43** (sin cvar) (`lmg-recoil-spread`): el retroceso y el spread siguen subiendo mientras se
   mantiene el gatillo (`LMG_BLOOM_*` en `src/g_local.h`) y la BAR lleva 7 cargadores.
 
 ## Servidor: airstrike kamikaze del Officer
@@ -65,7 +66,53 @@ de airstrike a su nombre. Los aviones de los mapas (`misc_airstrike`) no cambian
 |---|---|---|
 | `kamikaze_arty` | `0` | `1` activa el kamikaze en el próximo airstrike (un vuelo ya en curso no cambia). |
 | `kamikaze_dmg` | `1000` | Daño del choque (una bomba normal hace 700). |
-| `kamikaze_radius` | `420` | Radio del choque (una bomba normal: 300). |
+| `kamikaze_radius` | `700` | Radio del choque (una bomba normal: 300). Un anillo de explosiones a media distancia muestra el área. |
+
+## Servidor: Medic nuevo (`medic_new`)
+
+Apagado por defecto: con `medic_new 0` el Medic es el clásico (la pistola de su facción y
+solo la jeringa). Con `medic_new 1` el Medic de todas las facciones lleva:
+
+- la **Browning Hi-Power** en lugar de la pistola de su facción;
+- **2 botiquines lanzables** por vida (`use special` y fuego);
+- **jeringas lanzables** (abajo);
+- **regeneración**: como ya no se cura con aim + fuego mientras tenga jeringas para lanzar,
+  después de 3 segundos sin recibir daño recupera 10 de vida por segundo hasta 100
+  (`MEDIC_REGEN_*` en `src/g_local.h`). No cura heridas: cada vez que el sangrado le hace daño,
+  los 3 segundos vuelven a empezar.
+
+Es latched, como `ffa`: `set medic_new 1` se aplica en el **próximo mapa**, y todo el mapa
+tiene el mismo Medic. Desde el bot: `medic on|off` (sin argumento dice el estado).
+
+### Jeringas lanzables
+
+El Medic con la jeringa en la mano y en modo
+apuntado (aim) la **lanza** al apretar fuego, igual que el cuchillo lanzado (misma velocidad
+y cadencia, `SYRINGE_THROW_DELAY` en `src/g_local.h`). Al **compañero** que toca lo cura
+`syringe_heal` (no cura sangrado ni cojera). Al **enemigo** lo envenena: `syringe_poison` de
+daño repartido en 2 segundos; los venenos de varias jeringas se acumulan, pueden matar y la
+muerte cuenta como kill del Medic (`was poisoned by`, `syringe` en el log de stats). Contra
+una pared, un objetivo o un cadáver la jeringa se rompe. Lleva `syringe_count` jeringas
+lanzables por vida (el HUD muestra cuántas le quedan), además de la de la mano, que es
+infinita y sigue sirviendo para inyectar de cerca. El Medic se puede mover mientras lanza
+(aim + cuerpo a tierra lo deja quieto, como con el cuchillo).
+
+Saltar no lo saca del apuntado mientras le queden jeringas, igual que con el cuchillo.
+
+El modelo de la jeringa en vuelo es `models/weapons/g_syringe/tris.md2` (ver
+[`../models/README.md`](../models/README.md)): hay que subirlo al server, y los jugadores lo
+bajan solos con `allow_download 1`. Sin jeringas lanzables, con un bot o con
+`invuln_medic` distinto de 0, aim + fuego sigue autocurando como siempre.
+
+| Cvar | Por defecto | Qué hace |
+|---|---|---|
+| `medic_new` | `0` | `1` activa el Medic nuevo (Browning, botiquín y jeringas) en el próximo mapa. |
+| `syringe_count` | `9` | Jeringas lanzables por vida (sin contar la de la mano). Se reparten al aparecer. |
+| `syringe_heal` | `33` | Vida que recupera el compañero (tope `HEALTH_MAX`). |
+| `syringe_poison` | `33` | Daño total del veneno de una jeringa, en 2 segundos. |
+
+Lo que se ponga por rcon se pierde al reiniciar el servidor; para dejarlo fijo va en
+`dday/server.cfg`.
 
 ## Servidor: estadísticas
 

@@ -198,6 +198,7 @@ static const char *StatsLog_ModName (int mod)
 	case MOD_PLONK:				return "plonk";
 	case MOD_SPAWNCAMP:			return "spawncamp";
 	case MOD_BOTTLE:			return "molotov";
+	case MOD_SYRINGE:			return "syringe";
 	case MOD_TANKHIT:			return "tank";
 	case MOD_FIRE:				return "fire";
 	case MOD_FIRE_SPLASH:		return "fire";

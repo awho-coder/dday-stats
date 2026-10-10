@@ -752,6 +752,9 @@ void ClientObituary (edict_t *self, edict_t *inflictor, edict_t *attacker)
 			case MOD_BROWNING:
 				message = "was browned by";
 				break;
+			case MOD_SYRINGE:
+				message = "was poisoned by";
+				break;
 			case MOD_SNIPER:
 				message = "was sniped by";
 				break;
@@ -4036,7 +4039,8 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 
 		if ((ent->client->aim && ent->stanceflags == STANCE_CRAWL &&
 			 ent->client->pers.weapon && ent->client->pers.weapon->position != LOC_GRENADES) ||
-			 (ent->client->pers.weapon && ent->client->pers.weapon->classnameb == WEAPON_MORPHINE))
+			 (ent->client->pers.weapon && ent->client->pers.weapon->classnameb == WEAPON_MORPHINE &&
+			  !(ent->client->aim && Syringe_CanThrow (ent))))	// the Medic moves while he throws syringes
 		{
 			// pbowens: this directly undermines the purpose of ClientSetMaxSpeed :(
 			for (i = 0; i < 3; i++) {
@@ -4258,7 +4262,8 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 			ent->client->pers.weapon &&
 			ent->client->pers.weapon->position != LOC_KNIFE  &&
 			ent->client->pers.weapon->position != LOC_HELMET &&
-			ent->client->pers.weapon->classnameb != WEAPON_BINOCULARS)
+			ent->client->pers.weapon->classnameb != WEAPON_BINOCULARS &&
+			!(ent->client->pers.weapon->classnameb == WEAPON_MORPHINE && Syringe_CanThrow (ent)))	// as the knife: the Medic keeps throwing syringes while he jumps
 
 		{
 			ent->client->aim = false;
@@ -4564,6 +4569,8 @@ void ClientBeginServerFrame (edict_t *ent)
 
 //		gi.dprintf("    %i\n", ent->client->ps.gunframe);//faf test
 
+
+	Medic_Regen (ent);
 
 	// run weapon animations if it hasn't been done by a ucmd_t
 	if (!client->weapon_thunk)

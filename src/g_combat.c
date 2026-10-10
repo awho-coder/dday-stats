@@ -1413,6 +1413,9 @@ void T_Damage (edict_t *targ, edict_t *inflictor, edict_t *attacker, vec3_t dir,
 			attacker=targ->enemy;
 		
 		targ->health = targ->health - take;
+
+		if (client && take > 0)
+			client->last_damage_time = level.time;	// the regeneration of the Medic waits for MEDIC_REGEN_DELAY
 		
 		if (targ->health <= 0)
 		{

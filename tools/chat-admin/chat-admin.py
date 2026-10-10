@@ -131,7 +131,7 @@ def find_player(name):
 HELP = ("[ADMIN] comandos: estado, kick <quien>, kickban <quien>, ban <ip>, unban <ip>, "
         "mapa <nombre>, duelo <mapa>, publico, cuenta, reset, resetscore, tiempo, mapas, bans, "
         "bots on|off, kickbots, screenshot, stuff <cmd>, autostuff <cmd>, autostuffoff, "
-        "control <mapa>, ffa <mapa>, dm <mapa>, kamikaze on|off, "
+        "control <mapa>, ffa <mapa>, dm <mapa>, kamikaze on|off, medic on|off, "
         "lock, unlock, say <texto>, ayuda")
 
 def run_cmd(text, by):
@@ -256,6 +256,24 @@ def run_cmd(text, by):
         m = re.search(r'is\s+"(\d+)"', rcon("kamikaze_arty"))
         estado = "?" if not m else ("ON" if m.group(1) != "0" else "OFF")
         return "[ADMIN] arty kamikaze: %s (uso: kamikaze on|off)" % estado, True
+    if verb in ("medic", "medico", "mdico"):  # norm() borra los acentos: médico -> mdico
+        # cvar latched de la DLL: el Medic nuevo (Browning, botiquin y jeringas lanzables) rige desde el
+        # proximo mapa; un reinicio del server lo deja como diga server.cfg
+        a = norm(arg)
+        if a in ("on", "1", "si", "nuevo", "activar", "activa", "prender", "prende", "encender", "enciende", "poner", "pon"):
+            rcon("set medic_new 1")
+            return ("[ADMIN] Medic NUEVO desde el proximo mapa: Browning, botiquin lanzable y jeringas "
+                    "lanzables (aim + fuego)"), True
+        if a in ("off", "0", "no", "clasico", "clsico", "desactivar", "desactiva", "apagar", "apaga", "quitar", "quita", "sacar", "saca"):
+            rcon("set medic_new 0")
+            return "[ADMIN] Medic CLASICO desde el proximo mapa: la pistola de su faccion y solo la jeringa", True
+        r = rcon("medic_new")
+        m = re.search(r'is\s+"(\d+)"', r)
+        estado = "?" if not m else ("NUEVO" if m.group(1) != "0" else "CLASICO")
+        lat = re.search(r'latched:?\s+"(\d+)"', r)
+        if lat and m and lat.group(1) != m.group(1):
+            estado += " (en el proximo mapa: %s)" % ("NUEVO" if lat.group(1) != "0" else "CLASICO")
+        return "[ADMIN] Medic: %s (uso: medic on|off)" % estado, True
     if verb in ("normal", "clasico", "restaurar", "default", "resetmodo"):
         restore_rotation(); rcon("set stats_mode public")
         rcon("map dday2")
@@ -557,7 +575,7 @@ def looks_command(text):
     return v in {"ayuda","help","estado","status","jugadores","players","kick","kickea","echar",
                  "kickban","ban","unban","delban","desban","lock","unlock","bloquear","abrir",
                  "mapa","map","cambiamapa","duelo","duel","publico","publica","cuenta","startcount",
-                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","dm","kamikaze","kamikase","kamicase","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
+                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","dm","kamikaze","kamikase","kamicase","medic","medico","mdico","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
                  "restart","reload"}
 
 def handle_line(line, dry=False):

@@ -81,6 +81,8 @@ loginctl enable-linger $USER                       # sobrevive al logout
 - **Juego**: `mapa <x>` `duelo <mapa>` `publico` `control <mapa>` `ffa <mapa>` `dm <mapa>`
   `kamikaze on|off` (sin argumento dice el estado; también en frase natural:
   "admin activa/apaga el kamikaze", detector local, sin LLM)
+  `medic on|off` (Medic nuevo o clásico, cvar `medic_new`; se aplica en el próximo mapa;
+  sin argumento dice el estado)
   `cuenta` (17 alias: iniciar/start/tira…) `reset` `resetscore` `torneo on|off`
   `freeze` `proximamapa` `lock` `unlock` `say <texto>`
 - **Moderación**: `kick <nick>` `kickban <nick>` `ban <ip>` `unban <ip>`
