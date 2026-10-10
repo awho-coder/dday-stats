@@ -84,6 +84,8 @@ loginctl enable-linger $USER                       # sobrevive al logout
   `medic on|off` (Medic nuevo o clásico, cvar `medic_new`; se aplica en el próximo mapa;
   sin argumento dice el estado; también en frase natural: "admin activa el medic nuevo",
   "admin deja el medic clásico", detector local, sin LLM; "quiero un médico" solo dice el estado)
+  `medic bazooka on|off` (lanzajeringas, cvar `medic_bazooka`; próximo mapa; también "admin activa
+  la bazooka de jeringas" / "dale la bazooka al medic")
   `cuenta` (17 alias: iniciar/start/tira…) `reset` `resetscore` `torneo on|off`
   `freeze` `proximamapa` `lock` `unlock` `say <texto>`
 - **Moderación**: `kick <nick>` `kickban <nick>` `ban <ip>` `unban <ip>`

@@ -3021,6 +3021,11 @@ qboolean Cmd_Reload (edict_t *ent)
 		 ent->client->limbo_mode || ent->deadflag == DEAD_DEAD)
 		return true;
 
+	// the syringe and the syringe launcher are their own ammo and are never reloaded: a reload would use them up
+	if (ent->client->pers.weapon->classnameb == WEAPON_MORPHINE ||
+		ent->client->pers.weapon->classnameb == WEAPON_SYRINGE_LAUNCHER)
+		return true;
+
 	//hack
 	if (ent->client->pers.weapon->classnameb != WEAPON_PANZERFAUST)
 	{if (ent->client->weaponstate == WEAPON_FIRING ||

@@ -211,7 +211,7 @@ void Give_Class_Weapon(edict_t *ent)
 		client->pers.inventory[ITEM_INDEX(item)] = 1;
 
 	// Loads secondary weapon, if existant, when spawning
-	if (item)
+	if (item && item->ammo)
 	{
 		ammo_item = FindItemInTeam(item->ammo, item->dllname);
 		if (ammo_item)
@@ -263,13 +263,14 @@ void Give_Class_Weapon(edict_t *ent)
 		client->pers.inventory[ITEM_INDEX(item)]=client->resp.team_on->mos[client->resp.mos]->specnum;
 	//}
 
-	// Medic: syringes that he can throw this life (the one in the hand is not counted);
-	// here, after random_class has picked the class
+	// Medic: syringes that he can throw this life (the one in the hand is not counted) and shots of the syringe
+	// launcher; here, after random_class has picked the class
 	if (client->resp.mos == MEDIC)
 	{
 		client->syringes = (int)syringe_count->value;
 		if (client->syringes < 0)
 			client->syringes = 0;
+		client->launcher_shots = SYRINGE_LAUNCHER_SHOTS;
 	}
 
 	ChangeWeapon(ent);
@@ -417,6 +418,13 @@ void InitMOS_List(TeamS_t *team, SMos_t *mos_list)
 			strcpy(MOS[i]->weapon2, "Browning Hi-Power");
 			strcpy(MOS[i]->special, "Healthpack");
 			MOS[i]->specnum = MEDIC_NEW_HEALTHPACKS;
+		}
+
+		// medic_bazooka (a joke, also latched): the syringe launcher instead of the pistol; it has no magazines
+		if (i == MEDIC && medic_bazooka->value)
+		{
+			strcpy(MOS[i]->weapon2, "Syringe Launcher");
+			MOS[i]->ammo2 = 0;
 		}
 	}
 

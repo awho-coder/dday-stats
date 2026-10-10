@@ -131,7 +131,7 @@ def find_player(name):
 HELP = ("[ADMIN] comandos: estado, kick <quien>, kickban <quien>, ban <ip>, unban <ip>, "
         "mapa <nombre>, duelo <mapa>, publico, cuenta, reset, resetscore, tiempo, mapas, bans, "
         "bots on|off, kickbots, screenshot, stuff <cmd>, autostuff <cmd>, autostuffoff, "
-        "control <mapa>, ffa <mapa>, dm <mapa>, kamikaze on|off, medic on|off, "
+        "control <mapa>, ffa <mapa>, dm <mapa>, kamikaze on|off, medic on|off, medic bazooka on|off, "
         "lock, unlock, say <texto>, ayuda")
 
 def run_cmd(text, by):
@@ -260,6 +260,23 @@ def run_cmd(text, by):
         # cvar latched de la DLL: el Medic nuevo (Browning, botiquin y jeringas lanzables) rige desde el
         # proximo mapa; un reinicio del server lo deja como diga server.cfg
         a = norm(arg)
+        if a.startswith(("bazooka", "bazuca", "lanzajeringa")):
+            # 'medic bazooka on|off': el lanzajeringas (medic_bazooka, tambien latched)
+            b = re.sub(r"^(bazooka|bazuca|lanzajeringas?)", "", a)
+            if b in ("on", "1", "si", "activar", "activa", "prender", "prende", "poner", "pon"):
+                rcon("set medic_bazooka 1")
+                return ("[ADMIN] LANZAJERINGAS desde el proximo mapa: el Medic cambia la pistola por una "
+                        "bazooka de 15 jeringas, 5 tiros"), True
+            if b in ("off", "0", "no", "desactivar", "desactiva", "apagar", "apaga", "quitar", "quita", "sacar", "saca"):
+                rcon("set medic_bazooka 0")
+                return "[ADMIN] lanzajeringas DESACTIVADO desde el proximo mapa: el Medic vuelve a su pistola", True
+            r = rcon("medic_bazooka")
+            m = re.search(r'is\s+"(\d+)"', r)
+            estado = "?" if not m else ("ON" if m.group(1) != "0" else "OFF")
+            lat = re.search(r'latched:?\s+"(\d+)"', r)
+            if lat and m and lat.group(1) != m.group(1):
+                estado += " (en el proximo mapa: %s)" % ("ON" if lat.group(1) != "0" else "OFF")
+            return "[ADMIN] lanzajeringas: %s (uso: medic bazooka on|off)" % estado, True
         if a in ("on", "1", "si", "nuevo", "activar", "activa", "prender", "prende", "encender", "enciende", "poner", "pon"):
             rcon("set medic_new 1")
             return ("[ADMIN] Medic NUEVO desde el proximo mapa: Browning, botiquin lanzable y jeringas "
@@ -543,6 +560,13 @@ def medic_phrase(text):
     kamikaze: 'quiero un medico' no prende nada (hace falta 'nuevo' o un verbo de activar).
     None si no hablan del medic."""
     low = " " + text.lower() + " "
+    # el lanzajeringas: 'activa la bazooka de jeringas', 'saca el lanzajeringas'
+    if re.search(r"lanzajeringa|\bbazooka\b.*jeringa|jeringa.*\bbazooka\b|\bbazuca\b.*jeringa|\bm[eé]dic[oa]?\b.*\bbazooka\b|\bbazooka\b.*\bm[eé]dic", low):
+        if any(w in low for w in KAMIKAZE_OFF):
+            return "medic bazooka off"
+        if any(re.search(r"\b%s" % re.escape(w), low) for w in KAMIKAZE_ON + ("dale", "da ", "entrega")):
+            return "medic bazooka on"
+        return "medic bazooka"
     if not re.search(r"\bm[eé]dic[oa]?s?\b", low):
         return None
     if any(w in low for w in MEDIC_CLASSIC) or any(w in low for w in KAMIKAZE_OFF):

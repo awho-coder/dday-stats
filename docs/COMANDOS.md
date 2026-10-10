@@ -116,6 +116,21 @@ bajan solos con `allow_download 1`. Sin jeringas lanzables, con un bot o con
 Lo que se ponga por rcon se pierde al reiniciar el servidor; para dejarlo fijo va en
 `dday/server.cfg`.
 
+## Servidor: lanzajeringas del Medic (`medic_bazooka`)
+
+Feature de chiste, apagada por defecto. Con `medic_bazooka 1` el Medic lleva, en lugar de su
+pistola, una **bazooka que dispara 15 jeringas de una vez**, como un escopetazo. Cada jeringa es
+una jeringa lanzada normal: cura al compañero y envenena al enemigo, con los mismos cvars
+`syringe_*` (también el bonus de cabeza). Tiene **5 tiros por vida**, no se recarga, y se dispara
+libre: de pie, caminando y sin apuntar, un tiro por segundo. Se ve como la bazooka de USA en
+todas las facciones (modelos y sonidos que ya tiene todo el mundo). Funciona con o sin
+`medic_new`. Es latched: se aplica en el **próximo mapa**. Desde el bot: `medic bazooka on|off`
+(o "admin activa la bazooka de jeringas"). Constantes `SYRINGE_LAUNCHER_*` en `src/g_local.h`.
+
+| Cvar | Por defecto | Qué hace |
+|---|---|---|
+| `medic_bazooka` | `0` | `1` le da el lanzajeringas al Medic en el próximo mapa. |
+
 ## Servidor: estadísticas
 
 Detalle: [`../stats/README.md`](../stats/README.md).
