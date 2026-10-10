@@ -988,6 +988,10 @@ void Think_Arty (edict_t *ent);
 
 qboolean OnSameTeam(edict_t *self,edict_t *target);
 qboolean G_IsFFA(void);
+// Free For All scoreboard pictures. The leading '/' makes them full paths: the client downloads the .png
+// itself (a plain name like "ffa_score" makes it ask for pics/ffa_score.pcx, which does not exist)
+#define FFA_PIC_SCORE	"/pics/ffa_score.png"
+#define FFA_PIC_WINNER	"/pics/ffa_winner.png"
 void FFA_JoinPlayer(edict_t *ent);
 void FFA_HudReset(void);
 void FFA_SpawnReset(void);
