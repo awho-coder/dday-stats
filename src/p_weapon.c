@@ -65,6 +65,7 @@ void Shrapnel_Dud (edict_t *ent);
 void Shrapnel_Touch (edict_t *ent, edict_t *other, cplane_t *plane, csurface_t *surf);
 void check_unscope (edict_t *ent);//faf
 void SpawnDamage (int type, vec3_t origin, vec3_t normal, int damage);
+int Damage_Loc (edict_t *targ, vec3_t point, edict_t *attacker);
 
 void P_ProjectSource (gclient_t *client, vec3_t point, vec3_t distance, vec3_t forward, vec3_t right, vec3_t result)
 {
@@ -2259,9 +2260,10 @@ void Weapon_Antidote(edict_t *ent)
 SYRINGE
 
 With medic_new on, the Medic throws the syringe in his hand with aim + fire, as the knife. A teammate it
-hits recovers syringe_heal health (wounds are not cured); an enemy is poisoned: syringe_poison damage spread
-over SYRINGE_POISON_TIME seconds, which stacks with every syringe and can kill (MOD_SYRINGE). The syringe of
-the hand is never used up; he carries syringe_count more to throw.
+hits recovers syringe_heal health (syringe_heal_head in the head; wounds are not cured); an enemy is
+poisoned: syringe_poison damage (syringe_poison_head in the head) spread over SYRINGE_POISON_TIME seconds,
+which stacks with every syringe and can kill (MOD_SYRINGE). The syringe of the hand is never used up; he
+carries syringe_count more to throw.
 
 ======================================================================
 */
@@ -2369,7 +2371,7 @@ static void syringe_poison_think (edict_t *ent)
 }
 
 // poisons the victim; the entity has no model and no collision, it only carries the damage
-static void Syringe_Poison (edict_t *victim, edict_t *medic)
+static void Syringe_Poison (edict_t *victim, edict_t *medic, int damage)
 {
 	edict_t	*poison;
 
@@ -2381,7 +2383,7 @@ static void Syringe_Poison (edict_t *victim, edict_t *medic)
 	poison->classnameb = SYRINGE_POISON;
 	poison->enemy = victim;
 	poison->activator = medic;
-	poison->dmg = (int)syringe_poison->value;
+	poison->dmg = damage;
 	poison->count = 0;	// damage done so far
 	poison->timestamp = level.time;
 	poison->svflags |= SVF_NOCLIENT;
@@ -2425,12 +2427,16 @@ static void syringe_touch (edict_t *self, edict_t *other, cplane_t *plane, csurf
 	if (other->client && other->health > 0 && !other->deadflag && !other->flyingnun &&
 		other->client->resp.team_on)
 	{
+		// a syringe in the head heals or poisons more (syringe_heal_head, syringe_poison_head); the zone is found as
+		// for a bullet
+		qboolean head = (Damage_Loc (other, self->s.origin, (owner && owner->inuse) ? owner : world) == HEAD_WOUND);
+
 		if (!G_IsFFA() && other->client->resp.team_on->index == self->obj_owner)
 		{
 			// a teammate: health only, the wounds stay as they are
 			if (other->health < HEALTH_MAX)
 			{
-				other->health += (int)syringe_heal->value;
+				other->health += (int)(head ? syringe_heal_head->value : syringe_heal->value);
 				if (other->health > HEALTH_MAX)
 					other->health = HEALTH_MAX;
 
@@ -2452,10 +2458,10 @@ static void syringe_touch (edict_t *self, edict_t *other, cplane_t *plane, csurf
 		}
 		else
 		{
-			Syringe_Poison (other, owner);
+			Syringe_Poison (other, owner, (int)(head ? syringe_poison_head->value : syringe_poison->value));
 
-			// it gets in the body: a hit sound as a bullet in the torso, some blood and a green cloud of poison
-			gi.sound (other, CHAN_ITEM, gi.soundindex ("misc/hittorso.wav"), 1, ATTN_NORM, 0);
+			// it gets in the body: a hit sound as a bullet in the head or the torso, some blood and a green cloud of poison
+			gi.sound (other, CHAN_ITEM, gi.soundindex (head ? "misc/hithead.wav" : "misc/hittorso.wav"), 1, ATTN_NORM, 0);
 			SpawnDamage (TE_BLOOD, self->s.origin, back, 0);
 			Syringe_Sparks (self->s.origin, back, 50, 0xd0);	// green
 		}

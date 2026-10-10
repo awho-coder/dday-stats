@@ -109,7 +109,9 @@ bajan solos con `allow_download 1`. Sin jeringas lanzables, con un bot o con
 | `medic_new` | `0` | `1` activa el Medic nuevo (Browning, botiquín y jeringas) en el próximo mapa. |
 | `syringe_count` | `9` | Jeringas lanzables por vida (sin contar la de la mano). Se reparten al aparecer. |
 | `syringe_heal` | `33` | Vida que recupera el compañero (tope `HEALTH_MAX`). |
+| `syringe_heal_head` | `45` | Vida que recupera el compañero si la jeringa le pega en la cabeza (tope `HEALTH_MAX`). |
 | `syringe_poison` | `33` | Daño total del veneno de una jeringa, en 2 segundos. |
+| `syringe_poison_head` | `50` | Lo mismo cuando la jeringa le pega en la cabeza. |
 
 Lo que se ponga por rcon se pierde al reiniciar el servidor; para dejarlo fijo va en
 `dday/server.cfg`.
