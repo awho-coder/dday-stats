@@ -148,6 +148,39 @@ User=quake2
 WantedBy=multi-user.target
 ```
 
+### Free For All (`mode = 'ffa'`)
+
+Al llegar al fraglimit la partida termina como `normal`, sin equipo ganador. Cada
+jugador que llega al final lleva su puesto (`place`, por puntaje; los empatados
+comparten puesto: 1, 1, 3...) y `match_end` trae `ffa_winner` (el único primero,
+o `null` si empataron). Quien se fue antes no tiene puesto ni resultado.
+
+- Resultado: `W` al único primero, `D` a los empatados en el primer puesto, `L`
+  al resto.
+- **Rankeada** (solo para `ladder_ffa` de abajo, no para el Elo): final normal,
+  al menos 5 minutos (`--min-duration`) y al menos 3 humanos que terminaron
+  (`--ffa-min-humans`, por defecto 3).
+- **El FFA no mueve el Elo** (tampoco con `--rebuild-ratings`): solo los modos por
+  equipos lo hacen. El FFA tiene su ladder: `ladder_ffa()` (partidas, victorias,
+  podios en el top 3, puesto promedio, K/D y mejor racha).
+- Las partidas FFA cargadas antes de este cambio (final `other`, sin puestos) las
+  completa `--init-schema`: puesto por puntaje, resultado y `end_reason = 'normal'`.
+
+### Modo control: kills en la zona
+
+En mapas con zona, cada `kill` lleva `kzone` y `vzone` (si el que mató / el que
+murió estaba dentro) y cada jugador `zone_kills`: kills a enemigos en que alguno
+de los dos estaba en la zona (defender o limpiarla; sin fuego amigo ni
+suicidios). En la base: `kills.killer_in_zone` / `victim_in_zone` (NULL fuera del
+modo control y en partidas anteriores) y `zone_kills`, que muestra `ladder_zone()`.
+
+### Partidas sin humanos
+
+Por defecto se cargan todas las partidas, incluso las que jugaron solo bots.
+`--skip-bot-only` (o `DDAY_STATS_SKIP_BOT_ONLY=1`) deja de cargar las que no
+tuvieron ningún humano: el archivo se mueve igual a `processed/` y el registro lo
+dice. Está apagada por defecto.
+
 ### Rachas de kills
 
 El registro lleva su propio contador de rachas con las mismas reglas que el
@@ -170,7 +203,7 @@ jugador que desvió el casco de otro: el tirador más desafortunado.
 
 ### Reglas del rating
 
-Una partida es **rankeada** si terminó normalmente con ganador o empate,
+Una partida de equipos es **rankeada** si terminó normalmente con ganador o empate,
 duró lo suficiente y cada equipo tuvo suficientes humanos. Los bots nunca cuentan.
 
 | | público | duelo |
@@ -235,8 +268,11 @@ SELECT * FROM ladder_elo(10, 'public', 'all');       -- Elo histórico
 SELECT * FROM ladder_streak();                       -- 20 mejores rachas, temporada actual
 SELECT * FROM ladder_streak('duel', 10, 'all');      -- 10 mejores rachas en duelos, histórico
 
-SELECT * FROM ladder_zone();                         -- modo control: capturas y minutos en la zona
+SELECT * FROM ladder_zone();                         -- modo control: capturas, minutos y kills en la zona
 SELECT * FROM ladder_zone(1, 'all', 'all');          -- idem, sin mínimo de partidas, histórico
+
+SELECT * FROM ladder_ffa();                          -- Free For All: victorias, podios, puesto promedio (mín. 3)
+SELECT * FROM ladder_ffa(1, 'all', 'all');           -- idem, sin mínimo de partidas, histórico
 
 SELECT * FROM ladder_luck();                         -- los más suertudos (casco + pie), mín. 5 partidas
 SELECT * FROM ladder_unlucky();                      -- tiradores con más tiros desviados por cascos
