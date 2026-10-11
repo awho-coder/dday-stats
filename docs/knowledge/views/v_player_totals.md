@@ -5,7 +5,7 @@ description: Totales historicos por jugador (una fila por jugador).
 resource: postgresql://dday/public/v_player_totals
 tags: [postgresql, view, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-05T01:21:03Z }
+generated: { by: process:okf-export, at: 2026-10-11T00:24:11Z }
 sources: 
   - id: schema
     resource: /references/schema.sql
@@ -50,6 +50,7 @@ sources:
 | `streaks_ended` | bigint | sí |  |
 | `zone_captures` | bigint | sí |  |
 | `zone_minutes` | numeric | sí |  |
+| `zone_kills` | bigint | sí |  |
 
 # Relaciones
 

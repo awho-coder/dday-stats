@@ -5,7 +5,7 @@ description: 'Kills por arma y jugador (arma en mano o, si no aplica, la causa).
 resource: postgresql://dday/public/player_weapon_stats
 tags: [postgresql, table, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-04T18:33:53Z }
+generated: { by: process:okf-export, at: 2026-10-11T00:24:11Z }
 sources: 
   - id: schema
     resource: /references/schema.sql

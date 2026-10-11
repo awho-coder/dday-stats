@@ -5,7 +5,7 @@ description: 'Una kill (o suicidio/muerte por entorno). Tabla de detalle, la mas
 resource: postgresql://dday/public/kills
 tags: [postgresql, table, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-04T18:33:53Z }
+generated: { by: process:okf-export, at: 2026-10-11T00:24:11Z }
 sources: 
   - id: schema
     resource: /references/schema.sql
@@ -36,6 +36,8 @@ sources:
 | `victim_x` | integer | sí | Posicion X de la victima. |
 | `victim_y` | integer | sí | Posicion Y de la victima. |
 | `victim_z` | integer | sí | Posicion Z de la victima. |
+| `killer_in_zone` | boolean | sí | Modo control: true si el que mato estaba dentro de la zona; NULL fuera del modo control (o en partidas anteriores a este dato). |
+| `victim_in_zone` | boolean | sí | Modo control: true si el que murio estaba dentro de la zona; NULL fuera del modo control. |
 
 # Relaciones
 

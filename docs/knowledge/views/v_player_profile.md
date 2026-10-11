@@ -5,7 +5,7 @@ description: Perfil completo de un jugador (totales + Elo + favoritos + nemesis)
 resource: postgresql://dday/public/v_player_profile
 tags: [postgresql, view, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-05T02:17:08Z }
+generated: { by: process:okf-export, at: 2026-10-11T00:24:11Z }
 sources: 
   - id: schema
     resource: /references/schema.sql
@@ -50,6 +50,7 @@ sources:
 | `streaks_ended` | bigint | sí |  |
 | `zone_captures` | bigint | sí |  |
 | `zone_minutes` | numeric | sí |  |
+| `zone_kills` | bigint | sí |  |
 | `rating` | integer | sí |  |
 | `ranked_games` | integer | sí |  |
 | `duel_rating` | integer | sí |  |

@@ -5,7 +5,7 @@ description: Resumen de un jugador en una partida (suma de sus tramos/reconexion
 resource: postgresql://dday/public/match_players
 tags: [postgresql, table, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-05T01:21:03Z }
+generated: { by: process:okf-export, at: 2026-10-11T00:24:11Z }
 sources: 
   - id: schema
     resource: /references/schema.sql
@@ -46,6 +46,8 @@ sources:
 | `godlikes` | integer | no | Veces que alcanzo GODLIKE. |
 | `streaks_ended` | integer | no | Rachas ajenas (>= base) que corto matando. |
 | `zone_seconds` | integer | no | Modo control: segundos que paso dentro de la zona (vivo y con la zona abierta). |
+| `zone_kills` | integer | no | Modo control: kills a enemigos en que el que mato o el que murio estaba en la zona (defender o limpiar). |
+| `place` | smallint | sí | FFA: puesto al terminar por score (los empatados comparten puesto); NULL en otros modos o si se fue antes. |
 
 # Relaciones
 

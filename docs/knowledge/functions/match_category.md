@@ -5,7 +5,7 @@ description: 'Categoria de ladder de una partida: official si tiene torneo, si n
 resource: postgresql://dday/public/match_category
 tags: [postgresql, function, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-04T18:33:53Z }
+generated: { by: process:okf-export, at: 2026-10-11T00:24:11Z }
 sources: 
   - id: schema
     resource: /references/schema.sql
