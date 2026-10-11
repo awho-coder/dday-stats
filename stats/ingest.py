@@ -10,6 +10,7 @@ Uso:
     ingest.py ... --loop 60          # revisar cada 60 s (servicio)
     ingest.py ... --rebuild-ratings  # recalcular todo el Elo desde cero
     ingest.py ... --init-schema      # crear / actualizar tablas y vistas
+    ingest.py ... --skip-bot-only    # no cargar partidas sin ningun humano
 
 Cada archivo se procesa en una transaccion. Si la partida ya existe en la
 base, el archivo se considera procesado (idempotente). Los archivos
@@ -49,6 +50,8 @@ class Config:
     duel_min_duration: float = 120.0
     min_participation: float = 0.2  # fraccion minima del tiempo para contar en el Elo
     bots_as_humans: bool = False    # solo para pruebas: los bots cuentan como humanos
+    ffa_min_humans: int = 3         # FFA: humanos minimos que terminaron la partida para rankear
+    skip_bot_only: bool = False     # no cargar partidas sin ningun humano que haya jugado
 
 
 @dataclass
@@ -74,6 +77,8 @@ class PlayerAgg:
     deflected: int = 0       # tiros suyos desviados por un casco
     human_deaths: int = 0    # muertes por humanos, suicidio o entorno
     zone_time: int = 0       # modo control: segundos dentro de la zona
+    zone_kills: int = 0      # modo control: kills con el que mata o el que muere en la zona
+    place: object = None     # FFA: puesto al terminar (None = se fue antes / otro modo)
 
     def add(self, ev):
         t = ev.get("time") or [0, 0]
@@ -85,9 +90,12 @@ class PlayerAgg:
                           ("tk", "tk"), ("hs", "hs"), ("objs", "objs"), ("hits", "hits"),
                           ("misses", "misses"), ("score", "score"), ("points", "points"),
                           ("helmet_saves", "helmet_saves"), ("foot_saves", "foot_saves"),
-                          ("deflected", "deflected"), ("zone_time", "zone_time")):
+                          ("deflected", "deflected"), ("zone_time", "zone_time"),
+                          ("zone_kills", "zone_kills")):
             setattr(self, attr, getattr(self, attr) + int(ev.get(key) or 0))
         self.best_streak = max(self.best_streak, int(ev.get("best_streak") or 0))
+        if ev.get("place"):
+            self.place = int(ev["place"])
 
     @property
     def total_time(self):
@@ -143,6 +151,10 @@ class Match:
         return self.start["match"]
 
     @property
+    def mode(self):
+        return self.start.get("mode", "dm")
+
+    @property
     def kind(self):
         return "duel" if self.start.get("kind") == "duel" else "public"
 
@@ -174,7 +186,7 @@ def build_match(events, path):
     start = next((e for e in events if e["ev"] == "match_start"), None)
     if not start or not start.get("match"):
         raise ValueError("sin match_start")
-    if start.get("v") != 1:
+    if start.get("v") not in (1, 2):
         raise ValueError(f"version de formato no soportada: {start.get('v')}")
 
     # duelo: solo cuenta lo que viene despues de la ultima cuenta regresiva
@@ -250,6 +262,7 @@ def build_match(events, path):
             else:
                 p.kills += 1
                 p.hs += 1 if k.get("hs") else 0
+                p.zone_kills += 1 if (k.get("kzone") or k.get("vzone")) else 0
                 # como en el juego, la kill por desangrado no suma a la racha
                 if k.get("mod") != "wound":
                     streak[key] = streak.get(key, 0) + 1
@@ -272,7 +285,29 @@ def team_humans(match, team):
                if not p.bot and p.team == team and p.total_time > 0)
 
 
+def ffa_finishers(match):
+    """Humanos que terminaron una partida FFA (tienen puesto)."""
+    return sum(1 for p in match.players.values()
+               if not p.bot and p.place is not None and p.total_time > 0)
+
+
+def ffa_result(match, p):
+    """W al unico primero, D a los empatados en el primer puesto, L al resto;
+    None a quien se fue antes (sin puesto)."""
+    if p.place is None:
+        return None
+    if p.place != 1:
+        return "L"
+    firsts = sum(1 for q in match.players.values() if q.place == 1)
+    return "W" if firsts == 1 else "D"
+
+
 def is_ranked(match, cfg):
+    if match.mode == "ffa":
+        # rankeada solo para el ladder FFA: no mueve el Elo
+        return (match.end.get("reason") == "normal"
+                and match.duration >= cfg.min_duration
+                and ffa_finishers(match) >= cfg.ffa_min_humans)
     if match.kind == "duel":
         min_humans, min_duration = cfg.duel_min_humans, cfg.duel_min_duration
     else:
@@ -307,13 +342,15 @@ class Ingestor:
         if self.cfg.bots_as_humans:
             strip_bot_flags(events)
         match = build_match(events, path)
+        humans = sum(1 for p in match.players.values() if not p.bot and p.total_time > 0)
+        if self.cfg.skip_bot_only and humans == 0:
+            raise SkipMatch("partida sin humanos (--skip-bot-only)")
         ranked = is_ranked(match, self.cfg)
         started = ts(match.start["ts"])
         ended = ts(match.end["ts"]) if match.end.get("ts") else None
         teams_start = {t["idx"]: t for t in match.start.get("teams", [])}
         teams_end = {t["idx"]: t for t in match.end.get("teams", [])}
         winner = match.winner
-        humans = sum(1 for p in match.players.values() if not p.bot and p.total_time > 0)
 
         with self.conn.transaction(), self.conn.cursor() as cur:
             cur.execute(
@@ -341,7 +378,9 @@ class Ingestor:
             for key, p in match.players.items():
                 pid = self.player_id(cur, p.name, p.bot, seen)
                 pids[key] = pid
-                if winner is None or p.team is None:
+                if match.mode == "ffa":
+                    result = ffa_result(match, p)
+                elif winner is None or p.team is None:
                     result = None
                 elif winner == -1:
                     result = "D"
@@ -351,13 +390,15 @@ class Ingestor:
                     """INSERT INTO match_players (match_id, player_id, team, time_team0, time_team1,
                            kills, deaths, human_kills, human_deaths, suicides, teamkills, headshots,
                            objectives, best_streak, helmet_saves, foot_saves, deflected,
-                           hits, misses, score, points, classes, main_class, result, zone_seconds)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                           hits, misses, score, points, classes, main_class, result, zone_seconds,
+                           zone_kills, place)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (match.id, pid, p.team, p.time[0], p.time[1], p.kills, p.deaths,
                      p.human_kills, p.human_deaths,
                      p.suicides, p.tk, p.hs, p.objs, p.best_streak, p.helmet_saves, p.foot_saves,
                      p.deflected, p.hits, p.misses, p.score, p.points,
-                     json.dumps(p.classes), p.main_class, result, p.zone_time))
+                     json.dumps(p.classes), p.main_class, result, p.zone_time, p.zone_kills,
+                     p.place))
 
             def actor_id(name, bot):
                 key = (name, bot)
@@ -383,13 +424,16 @@ class Ingestor:
                              kl.get("class") if kl else None, v.get("class"),
                              k.get("mod") or "unknown", k.get("weapon"),
                              bool(k.get("hs")), bool(k.get("ff")), bool(k.get("suicide")),
-                             k.get("dist"), kpos[0], kpos[1], kpos[2], vpos[0], vpos[1], vpos[2]))
+                             k.get("dist"), kpos[0], kpos[1], kpos[2], vpos[0], vpos[1], vpos[2],
+                             bool(k["kzone"]) if "kzone" in k else None,
+                             bool(k["vzone"]) if "vzone" in k else None))
             if rows:
                 cur.executemany(
                     """INSERT INTO kills (match_id, t, killer_id, victim_id, killer_team, victim_team,
                            killer_class, victim_class, mod, weapon, headshot, friendly_fire, suicide,
-                           distance, killer_x, killer_y, killer_z, victim_x, victim_y, victim_z)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                           distance, killer_x, killer_y, killer_z, victim_x, victim_y, victim_z,
+                           killer_in_zone, victim_in_zone)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     rows)
 
             rows = []
@@ -407,7 +451,8 @@ class Ingestor:
             # tablas de resumen del ladder (en la misma transaccion)
             cur.execute("SELECT apply_rollups(%s)", ([match.id],))
 
-            if ranked:
+            # el FFA tiene su propio ladder: solo los modos por equipos mueven el Elo
+            if ranked and match.mode != "ffa":
                 apply_elo(cur, match.id, self.cfg.min_participation)
 
         log.info("%s: %s (%s, %s%s), %d jugadores, %d kills%s", match.id, match.start.get("map"),
@@ -493,7 +538,7 @@ def rebuild_ratings(conn, cfg):
     with conn.transaction(), conn.cursor() as cur:
         cur.execute("DELETE FROM rating_history")
         cur.execute("DELETE FROM ratings")
-        cur.execute("SELECT id FROM matches WHERE ranked ORDER BY started_at, id")
+        cur.execute("SELECT id FROM matches WHERE ranked AND mode <> 'ffa' ORDER BY started_at, id")
         ids = [r[0] for r in cur.fetchall()]
         for mid in ids:
             apply_elo(cur, mid, cfg.min_participation)
@@ -582,6 +627,11 @@ def main():
     ap.add_argument("--min-participation", type=float, default=Config.min_participation)
     ap.add_argument("--bots-as-humans", action="store_true",
                     help="SOLO PRUEBAS: cargar a los bots como si fueran humanos")
+    ap.add_argument("--ffa-min-humans", type=int, default=Config.ffa_min_humans,
+                    help="FFA: humanos minimos que terminaron la partida para que sea rankeada")
+    ap.add_argument("--skip-bot-only", action="store_true",
+                    default=os.environ.get("DDAY_STATS_SKIP_BOT_ONLY", "").lower() in ("1", "true", "yes", "on"),
+                    help="no cargar partidas sin ningun humano que haya jugado (o DDAY_STATS_SKIP_BOT_ONLY=1)")
     ap.add_argument("--init-schema", action="store_true", help="crear / actualizar tablas y vistas")
     ap.add_argument("--rebuild-ratings", action="store_true", help="recalcular el Elo desde cero")
     ap.add_argument("--rebuild-stats", action="store_true",
@@ -606,7 +656,8 @@ def main():
 
     cfg = Config(min_humans=args.min_humans, min_duration=args.min_duration,
                  duel_min_humans=args.duel_min_humans, duel_min_duration=args.duel_min_duration,
-                 min_participation=args.min_participation, bots_as_humans=args.bots_as_humans)
+                 min_participation=args.min_participation, bots_as_humans=args.bots_as_humans,
+                 ffa_min_humans=args.ffa_min_humans, skip_bot_only=args.skip_bot_only)
 
     maintenance = (args.init_schema or args.rebuild_ratings or args.rebuild_stats
                    or args.new_season or args.set_event)
@@ -622,7 +673,7 @@ def main():
                 conn.execute(SCHEMA_FILE.read_text(encoding="utf-8"))
                 log.info("esquema actualizado")
                 # ratings recreada por una migracion: se recalcula sola
-                if conn.execute("SELECT EXISTS (SELECT 1 FROM matches WHERE ranked)"
+                if conn.execute("SELECT EXISTS (SELECT 1 FROM matches WHERE ranked AND mode <> 'ffa')"
                                 " AND NOT EXISTS (SELECT 1 FROM ratings)").fetchone()[0]:
                     rebuild_elo = True
             if args.new_season:
