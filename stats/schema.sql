@@ -975,13 +975,13 @@ LANGUAGE sql STABLE AS $$
     )
     SELECT rank() OVER (ORDER BY s.wins DESC, s.podiums DESC,
                         s.place_sum::numeric / greatest(s.placed, 1)),
-           p.name, s.matches, s.wins,
-           round(100.0 * s.wins / greatest(s.matches, 1), 1), s.podiums,
+           p.name, s.placed, s.wins,
+           round(100.0 * s.wins / greatest(s.placed, 1), 1), s.podiums,
            CASE WHEN s.placed > 0 THEN round(s.place_sum::numeric / s.placed, 2) END,
            s.kills, s.deaths, round(s.kills::numeric / greatest(s.deaths, 1), 2), s.best_streak
     FROM s
     JOIN players p ON p.id = s.player_id
-    WHERE s.matches >= min_matches
+    WHERE s.placed >= min_matches
     ORDER BY 1, p.name;
 $$;
 
@@ -1403,6 +1403,6 @@ COMMENT ON FUNCTION ladder_luck(integer, text, text, text) IS 'Los mas suertudos
 COMMENT ON FUNCTION ladder_unlucky(integer, text, text, text) IS 'Los tiradores mas desafortunados (tiros desviados por cascos).';
 COMMENT ON FUNCTION ladder_streak_tiers(integer, text, text, text) IS 'Rachas por nivel: quien mas llego a GODLIKE, UNSTOPPABLE, etc.';
 COMMENT ON FUNCTION ladder_zone(integer, text, text) IS 'Modo control: capturas, minutos y kills en la zona por jugador.';
-COMMENT ON FUNCTION ladder_ffa(integer, text, text) IS 'Free For All: victorias, podios, puesto promedio, K/D y mejor racha por jugador (sin Elo).';
+COMMENT ON FUNCTION ladder_ffa(integer, text, text) IS 'Free For All: victorias, podios, puesto promedio, K/D y mejor racha por jugador (sin Elo). Partidas y % de victorias cuentan solo las FFA terminadas (con puesto); K/D y racha, todas.';
 
 COMMIT;
