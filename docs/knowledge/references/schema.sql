@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS matches (
     id           text PRIMARY KEY,           -- <fecha>-<servidor>-<random>
     server       text        NOT NULL,
     map          text        NOT NULL,
-    mode         text        NOT NULL,       -- dm, ctb, campaign, control
+    mode         text        NOT NULL,       -- dm, ctb, campaign, control, ffa
     kind         text        NOT NULL DEFAULT 'public',  -- public o duel (cvar stats_mode)
     event        text        NOT NULL DEFAULT '',        -- torneo (cvar stats_event); '' = casual
     season_id    integer     REFERENCES seasons (id),
@@ -88,6 +88,8 @@ CREATE TABLE IF NOT EXISTS match_players (
     godlikes     integer NOT NULL DEFAULT 0, -- GODLIKE
     streaks_ended integer NOT NULL DEFAULT 0, -- "has ENDED <x> streak"
     zone_seconds integer NOT NULL DEFAULT 0, -- modo control: segundos dentro de la zona
+    zone_kills   integer NOT NULL DEFAULT 0, -- modo control: kills con el que mata o el que muere en la zona
+    place        smallint,                   -- FFA: puesto al terminar (NULL en otros modos o si se fue antes)
     PRIMARY KEY (match_id, player_id)
 );
 CREATE INDEX IF NOT EXISTS match_players_player_idx ON match_players (player_id);
@@ -110,7 +112,9 @@ CREATE TABLE IF NOT EXISTS kills (
     suicide       boolean  NOT NULL DEFAULT false,
     distance      integer,
     killer_x integer, killer_y integer, killer_z integer,
-    victim_x integer, victim_y integer, victim_z integer
+    victim_x integer, victim_y integer, victim_z integer,
+    killer_in_zone boolean,                  -- modo control: el que mato estaba en la zona (NULL fuera del modo)
+    victim_in_zone boolean                   -- modo control: el que murio estaba en la zona
 );
 CREATE INDEX IF NOT EXISTS kills_match_idx ON kills (match_id);
 CREATE INDEX IF NOT EXISTS kills_killer_idx ON kills (killer_id);
@@ -163,6 +167,10 @@ ALTER TABLE match_players ADD COLUMN IF NOT EXISTS unstoppables  integer NOT NUL
 ALTER TABLE match_players ADD COLUMN IF NOT EXISTS godlikes      integer NOT NULL DEFAULT 0;
 ALTER TABLE match_players ADD COLUMN IF NOT EXISTS streaks_ended integer NOT NULL DEFAULT 0;
 ALTER TABLE match_players ADD COLUMN IF NOT EXISTS zone_seconds  integer NOT NULL DEFAULT 0;
+ALTER TABLE match_players ADD COLUMN IF NOT EXISTS zone_kills    integer NOT NULL DEFAULT 0;
+ALTER TABLE match_players ADD COLUMN IF NOT EXISTS place         smallint;
+ALTER TABLE kills ADD COLUMN IF NOT EXISTS killer_in_zone boolean;
+ALTER TABLE kills ADD COLUMN IF NOT EXISTS victim_in_zone boolean;
 
 -- rellena las columnas nuevas en filas cargadas antes de que existieran
 UPDATE match_players mp SET
@@ -288,6 +296,10 @@ CREATE TABLE IF NOT EXISTS player_stats (
     last_match    timestamptz,
     zone_seconds  integer NOT NULL DEFAULT 0,  -- modo control: segundos dentro de la zona
     zone_captures integer NOT NULL DEFAULT 0,  -- modo control: capturas en las que participo
+    zone_kills    integer NOT NULL DEFAULT 0,  -- modo control: kills en la zona (defender o limpiar)
+    ffa_podiums   integer NOT NULL DEFAULT 0,  -- FFA: veces en el top 3
+    ffa_placed    integer NOT NULL DEFAULT 0,  -- FFA: partidas terminadas con puesto
+    ffa_place_sum integer NOT NULL DEFAULT 0,  -- FFA: suma de puestos (puesto promedio = suma / ffa_placed)
     PRIMARY KEY (player_id, season_id, kind, mode, event)
 );
 
@@ -358,6 +370,18 @@ CREATE TABLE IF NOT EXISTS map_weapon_stats (
     PRIMARY KEY (map, kind, weapon)
 );
 
+-- columnas de FFA y kills en zona: si player_stats no las tenia, al final se
+-- recalculan los resumenes (rebuild_rollups) para que cuadren con el historial
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'player_stats')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                       WHERE table_name = 'player_stats' AND column_name = 'ffa_placed')
+       AND to_regclass('pg_temp.streak_backfill_needed') IS NULL THEN
+        CREATE TEMP TABLE streak_backfill_needed () ON COMMIT DROP;
+    END IF;
+END $$;
+
 ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS helmet_saves integer NOT NULL DEFAULT 0;
 ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS foot_saves   integer NOT NULL DEFAULT 0;
 ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS deflected    integer NOT NULL DEFAULT 0;
@@ -369,6 +393,10 @@ ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS godlikes      integer NOT NULL
 ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS streaks_ended integer NOT NULL DEFAULT 0;
 ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS zone_seconds  integer NOT NULL DEFAULT 0;
 ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS zone_captures integer NOT NULL DEFAULT 0;
+ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS zone_kills    integer NOT NULL DEFAULT 0;
+ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS ffa_podiums   integer NOT NULL DEFAULT 0;
+ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS ffa_placed    integer NOT NULL DEFAULT 0;
+ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS ffa_place_sum integer NOT NULL DEFAULT 0;
 
 -- actividad por dia (hora de Chile)
 CREATE TABLE IF NOT EXISTS daily_stats (
@@ -478,7 +506,7 @@ BEGIN
         objectives, seconds, best_streak, max_kills, longest_kill, last_match,
         helmet_saves, foot_saves, deflected,
         sprees, rampages, dominatings, unstoppables, godlikes, streaks_ended,
-        zone_seconds, zone_captures)
+        zone_seconds, zone_captures, zone_kills, ffa_podiums, ffa_placed, ffa_place_sum)
     SELECT mp.player_id, m.season_id, match_category(m.kind, m.event), m.mode, m.event, count(*),
            count(*) FILTER (WHERE mp.result = 'W'), count(*) FILTER (WHERE mp.result = 'L'),
            count(*) FILTER (WHERE mp.result = 'D'),
@@ -489,7 +517,11 @@ BEGIN
            sum(mp.helmet_saves), sum(mp.foot_saves), sum(mp.deflected),
            sum(mp.sprees), sum(mp.rampages), sum(mp.dominatings), sum(mp.unstoppables),
            sum(mp.godlikes), sum(mp.streaks_ended),
-           sum(mp.zone_seconds), coalesce(sum(zc.n), 0)
+           sum(mp.zone_seconds), coalesce(sum(zc.n), 0), sum(mp.zone_kills),
+           -- puestos del FFA (solo m.mode = 'ffa'; quien se fue antes no tiene puesto)
+           count(*) FILTER (WHERE m.mode = 'ffa' AND mp.place <= 3),
+           count(*) FILTER (WHERE m.mode = 'ffa' AND mp.place IS NOT NULL),
+           coalesce(sum(mp.place) FILTER (WHERE m.mode = 'ffa'), 0)
     FROM match_players mp
     JOIN matches m ON m.id = mp.match_id
     JOIN players p ON p.id = mp.player_id
@@ -528,7 +560,11 @@ BEGIN
         godlikes = s.godlikes + EXCLUDED.godlikes,
         streaks_ended = s.streaks_ended + EXCLUDED.streaks_ended,
         zone_seconds = s.zone_seconds + EXCLUDED.zone_seconds,
-        zone_captures = s.zone_captures + EXCLUDED.zone_captures;
+        zone_captures = s.zone_captures + EXCLUDED.zone_captures,
+        zone_kills = s.zone_kills + EXCLUDED.zone_kills,
+        ffa_podiums = s.ffa_podiums + EXCLUDED.ffa_podiums,
+        ffa_placed = s.ffa_placed + EXCLUDED.ffa_placed,
+        ffa_place_sum = s.ffa_place_sum + EXCLUDED.ffa_place_sum;
 
     INSERT INTO player_map_stats AS s (player_id, map, kind, matches, wins, kills, deaths, seconds, best_streak)
     SELECT mp.player_id, m.map, m.kind, count(*), count(*) FILTER (WHERE mp.result = 'W'),
@@ -644,6 +680,48 @@ BEGIN
 END;
 $$;
 
+-- Partidas FFA viejas (cargadas antes de que la DLL registrara el final del
+-- FFA): terminaron con end_reason 'other', sin puestos ni resultado. Se
+-- completan con el puesto por score (los empatados comparten puesto), el
+-- resultado W/D/L como en las nuevas y end_reason 'normal', y se recalculan los
+-- resumenes. Es idempotente: solo toca FFA con end_reason = 'other' y la
+-- primera vez las deja en 'normal'. 'ranked' sigue la misma regla que ingest.py
+-- (al menos 5 minutos y 3 humanos; aqui todos tienen puesto).
+DO $$
+DECLARE
+    ids text[];
+BEGIN
+    SELECT array_agg(id) INTO ids FROM matches WHERE mode = 'ffa' AND end_reason = 'other';
+    IF ids IS NULL THEN
+        RETURN;
+    END IF;
+
+    UPDATE match_players mp SET place = r.place
+    FROM (SELECT match_id, player_id,
+                 rank() OVER (PARTITION BY match_id ORDER BY score DESC)::smallint AS place
+          FROM match_players WHERE match_id = ANY (ids)) r
+    WHERE mp.match_id = r.match_id AND mp.player_id = r.player_id;
+
+    UPDATE match_players mp SET result = CASE
+        WHEN mp.place <> 1 THEN 'L'
+        WHEN (SELECT count(*) FROM match_players x
+              WHERE x.match_id = mp.match_id AND x.place = 1) = 1 THEN 'W'
+        ELSE 'D' END
+    WHERE mp.match_id = ANY (ids);
+
+    UPDATE matches m SET end_reason = 'normal',
+        ranked = (m.duration_s >= 300 AND
+                  (SELECT count(*) FROM match_players mp JOIN players p ON p.id = mp.player_id
+                   WHERE mp.match_id = m.id AND NOT p.is_bot AND mp.place IS NOT NULL
+                     AND mp.time_team0 + mp.time_team1 > 0) >= 3)
+    WHERE m.id = ANY (ids);
+
+    IF to_regclass('pg_temp.streak_backfill_needed') IS NULL THEN
+        CREATE TEMP TABLE streak_backfill_needed () ON COMMIT DROP;
+    END IF;
+    RAISE NOTICE 'FFA viejas completadas: %', array_length(ids, 1);
+END $$;
+
 -- base con datos de partidas pero resumenes vacios (version anterior del esquema)
 DO $$
 BEGIN
@@ -685,6 +763,7 @@ DROP FUNCTION IF EXISTS ladder_luck(integer, text, text, text);
 DROP FUNCTION IF EXISTS ladder_unlucky(integer, text, text, text);
 DROP FUNCTION IF EXISTS ladder_streak_tiers(integer, text, text, text);
 DROP FUNCTION IF EXISTS ladder_zone(integer, text, text);
+DROP FUNCTION IF EXISTS ladder_ffa(integer, text, text);
 
 -- Totales por jugador para una temporada, categoria y torneo:
 --   season: 'current' (la vigente), 'all' (historico) o el nombre de una temporada
@@ -704,7 +783,7 @@ RETURNS TABLE (player_id integer, name text, matches bigint, wins bigint, losses
                helmet_saves bigint, foot_saves bigint, luck bigint, deflected bigint,
                sprees bigint, rampages bigint, dominatings bigint, unstoppables bigint,
                godlikes bigint, streaks_ended bigint,
-               zone_captures bigint, zone_minutes numeric)
+               zone_captures bigint, zone_minutes numeric, zone_kills bigint)
 LANGUAGE sql STABLE AS $$
     WITH sid AS (SELECT season_lookup(season) AS id),
     s AS (
@@ -720,7 +799,8 @@ LANGUAGE sql STABLE AS $$
                sum(ps.sprees) AS sprees, sum(ps.rampages) AS rampages,
                sum(ps.dominatings) AS dominatings, sum(ps.unstoppables) AS unstoppables,
                sum(ps.godlikes) AS godlikes, sum(ps.streaks_ended) AS streaks_ended,
-               sum(ps.zone_captures) AS zone_captures, sum(ps.zone_seconds) AS zone_seconds
+               sum(ps.zone_captures) AS zone_captures, sum(ps.zone_seconds) AS zone_seconds,
+               sum(ps.zone_kills) AS zone_kills
         FROM player_stats ps, sid
         WHERE (season = 'all' OR ps.season_id = sid.id)
           AND (match_kind = 'all' OR ps.kind = match_kind)
@@ -738,7 +818,7 @@ LANGUAGE sql STABLE AS $$
            s.max_kills, s.longest_kill, s.last_match,
            s.helmet_saves, s.foot_saves, s.helmet_saves + s.foot_saves, s.deflected,
            s.sprees, s.rampages, s.dominatings, s.unstoppables, s.godlikes, s.streaks_ended,
-           s.zone_captures, round(s.zone_seconds / 60.0, 1)
+           s.zone_captures, round(s.zone_seconds / 60.0, 1), s.zone_kills
     FROM s
     JOIN players p ON p.id = s.player_id;
 $$;
@@ -857,18 +937,52 @@ LANGUAGE sql STABLE AS $$
 $$;
 
 -- Modo control de zona: quien mas capturas hizo (cuenta cada jugador que estaba
--- en la zona cuando su equipo la capturo) y cuanto tiempo paso dentro de ella
+-- en la zona cuando su equipo la capturo), cuanto tiempo paso dentro de ella y
+-- cuantas kills hizo defendiendola o limpiandola (zone_kills)
 CREATE FUNCTION ladder_zone(min_matches integer DEFAULT 5, match_kind text DEFAULT 'all',
                             season text DEFAULT 'current')
 RETURNS TABLE (pos bigint, name text, matches bigint, wins bigint, win_pct numeric,
-               zone_captures bigint, zone_minutes numeric, captures_per_match numeric)
+               zone_captures bigint, zone_minutes numeric, captures_per_match numeric,
+               zone_kills bigint)
 LANGUAGE sql STABLE AS $$
     SELECT rank() OVER (ORDER BY t.zone_captures DESC, t.zone_minutes DESC),
            t.name, t.matches, t.wins, t.win_pct, t.zone_captures, t.zone_minutes,
-           round(t.zone_captures::numeric / greatest(t.matches, 1), 2)
+           round(t.zone_captures::numeric / greatest(t.matches, 1), 2), t.zone_kills
     FROM player_totals(season, match_kind, NULL, 'control') t
     WHERE t.matches >= min_matches
     ORDER BY 1, t.name;
+$$;
+
+-- Ladder del Free For All (modo ffa): victorias (1.er puesto), podios (top 3),
+-- puesto promedio (solo partidas que termino), K/D y mejor racha. No usa el Elo.
+CREATE FUNCTION ladder_ffa(min_matches integer DEFAULT 3, match_kind text DEFAULT 'all',
+                           season text DEFAULT 'current')
+RETURNS TABLE (pos bigint, name text, matches bigint, wins bigint, win_pct numeric,
+               podiums bigint, avg_place numeric, kills bigint, deaths bigint,
+               kd numeric, best_streak integer)
+LANGUAGE sql STABLE AS $$
+    WITH sid AS (SELECT season_lookup(season) AS id),
+    s AS (
+        SELECT ps.player_id, sum(ps.matches) AS matches, sum(ps.wins) AS wins,
+               sum(ps.ffa_podiums) AS podiums, sum(ps.ffa_placed) AS placed,
+               sum(ps.ffa_place_sum) AS place_sum, sum(ps.kills) AS kills,
+               sum(ps.deaths) AS deaths, max(ps.best_streak) AS best_streak
+        FROM player_stats ps, sid
+        WHERE ps.mode = 'ffa'
+          AND (season = 'all' OR ps.season_id = sid.id)
+          AND (match_kind = 'all' OR ps.kind = match_kind)
+        GROUP BY ps.player_id
+    )
+    SELECT rank() OVER (ORDER BY s.wins DESC, s.podiums DESC,
+                        s.place_sum::numeric / greatest(s.placed, 1)),
+           p.name, s.matches, s.wins,
+           round(100.0 * s.wins / greatest(s.matches, 1), 1), s.podiums,
+           CASE WHEN s.placed > 0 THEN round(s.place_sum::numeric / s.placed, 2) END,
+           s.kills, s.deaths, round(s.kills::numeric / greatest(s.deaths, 1), 2), s.best_streak
+    FROM s
+    JOIN players p ON p.id = s.player_id
+    WHERE s.matches >= min_matches
+    ORDER BY 1, p.name;
 $$;
 
 -- Temporadas y torneos
@@ -1044,7 +1158,7 @@ COMMENT ON TABLE matches IS 'Una partida (un mapa jugado en un servidor).';
 COMMENT ON COLUMN matches.id IS 'Id de partida: <fecha>-<servidor>-<random>. Clave primaria.';
 COMMENT ON COLUMN matches.server IS 'Id del servidor (cvar stats_server).';
 COMMENT ON COLUMN matches.map IS 'Mapa jugado.';
-COMMENT ON COLUMN matches.mode IS 'Modo del juego: dm, ctb, campaign, control (o el que mande la DLL).';
+COMMENT ON COLUMN matches.mode IS 'Modo del juego: dm, ctb, campaign, control, ffa (o el que mande la DLL).';
 COMMENT ON COLUMN matches.kind IS 'Tipo de partida: public o duel (cvar stats_mode).';
 COMMENT ON COLUMN matches.event IS 'Torneo (cvar stats_event); cadena vacia = casual.';
 COMMENT ON COLUMN matches.season_id IS 'Temporada a la que pertenece la partida.';
@@ -1061,7 +1175,7 @@ COMMENT ON COLUMN matches.team1_score IS 'Puntaje final del equipo 1.';
 COMMENT ON COLUMN matches.team0_kills IS 'Kills del equipo 0.';
 COMMENT ON COLUMN matches.team1_kills IS 'Kills del equipo 1.';
 COMMENT ON COLUMN matches.humans IS 'Cantidad de jugadores humanos en la partida.';
-COMMENT ON COLUMN matches.ranked IS 'true si la partida cuenta para el Elo.';
+COMMENT ON COLUMN matches.ranked IS 'true si la partida es rankeada. Modos por equipos: cuenta para el Elo. FFA: solo marca la partida para ladder_ffa (final normal, 5 minutos y 3 humanos que terminaron); el FFA no mueve el Elo.';
 COMMENT ON COLUMN matches.ingested_at IS 'Cuando se cargo en la base.';
 
 COMMENT ON TABLE match_players IS 'Resumen de un jugador en una partida (suma de sus tramos/reconexiones).';
@@ -1089,6 +1203,8 @@ COMMENT ON COLUMN match_players.points IS 'Puntos del juego.';
 COMMENT ON COLUMN match_players.classes IS 'Segundos jugados por clase (JSON: {"clase": segundos}).';
 COMMENT ON COLUMN match_players.main_class IS 'Clase en la que jugo mas tiempo.';
 COMMENT ON COLUMN match_players.result IS 'Resultado: W (gano), L (perdio), D (empate) o NULL (sin ganador).';
+COMMENT ON COLUMN match_players.zone_kills IS 'Modo control: kills a enemigos en que el que mato o el que murio estaba en la zona (defender o limpiar).';
+COMMENT ON COLUMN match_players.place IS 'FFA: puesto al terminar por score (los empatados comparten puesto); NULL en otros modos o si se fue antes.';
 COMMENT ON COLUMN match_players.sprees IS 'Veces que alcanzo KILLING SPREE.';
 COMMENT ON COLUMN match_players.rampages IS 'Veces que alcanzo RAMPAGE.';
 COMMENT ON COLUMN match_players.dominatings IS 'Veces que alcanzo DOMINATING.';
@@ -1119,6 +1235,8 @@ COMMENT ON COLUMN kills.killer_z IS 'Posicion Z del killer (altura).';
 COMMENT ON COLUMN kills.victim_x IS 'Posicion X de la victima.';
 COMMENT ON COLUMN kills.victim_y IS 'Posicion Y de la victima.';
 COMMENT ON COLUMN kills.victim_z IS 'Posicion Z de la victima.';
+COMMENT ON COLUMN kills.killer_in_zone IS 'Modo control: true si el que mato estaba dentro de la zona; NULL fuera del modo control (o en partidas anteriores a este dato).';
+COMMENT ON COLUMN kills.victim_in_zone IS 'Modo control: true si el que murio estaba dentro de la zona; NULL fuera del modo control.';
 
 COMMENT ON TABLE objectives IS 'Eventos de objetivo de una partida (banderas, maletin, zonas, etc.).';
 COMMENT ON COLUMN objectives.id IS 'Clave interna.';
@@ -1184,6 +1302,10 @@ COMMENT ON COLUMN player_stats.longest_kill IS 'Kill mas larga (distancia en uni
 COMMENT ON COLUMN player_stats.last_match IS 'Fecha de la ultima partida.';
 COMMENT ON COLUMN player_stats.zone_seconds IS 'Modo control: segundos dentro de la zona.';
 COMMENT ON COLUMN player_stats.zone_captures IS 'Modo control: capturas de la zona en las que participo (estaba dentro).';
+COMMENT ON COLUMN player_stats.zone_kills IS 'Modo control: kills en la zona (el que mato o el que murio estaba dentro).';
+COMMENT ON COLUMN player_stats.ffa_podiums IS 'FFA: veces que termino en el top 3.';
+COMMENT ON COLUMN player_stats.ffa_placed IS 'FFA: partidas que termino con puesto (no se fue antes).';
+COMMENT ON COLUMN player_stats.ffa_place_sum IS 'FFA: suma de los puestos; el puesto promedio es ffa_place_sum / ffa_placed.';
 
 COMMENT ON TABLE player_map_stats IS 'Resumen por jugador y mapa (todas las temporadas).';
 COMMENT ON COLUMN player_map_stats.player_id IS 'Jugador.';
@@ -1280,6 +1402,7 @@ COMMENT ON FUNCTION ladder_streak(text, integer, text, text) IS 'Mejores rachas 
 COMMENT ON FUNCTION ladder_luck(integer, text, text, text) IS 'Los mas suertudos (casco que desvia + pie salvado).';
 COMMENT ON FUNCTION ladder_unlucky(integer, text, text, text) IS 'Los tiradores mas desafortunados (tiros desviados por cascos).';
 COMMENT ON FUNCTION ladder_streak_tiers(integer, text, text, text) IS 'Rachas por nivel: quien mas llego a GODLIKE, UNSTOPPABLE, etc.';
-COMMENT ON FUNCTION ladder_zone(integer, text, text) IS 'Modo control: capturas y minutos en la zona por jugador.';
+COMMENT ON FUNCTION ladder_zone(integer, text, text) IS 'Modo control: capturas, minutos y kills en la zona por jugador.';
+COMMENT ON FUNCTION ladder_ffa(integer, text, text) IS 'Free For All: victorias, podios, puesto promedio, K/D y mejor racha por jugador (sin Elo).';
 
 COMMIT;

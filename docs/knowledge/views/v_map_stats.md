@@ -5,7 +5,7 @@ description: 'Estadisticas por mapa: balance aliados/eje, duracion, kills (todos
 resource: postgresql://dday/public/v_map_stats
 tags: [postgresql, view, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-05T02:17:08Z }
+generated: { by: process:okf-export, at: 2026-10-11T00:24:11Z }
 sources: 
   - id: schema
     resource: /references/schema.sql

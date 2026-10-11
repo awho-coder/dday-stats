@@ -5,7 +5,7 @@ description: 'Resumen por jugador, temporada, categoria, modo de juego y torneo 
 resource: postgresql://dday/public/player_stats
 tags: [postgresql, table, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-05T01:21:03Z }
+generated: { by: process:okf-export, at: 2026-10-11T00:24:11Z }
 sources: 
   - id: schema
     resource: /references/schema.sql
@@ -50,6 +50,10 @@ sources:
 | `last_match` | timestamp with time zone | sí | Fecha de la ultima partida. |
 | `zone_seconds` | integer | no | Modo control: segundos dentro de la zona. |
 | `zone_captures` | integer | no | Modo control: capturas de la zona en las que participo (estaba dentro). |
+| `zone_kills` | integer | no | Modo control: kills en la zona (el que mato o el que murio estaba dentro). |
+| `ffa_podiums` | integer | no | FFA: veces que termino en el top 3. |
+| `ffa_placed` | integer | no | FFA: partidas que termino con puesto (no se fue antes). |
+| `ffa_place_sum` | integer | no | FFA: suma de los puestos; el puesto promedio es ffa_place_sum / ffa_placed. |
 
 # Relaciones
 

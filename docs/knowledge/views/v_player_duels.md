@@ -5,7 +5,7 @@ description: Kills entre pares de jugadores.
 resource: postgresql://dday/public/v_player_duels
 tags: [postgresql, view, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-04T18:33:53Z }
+generated: { by: process:okf-export, at: 2026-10-11T00:24:11Z }
 sources: 
   - id: schema
     resource: /references/schema.sql

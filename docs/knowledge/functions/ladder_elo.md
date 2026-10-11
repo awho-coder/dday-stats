@@ -5,7 +5,7 @@ description: 'Ladder por rating Elo, por categoria.'
 resource: postgresql://dday/public/ladder_elo
 tags: [postgresql, function, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-05T02:17:08Z }
+generated: { by: process:okf-export, at: 2026-10-11T00:24:11Z }
 sources: 
   - id: schema
     resource: /references/schema.sql

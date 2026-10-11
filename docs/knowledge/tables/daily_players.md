@@ -5,7 +5,7 @@ description: Que jugador jugo cada dia (para no contarlo dos veces en daily_stat
 resource: postgresql://dday/public/daily_players
 tags: [postgresql, table, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-04T18:33:53Z }
+generated: { by: process:okf-export, at: 2026-10-11T00:24:11Z }
 sources: 
   - id: schema
     resource: /references/schema.sql

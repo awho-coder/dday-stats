@@ -5,7 +5,7 @@ description: 'Resumen por mapa, categoria y modo de juego (balance, duracion, le
 resource: postgresql://dday/public/map_stats
 tags: [postgresql, table, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-05T01:21:03Z }
+generated: { by: process:okf-export, at: 2026-10-11T00:24:11Z }
 sources: 
   - id: schema
     resource: /references/schema.sql

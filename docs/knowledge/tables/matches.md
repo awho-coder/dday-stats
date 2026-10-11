@@ -5,7 +5,7 @@ description: Una partida (un mapa jugado en un servidor).
 resource: postgresql://dday/public/matches
 tags: [postgresql, table, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-05T01:21:03Z }
+generated: { by: process:okf-export, at: 2026-10-11T00:24:11Z }
 sources: 
   - id: schema
     resource: /references/schema.sql
@@ -18,7 +18,7 @@ sources:
 | `id` | text | no | Id de partida: <fecha>-<servidor>-<random>. Clave primaria. (PK) |
 | `server` | text | no | Id del servidor (cvar stats_server). |
 | `map` | text | no | Mapa jugado. |
-| `mode` | text | no | Modo del juego: dm, ctb, campaign, control (o el que mande la DLL). |
+| `mode` | text | no | Modo del juego: dm, ctb, campaign, control, ffa (o el que mande la DLL). |
 | `kind` | text | no | Tipo de partida: public o duel (cvar stats_mode). |
 | `event` | text | no | Torneo (cvar stats_event); cadena vacia = casual. |
 | `season_id` | integer | sí | Temporada a la que pertenece la partida. (FK → [seasons](seasons.md)) |
@@ -35,7 +35,7 @@ sources:
 | `team0_kills` | integer | sí | Kills del equipo 0. |
 | `team1_kills` | integer | sí | Kills del equipo 1. |
 | `humans` | integer | no | Cantidad de jugadores humanos en la partida. |
-| `ranked` | boolean | no | true si la partida cuenta para el Elo. |
+| `ranked` | boolean | no | true si la partida es rankeada. Modos por equipos: cuenta para el Elo. FFA: solo marca la partida para ladder_ffa (final normal, 5 minutos y 3 humanos que terminaron); el FFA no mueve el Elo. |
 | `ingested_at` | timestamp with time zone | no | Cuando se cargo en la base. |
 
 # Relaciones

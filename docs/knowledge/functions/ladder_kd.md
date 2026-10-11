@@ -5,7 +5,7 @@ description: 'Ladder por K/D (humano vs humano), opcionalmente de un modo.'
 resource: postgresql://dday/public/ladder_kd
 tags: [postgresql, function, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-05T01:21:03Z }
+generated: { by: process:okf-export, at: 2026-10-11T00:24:11Z }
 sources: 
   - id: schema
     resource: /references/schema.sql

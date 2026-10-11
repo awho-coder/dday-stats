@@ -5,7 +5,7 @@ description: 'Elo por equipos, por jugador, categoria (public/duel/official) y t
 resource: postgresql://dday/public/ratings
 tags: [postgresql, table, ladder]
 status: stable
-generated: { by: process:okf-export, at: 2026-10-05T02:17:08Z }
+generated: { by: process:okf-export, at: 2026-10-11T00:24:11Z }
 sources: 
   - id: schema
     resource: /references/schema.sql
