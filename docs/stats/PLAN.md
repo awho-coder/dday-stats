@@ -71,26 +71,32 @@ implementa autenticación.
    con su Elo por temporada y uno histórico.
 8. (Siguiente iteración) Web / API del ladder sobre las vistas.
 
-## Formato de eventos (v1)
+## Formato de eventos (v2)
+
+La versión 2 agrega campos (`place`, `ffa_winner`, `zone_kills`, `kzone`/`vzone`);
+el ingestor acepta archivos v1 y v2.
 
 Todos llevan `ev` y `t` (segundos desde el inicio del mapa).
 
 | ev | campos |
 |---|---|
-| `match_start` | `v`, `match`, `server`, `map`, `mode` (`dm`/`ctb`/`campaign`/`coop`/`control`), `kind` (`public`/`duel`), `event` (torneo), `tournament`, `ts` (unix), `teams[]` (`idx`,`army`,`name`) |
+| `match_start` | `v`, `match`, `server`, `map`, `mode` (`dm`/`ctb`/`campaign`/`coop`/`control`/`ffa`), `kind` (`public`/`duel`), `event` (torneo), `tournament`, `ts` (unix), `teams[]` (`idx`,`army`,`name`) |
 | `live` / `resume` / `live_cancel` | solo duelos: la cuenta llegó a 0 (con `event`) / se reanudó tras una pausa / `sv resetcount` |
 | `team` | `slot`, `name`, `bot`, `team` (-1 = observador) |
-| `kill` | `killer`/`victim` (`name`,`bot`,`team`,`class`,`pos`), `mod`, `weapon`, `hs`, `ff`, `suicide`, `dist` |
+| `kill` | `killer`/`victim` (`name`,`bot`,`team`,`class`,`pos`), `mod`, `weapon`, `hs`, `ff`, `suicide`, `dist`; en mapas con zona de control también `kzone` / `vzone` (0/1: el que mató / el que murió estaba dentro de la zona) |
 | `luck` | `type` (`helmet`/`foot`), `player`, `by` (quien disparó), `mod` |
 | `obj` | `type` (`touch`,`area`,`timed`,`timed_held`,`explosive`,`bc_pickup`,`bc_drop`,`bc_capture`,`zone_capture`), `name`, `team`, `player` (en `zone_capture`, un evento por cada jugador del equipo que estaba en la zona) |
 | `leave` | resumen del jugador (igual que en `match_end.players[]`) |
-| `match_end` | `ts`, `dur`, `winner` (0/1, -1 empate, null = sin ganador), `reason` (`normal`/`forced`), `teams[]` (`score`,`kills`,`losses`), `players[]` |
+| `match_end` | `ts`, `dur`, `winner` (0/1, -1 empate, null = sin ganador), `reason` (`normal`/`forced`), en FFA `ffa_winner` (nombre del único primero, `null` si empataron), `teams[]` (`score`,`kills`,`losses`), `players[]` |
 
 Resumen por jugador: `name`, `bot`, `team` (último), `time` (`[s_aliados, s_eje]`),
 `classes` (segundos por clase), `kills`, `deaths`, `suicides`, `tk`, `hs`,
 `best_streak`, `helmet_saves`, `foot_saves`, `deflected`, `hits`, `misses`,
 `score`, `points`; en mapas con zona de control también `zone_time` (segundos
-dentro de la zona; no aparece en los otros modos).
+dentro de la zona) y `zone_kills` (kills a enemigos en que el que mató o el
+que murió estaba en la zona); no aparecen en los otros modos. En FFA, quien
+termina la partida lleva `place` (puesto por `score`; los empatados comparten
+puesto: 1, 1, 3...); quien se fue antes no tiene puesto.
 
 ## Reglas del ladder
 
@@ -108,4 +114,11 @@ dentro de la zona; no aparece en los otros modos).
 - **Modo control** (`mode = 'control'`): además del K/D del modo, se
   registran los segundos dentro de la zona (`zone_time`) y las capturas
   (`obj.type = 'zone_capture'`, una por cada jugador del equipo capturador que
-  estaba en la zona). Se consultan con `ladder_zone()`.
+  estaba en la zona) y las kills en la zona (`zone_kills`: el que mató o el que
+  murió estaba dentro; `kills.killer_in_zone` / `victim_in_zone`). Se consultan
+  con `ladder_zone()`.
+- **FFA** (`mode = 'ffa'`): al llegar al fraglimit la partida termina como
+  `normal` sin equipo ganador; el resultado sale del puesto (`W` al único primero,
+  `D` a los empatados en el primer puesto, `L` al resto). Es rankeada con final
+  normal, >= 5 min y >= 3 humanos que terminaron, pero **no mueve el Elo**: tiene
+  su propio ladder, `ladder_ffa()` (victorias, podios, puesto promedio).
