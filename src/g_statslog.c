@@ -39,7 +39,7 @@
 #define stats_getpid()	getpid()
 #endif
 
-#define STATS_FORMAT_VERSION	1
+#define STATS_FORMAT_VERSION	2
 #define STATS_NAME_LEN			32
 #define STATS_PATH_LEN			256
 #define STATS_NUM_CLASSES		(FLAMER + 1)
@@ -88,6 +88,8 @@ typedef struct
 	int			foot_saves;		// sobrevivio a un tiro con "almost lost a foot"
 	int			deflected;		// tiros suyos que desvio el casco de otro
 	int			zone_time;		// modo control: segundos dentro de la zona
+	int			zone_kills;		// modo control: kills a enemigos con el que mata o el que muere en la zona
+	int			place;			// FFA: puesto al terminar (0 = sin puesto)
 
 	stats_counter_t	hits;
 	stats_counter_t	misses;
@@ -106,6 +108,7 @@ static struct
 	float		last_time;		// ultimo level.time visto (para partidas abortadas)
 	int			winner;
 	qboolean	forced_end;
+	qboolean	ffa_end;		// FFA: se llego al fraglimit (no hay equipo ganador)
 	qboolean	duel;			// stats_mode duel al iniciar el mapa
 	qboolean	live;			// duel: la cuenta ya llego a 0
 	int			live_seconds;	// duel: segundos jugados (sin pausas ni cuentas)
@@ -391,10 +394,24 @@ static void StatsLog_WritePlayer (stats_player_t *p, const char *reason)
 		p->score, StatsLog_CounterGet (&p->points));
 	// solo en mapas con zona de control, para no ensuciar los logs de otros modos
 	if (level.control_zone)
-		fprintf (sl.file, ",\"zone_time\":%d", p->zone_time);
+		fprintf (sl.file, ",\"zone_time\":%d,\"zone_kills\":%d", p->zone_time, p->zone_kills);
+	// puesto en FFA: solo quien llega al final de la partida
+	if (p->place > 0)
+		fprintf (sl.file, ",\"place\":%d", p->place);
 	StatsLog_WriteKey ("reason");
 	StatsLog_WriteString (reason);
 	StatsLog_EndEvent ();
+}
+
+// el jugador tiene algo que registrar (misma regla que StatsLog_FlushPlayer)
+static qboolean StatsLog_Recordable (stats_player_t *p)
+{
+	if (!p->active)
+		return false;
+	if (sl.duel && !sl.live)
+		return false;
+	return p->team_time[0] || p->team_time[1] || p->kills || p->deaths ||
+		p->helmet_saves || p->foot_saves;
 }
 
 // escribe el resumen del jugador y libera el slot
@@ -407,9 +424,7 @@ static void StatsLog_FlushPlayer (int slot, const char *reason)
 
 	// no registrar a quien nunca entro a un equipo ni hizo nada, ni el
 	// calentamiento de un duelo
-	if ((!sl.duel || sl.live) &&
-		(p->team_time[0] || p->team_time[1] || p->kills || p->deaths ||
-		 p->helmet_saves || p->foot_saves))
+	if (StatsLog_Recordable (p))
 		StatsLog_WritePlayer (p, reason);
 
 	memset (p, 0, sizeof(*p));
@@ -849,6 +864,39 @@ void StatsLog_EndDMLevel (void)
 
 	if (Last_Team_Winner == 0 || Last_Team_Winner == 1 || Last_Team_Winner == -1)
 		sl.winner = Last_Team_Winner;
+	// FFA: al llegar al fraglimit el juego pone 99 (no gana un equipo);
+	// es un final normal y el ganador se saca del puesto de cada jugador
+	else if (Last_Team_Winner == 99 && G_IsFFA ())
+		sl.ffa_end = true;
+}
+
+// FFA: puesto de cada jugador por score; los empatados comparten puesto
+// (1, 1, 3...). Devuelve cuantos quedaron en el primer puesto y deja su nombre
+// (el ultimo que lo tenga) en first_name.
+static int StatsLog_FFAPlaces (char *first_name, size_t size)
+{
+	int		i, j, better, firsts = 0;
+
+	first_name[0] = '\0';
+	for (i = 0; i < MAX_CLIENTS; i++)
+	{
+		stats_player_t *p = &sl.players[i];
+
+		p->place = 0;
+		if (!StatsLog_Recordable (p))
+			continue;
+		better = 0;
+		for (j = 0; j < MAX_CLIENTS; j++)
+			if (j != i && StatsLog_Recordable (&sl.players[j]) && sl.players[j].score > p->score)
+				better++;
+		p->place = better + 1;
+		if (p->place == 1)
+		{
+			firsts++;
+			StatsLog_Copy (first_name, p->name, size);
+		}
+	}
+	return firsts;
 }
 
 // fin de partida por comando de admin (sv nextmap, sv maplist next...)
@@ -863,6 +911,8 @@ void StatsLog_MatchEnd (void)
 {
 	int			i;
 	const char	*reason;
+	char		ffa_winner[STATS_NAME_LEN] = "";	// copia: FlushPlayer vacia los slots
+	int			ffa_firsts = 0;
 	qboolean	first;
 
 	if (!sl.open)
@@ -877,12 +927,17 @@ void StatsLog_MatchEnd (void)
 
 	StatsLog_SampleAll (false);
 
+	if (sl.ffa_end && !sl.forced_end && sl.winner == STATS_WINNER_UNSET)
+		ffa_firsts = StatsLog_FFAPlaces (ffa_winner, sizeof(ffa_winner));
+	else
+		sl.ffa_end = false;
+
 	for (i = 0; i < MAX_CLIENTS; i++)
 		StatsLog_FlushPlayer (i, "end");
 
 	if (sl.forced_end)
 		reason = "forced";
-	else if (sl.winner != STATS_WINNER_UNSET)
+	else if (sl.winner != STATS_WINNER_UNSET || sl.ffa_end)
 		reason = "normal";
 	else
 		reason = "other";
@@ -896,6 +951,12 @@ void StatsLog_MatchEnd (void)
 		fprintf (sl.file, ",\"winner\":%d", sl.winner);
 	StatsLog_WriteKey ("reason");
 	StatsLog_WriteString (reason);
+	if (sl.ffa_end)
+	{
+		// FFA: nombre del unico primero, o null si empataron en el primer puesto
+		StatsLog_WriteKey ("ffa_winner");
+		StatsLog_WriteString (ffa_firsts == 1 ? ffa_winner : NULL);
+	}
 	fputs (",\"teams\":[", sl.file);
 	first = true;
 	for (i = 0; i < MAX_TEAMS; i++)
@@ -956,7 +1017,8 @@ static void StatsLog_Streak (edict_t *targ, edict_t *attacker, stats_player_t *v
 		(a = StatsLog_GetPlayer (attacker)) != NULL)
 	{
 		ateam = StatsLog_TeamOf (attacker);
-		if (ateam >= 0 && ateam == StatsLog_TeamOf (targ))
+		// en FFA todos estan en el mismo equipo pero no hay fuego amigo
+		if (!G_IsFFA () && ateam >= 0 && ateam == StatsLog_TeamOf (targ))
 			a->streak = 0;
 		else if (++a->streak > a->best_streak)
 			a->best_streak = a->streak;
@@ -972,6 +1034,7 @@ void StatsLog_Kill (edict_t *targ, edict_t *inflictor, edict_t *attacker)
 	edict_t			*killer;
 	int				mod, vteam, kteam = -1;
 	qboolean		suicide, ff = false, hs = false;
+	int				kzone = 0, vzone = 0;
 	const char		*weapon = NULL;
 	vec3_t			d;
 
@@ -1014,6 +1077,8 @@ void StatsLog_Kill (edict_t *targ, edict_t *inflictor, edict_t *attacker)
 
 	suicide = (killer == NULL);
 	victim->deaths++;
+	if (level.control_zone)
+		vzone = Control_PlayerInZone (targ) ? 1 : 0;
 
 	StatsLog_Streak (targ, attacker, victim);
 
@@ -1026,6 +1091,9 @@ void StatsLog_Kill (edict_t *targ, edict_t *inflictor, edict_t *attacker)
 		ff = (!G_IsFFA () && kteam >= 0 && kteam == vteam);
 		hs = (targ->client->resp.deathblend == 1);
 
+		if (level.control_zone)
+			kzone = Control_PlayerInZone (killer) ? 1 : 0;
+
 		if (ff)
 			killer_p->teamkills++;
 		else
@@ -1033,6 +1101,8 @@ void StatsLog_Kill (edict_t *targ, edict_t *inflictor, edict_t *attacker)
 			killer_p->kills++;
 			if (hs)
 				killer_p->headshots++;
+			if (kzone || vzone)
+				killer_p->zone_kills++;
 		}
 
 		if (StatsLog_ModUsesHeldWeapon (mod) && killer->client->pers.weapon)
@@ -1053,6 +1123,11 @@ void StatsLog_Kill (edict_t *targ, edict_t *inflictor, edict_t *attacker)
 	{
 		VectorSubtract (killer->s.origin, targ->s.origin, d);
 		fprintf (sl.file, ",\"dist\":%d", (int)VectorLength (d));
+	}
+	// modo control: si el que mato / el que murio estaba dentro de la zona
+	if (level.control_zone)
+	{
+		fprintf (sl.file, ",\"kzone\":%d,\"vzone\":%d", kzone, vzone);
 	}
 	StatsLog_EndEvent ();
 }
