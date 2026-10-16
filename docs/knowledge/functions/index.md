@@ -1,6 +1,12 @@
 # Funciones
 
 * [apply_rollups(ids text[])](apply_rollups.md) - Suma las partidas indicadas a las tablas de resumen (una sola vez por partida).
+* [clan_delete(p_id integer)](clan_delete.md) - Borra un clan y sus tags; true si existia. SECURITY DEFINER.
+* [clan_duels(match_kind text, season text, min_per_side integer)](clan_duels.md) - Duelos de clanes: partidas por equipos sin bots donde cada equipo esta formado solo por integrantes de un mismo clan (distintos entre si, ninguno sin inscribir), con un minimo por lado.
+* [clan_preview(p_clan_id integer, p_tags text[])](clan_preview.md) - Vista previa del mantenedor: nicks humanos que quedarian en un clan (o en uno nuevo si el id es NULL) con los tags indicados, y el clan del que vendrian.
+* [clan_save(p_id integer, p_tags text[], p_data jsonb, p_admin text)](clan_save.md) - Crea (id NULL) o edita un clan y reemplaza sus tags (el primero es el principal). SECURITY DEFINER: es la unica via de escritura para dday_clans. Un tag repetido da el error 23505.
+* [clan_tag_matches(nick text, tag text)](clan_tag_matches.md) - Regla de pertenencia: un tag solo de letras y numeros debe estar al comienzo del nick y seguido de un caracter que no sea letra ni numero; otros tags basta con que el nick los contenga. Sin distinguir mayusculas.
+* [ladder_clans(match_kind text, season text)](ladder_clans.md) - Ranking de clanes: suma de sus miembros activos en la temporada y categoria (K/D sin muestra con menos de 20 muertes, Elo promedio, MVPs).
 * [ladder_elo(min_games integer, match_kind text, season text)](ladder_elo.md) - Ladder por rating Elo, por categoria.
 * [ladder_ffa(min_matches integer, match_kind text, season text)](ladder_ffa.md) - Free For All: victorias, podios, puesto promedio, K/D y mejor racha por jugador (sin Elo).
 * [ladder_kd(min_matches integer, match_kind text, season text, match_event text, match_mode text)](ladder_kd.md) - Ladder por K/D (humano vs humano), opcionalmente de un modo.

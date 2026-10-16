@@ -1,5 +1,7 @@
 # Tablas
 
+* [clan_tags](clan_tags.md) - Tags de cada clan: uno principal y 0 o mas alternativos, todos cuentan para la pertenencia (regla en clan_tag_matches).
+* [clans](clans.md) - Clanes del Ladder Test (se editan desde el panel de administrador; escritura solo por clan_save / clan_delete).
 * [daily_players](daily_players.md) - Que jugador jugo cada dia (para no contarlo dos veces en daily_stats.players).
 * [daily_stats](daily_stats.md) - Actividad por dia (hora de Chile): partidas y jugadores nuevos.
 * [kills](kills.md) - Una kill (o suicidio/muerte por entorno). Tabla de detalle, la mas grande.
