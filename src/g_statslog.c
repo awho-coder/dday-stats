@@ -105,7 +105,10 @@ static struct
 	char		match_id[96];
 	char		part_path[STATS_PATH_LEN];
 	char		final_path[STATS_PATH_LEN];
-	float		last_time;		// ultimo level.time visto (para partidas abortadas)
+	float		last_time;		// ultimo valor del reloj (para partidas abortadas)
+	float		clock_offset;	// segundos sin nadie en un equipo: no cuentan en el reloj
+	float		last_check;		// level.time del ultimo chequeo de equipos
+	qboolean	played;			// ya entro alguien a un equipo (evento "play" escrito)
 	int			winner;
 	qboolean	forced_end;
 	qboolean	ffa_end;		// FFA: se llego al fraglimit (no hay equipo ganador)
@@ -294,9 +297,16 @@ static void StatsLog_WriteKey (const char *key)
 	fprintf (sl.file, ",\"%s\":", key);
 }
 
+// reloj de la partida: level.time sin los segundos en que no habia nadie en un
+// equipo (un mapa puede quedar cargado horas con el servidor vacio)
+static float StatsLog_Clock (void)
+{
+	return level.time - sl.clock_offset;
+}
+
 static void StatsLog_BeginEvent (const char *ev)
 {
-	fprintf (sl.file, "{\"ev\":\"%s\",\"t\":%.1f", ev, level.time);
+	fprintf (sl.file, "{\"ev\":\"%s\",\"t\":%.1f", ev, StatsLog_Clock ());
 }
 
 static void StatsLog_EndEvent (void)
@@ -555,6 +565,21 @@ static void StatsLog_ResetCounters (void)
 	}
 }
 
+// hay al menos un jugador (humano o bot) en un equipo
+static qboolean StatsLog_AnyoneInTeam (void)
+{
+	int		i;
+	edict_t	*ent;
+
+	for (i = 0; i < game.maxclients && i < MAX_CLIENTS; i++)
+	{
+		ent = g_edicts + 1 + i;
+		if (ent->inuse && ent->client && ent->client->pers.connected && StatsLog_TeamOf (ent) >= 0)
+			return true;
+	}
+	return false;
+}
+
 static void StatsLog_SampleAll (qboolean add_time)
 {
 	int		i;
@@ -773,6 +798,9 @@ void StatsLog_MatchBegin (void)
 	sl.winner = STATS_WINNER_UNSET;
 	sl.forced_end = false;
 	sl.last_time = 0;
+	sl.clock_offset = level.time;
+	sl.last_check = level.time;
+	sl.played = false;
 	sl.duel = !Q_stricmp (stats_mode->string, "duel");
 	sl.live = false;
 	sl.live_seconds = 0;
@@ -841,15 +869,27 @@ void StatsLog_RunFrame (void)
 	if (!sl.open || level.intermissiontime)
 		return;
 
-	sl.last_time = level.time;
-
 	// tiempo por equipo y clase, con resolucion de 1 segundo
 	if (level.framenum % 10 == 0)
 	{
+		// sin nadie en un equipo el reloj se detiene; la primera vez que entra
+		// alguien se anota la hora real en que empezo a jugarse la partida
+		if (!StatsLog_AnyoneInTeam ())
+			sl.clock_offset += level.time - sl.last_check;
+		else if (!sl.played)
+		{
+			sl.played = true;
+			StatsLog_BeginEvent ("play");
+			fprintf (sl.file, ",\"ts\":%ld,\"idle\":%.1f", (long)time (NULL), sl.clock_offset);
+			StatsLog_EndEvent ();
+		}
+		sl.last_check = level.time;
 		StatsLog_SampleAll (true);
 		if (sl.duel && StatsLog_Counting ())
 			sl.live_seconds++;
 	}
+
+	sl.last_time = StatsLog_Clock ();
 
 	if (level.framenum % STATS_FLUSH_FRAMES == 0)
 		fflush (sl.file);
@@ -944,7 +984,7 @@ void StatsLog_MatchEnd (void)
 
 	StatsLog_BeginEvent ("match_end");
 	fprintf (sl.file, ",\"ts\":%ld,\"dur\":%.1f", (long)time (NULL),
-		sl.duel ? (float)sl.live_seconds : level.time);
+		sl.duel ? (float)sl.live_seconds : StatsLog_Clock ());
 	if (sl.winner == STATS_WINNER_UNSET)
 		fputs (",\"winner\":null", sl.file);
 	else

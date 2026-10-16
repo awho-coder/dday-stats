@@ -33,6 +33,12 @@ Versión 5.068
   Elo, rachas y suerte por temporada, categoría y torneo) y el ingestor
   ingest.py que carga los archivos JSONL. Ver stats/README.md.
 
+- El reloj de las estadísticas se detiene mientras no hay nadie (humano
+  ni bot) en un equipo. Antes contaba desde que cargaba el mapa, y un
+  mapa que quedaba horas con el servidor vacío registraba partidas de
+  días. Escribe el evento "play" con la hora real en que entró el primer
+  jugador; ingest.py la usa como inicio de la partida.
+
 - Corrige `ClientDisconnect()` de p_client.c que escribía las
   estadísticas antiguas aunque "stats" estuviera en 0, y
   `Write_Player_Stats()` que botaba el servidor con `gi.error()` si no

@@ -346,7 +346,10 @@ class Ingestor:
         if self.cfg.skip_bot_only and humans == 0:
             raise SkipMatch("partida sin humanos (--skip-bot-only)")
         ranked = is_ranked(match, self.cfg)
-        started = ts(match.start["ts"])
+        # "play": primera vez que alguien entro a un equipo (DLL nuevas). El mapa
+        # puede haber estado cargado horas con el servidor vacio antes de eso.
+        play = next((e for e in events if e["ev"] == "play" and e.get("ts")), None)
+        started = ts(play["ts"] if play else match.start["ts"])
         ended = ts(match.end["ts"]) if match.end.get("ts") else None
         teams_start = {t["idx"]: t for t in match.start.get("teams", [])}
         teams_end = {t["idx"]: t for t in match.end.get("teams", [])}
