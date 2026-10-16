@@ -301,6 +301,56 @@ SELECT * FROM v_daily_activity ORDER BY day DESC;
 SELECT victim_x, victim_y FROM kills k JOIN matches m ON m.id = k.match_id WHERE m.map = 'dday1';
 ```
 
+## Clanes
+
+Los clanes del Ladder Test viven en la misma base. Se editan desde el panel de
+administrador de la app; la carga inicial (hoja `ClanTags` más `=SL=` y `>6S<`)
+es `stats/clans_seed.sql`, que se aplica una sola vez.
+
+| Objeto | Qué es |
+|---|---|
+| `clans` | Un clan: nombre, líder, miembros declarados, mapa favorito, jugador símbolo, frase, rival, logo, `unregistered`, `active`, `sort_order`, quién lo editó. |
+| `clan_tags` | Los tags de cada clan: uno principal (`is_primary`) y 0 o más alternativos. Únicos sin distinguir mayúsculas. |
+| `v_clans` | Clanes con su tag principal (`tag`) y los alternativos (`aliases`). |
+| `v_player_clan` | Clan de cada nick humano (`clan_id` NULL si no tiene). Solo clanes activos. |
+| `ladder_clans(categoría, temporada)` | Ranking: suma de los miembros por nick. K/D «sin muestra» (NULL) con menos de 20 muertes; Elo promedio de los miembros con 5 partidas o más; MVPs; mejor jugador. Solo clanes con miembros activos. |
+| `clan_duels(categoría, temporada, mínimo_por_lado)` | Duelos de clanes (regla D5, abajo). |
+| `clan_preview(id, tags)` | Vista previa del mantenedor: qué nicks quedarían en el clan con esos tags y de qué clan vendrían. |
+| `clan_save` / `clan_delete` | Únicas vías de escritura (`SECURITY DEFINER`). |
+
+**Pertenencia de un nick a un clan (`clan_tag_matches`).** Sin distinguir
+mayúsculas, el nick pertenece al clan si **contiene** el tag. Un tag formado
+**solo por letras y números** (`WR`, `7up`) debe estar **al comienzo** del nick
+y **seguido de un carácter que no sea letra ni número** (o ser el nick
+completo): `WR|Juan` sí, `Wrath` y `WRmaster` no. Si calzan varios tags gana el
+más largo; si empatan, el de menor `sort_order` y luego el de menor `id`. Un
+nick pertenece a un solo clan y solo cuentan los clanes activos. La pertenencia
+es **por nick**, no por persona: cada partida cuenta para el clan del nick que
+se usó.
+
+**Clan No Inscritos (`unregistered`).** Va al final de las listas, fuera de los
+podios, y nunca cuenta para los duelos de clanes.
+
+**Duelo de clanes.** Partida por equipos (no FFA), **sin ningún bot**, en la que
+**todos los jugadores** del equipo 0 son integrantes de un mismo clan y todos
+los del equipo 1, de otro clan distinto; ninguno de los dos `unregistered`. Un
+humano sin clan anula el duelo. Mínimo 2 jugadores por lado.
+
+**Permisos.** `dday_ro` lee las tablas y vistas nuevas (privilegios por defecto)
+pero no escribe. El rol `dday_clans` (lo usa el backend del mantenedor) hereda
+de `dday_ro` y solo puede ejecutar `clan_save` y `clan_delete`; no puede
+escribir directamente en `clans` ni en `clan_tags`. `schema.sql` no crea ese
+rol (lleva clave): ver [`docs/stats/DESPLIEGUE.md`](../docs/stats/DESPLIEGUE.md).
+
+```sql
+SELECT * FROM v_clans ORDER BY sort_order, id;
+SELECT * FROM v_player_clan WHERE clan_id IS NOT NULL ORDER BY clan, name;
+SELECT * FROM ladder_clans();                         -- temporada actual, todas las categorías
+SELECT * FROM ladder_clans('public', 'all');          -- solo público, histórico
+SELECT * FROM clan_duels('all', 'all');               -- duelos de clanes (mínimo 2 por lado)
+SELECT * FROM clan_preview(NULL, ARRAY['=SL=', 'SL+']);  -- quién quedaría con estos tags
+```
+
 ## Rendimiento
 
 Las vistas del ladder leen **tablas de resumen** (`player_stats`,
