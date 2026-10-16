@@ -1,10 +1,12 @@
 # Vistas
 
+* [v_clans](v_clans.md) - Clanes con su tag principal (tag) y la lista de tags alternativos (aliases).
 * [v_daily_activity](v_daily_activity.md) - Actividad diaria (partidas y jugadores por dia).
 * [v_events](v_events.md) - Torneos jugados (partidas y mapas).
 * [v_map_stats](v_map_stats.md) - Estadisticas por mapa: balance aliados/eje, duracion, kills (todos los modos).
 * [v_map_stats_by_mode](v_map_stats_by_mode.md) - Estadisticas por mapa, tipo y modo de juego.
 * [v_map_weapons](v_map_weapons.md) - Armas mas letales por mapa.
+* [v_player_clan](v_player_clan.md) - Clan de cada nick humano segun clan_tag_matches (solo clanes activos; gana el tag mas largo). clan_id NULL = sin clan.
 * [v_player_classes](v_player_classes.md) - Segundos por clase y jugador.
 * [v_player_duels](v_player_duels.md) - Kills entre pares de jugadores.
 * [v_player_fav_class](v_player_fav_class.md) - Clase favorita de cada jugador.

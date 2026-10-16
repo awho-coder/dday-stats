@@ -411,6 +411,36 @@ CREATE TABLE IF NOT EXISTS daily_players (
     PRIMARY KEY (day, player_id)
 );
 
+-- Clanes del Ladder Test. Se editan desde el panel de administrador de la app
+-- (funciones clan_save / clan_delete); la carga inicial es stats/clans_seed.sql.
+CREATE TABLE IF NOT EXISTS clans (
+    id               serial PRIMARY KEY,
+    name             text NOT NULL DEFAULT '',
+    leader           text NOT NULL DEFAULT '',
+    declared_members integer CHECK (declared_members IS NULL OR declared_members BETWEEN 0 AND 999),
+    favorite_map     text NOT NULL DEFAULT '',
+    symbol_player    text NOT NULL DEFAULT '',
+    phrase           text NOT NULL DEFAULT '',
+    rival            text NOT NULL DEFAULT '',
+    logo_url         text NOT NULL DEFAULT '',
+    unregistered     boolean NOT NULL DEFAULT false,
+    active           boolean NOT NULL DEFAULT true,
+    sort_order       integer NOT NULL DEFAULT 0,
+    created_at       timestamptz NOT NULL DEFAULT now(),
+    updated_at       timestamptz NOT NULL DEFAULT now(),
+    updated_by       text
+);
+
+-- Todos los tags de cada clan: el principal (is_primary) y los alternativos.
+CREATE TABLE IF NOT EXISTS clan_tags (
+    clan_id    integer NOT NULL REFERENCES clans (id) ON DELETE CASCADE,
+    tag        text NOT NULL CHECK (length(tag) BETWEEN 1 AND 24 AND tag !~ '\s'),
+    is_primary boolean NOT NULL DEFAULT false
+);
+CREATE UNIQUE INDEX IF NOT EXISTS clan_tags_key_idx ON clan_tags (lower(tag));
+CREATE UNIQUE INDEX IF NOT EXISTS clan_tags_primary_idx ON clan_tags (clan_id) WHERE is_primary;
+CREATE INDEX IF NOT EXISTS clan_tags_clan_idx ON clan_tags (clan_id);
+
 -- para ladder_streak (top N sin recorrer toda la tabla)
 CREATE INDEX IF NOT EXISTS match_players_streak_idx ON match_players (best_streak DESC);
 
@@ -975,13 +1005,13 @@ LANGUAGE sql STABLE AS $$
     )
     SELECT rank() OVER (ORDER BY s.wins DESC, s.podiums DESC,
                         s.place_sum::numeric / greatest(s.placed, 1)),
-           p.name, s.matches, s.wins,
-           round(100.0 * s.wins / greatest(s.matches, 1), 1), s.podiums,
+           p.name, s.placed, s.wins,
+           round(100.0 * s.wins / greatest(s.placed, 1), 1), s.podiums,
            CASE WHEN s.placed > 0 THEN round(s.place_sum::numeric / s.placed, 2) END,
            s.kills, s.deaths, round(s.kills::numeric / greatest(s.deaths, 1), 2), s.best_streak
     FROM s
     JOIN players p ON p.id = s.player_id
-    WHERE s.matches >= min_matches
+    WHERE s.placed >= min_matches
     ORDER BY 1, p.name;
 $$;
 
@@ -1136,6 +1166,264 @@ GROUP BY weapon;
 -- Actividad diaria (dias en hora de Chile)
 CREATE VIEW v_daily_activity AS
 SELECT day, matches, players FROM daily_stats;
+
+------------------------------------------------------------------------------
+-- Clanes: regla de pertenencia, vistas y funciones
+------------------------------------------------------------------------------
+
+-- Regla de pertenencia: un tag formado solo por letras y numeros (WR, 7up) debe
+-- estar al comienzo del nick y seguido de un caracter que no sea letra ni numero
+-- (o ser el nick completo): "WR|Juan" si, "Wrath" y "WRmaster" no. Cualquier otro
+-- tag (con simbolos) basta con que el nick lo contenga. Sin distinguir mayusculas.
+CREATE OR REPLACE FUNCTION clan_tag_matches(nick text, tag text) RETURNS boolean
+LANGUAGE sql IMMUTABLE AS $$
+    SELECT CASE WHEN tag ~ '^[A-Za-z0-9]+$'
+                THEN left(lower(nick), length(tag)) = lower(tag)
+                     AND substr(nick, length(tag) + 1, 1) !~ '[A-Za-z0-9]'
+                ELSE strpos(lower(nick), lower(tag)) > 0 END
+$$;
+
+-- Clanes con su tag principal y la lista de alternativos.
+CREATE OR REPLACE VIEW v_clans AS
+SELECT c.*, pt.tag,
+       coalesce(array_agg(al.tag ORDER BY al.tag) FILTER (WHERE al.tag IS NOT NULL), '{}') AS aliases
+  FROM clans c
+  JOIN clan_tags pt ON pt.clan_id = c.id AND pt.is_primary
+  LEFT JOIN clan_tags al ON al.clan_id = c.id AND NOT al.is_primary
+ GROUP BY c.id, pt.tag;
+
+-- Clan de cada nick humano (clan_id NULL si no tiene). Solo clanes activos; si
+-- calzan varios gana el tag mas largo, luego menor sort_order y menor id.
+CREATE OR REPLACE VIEW v_player_clan AS
+SELECT p.id AS player_id, p.name, m.clan_id, m.clan, m.unregistered
+  FROM players p
+  LEFT JOIN LATERAL (
+       SELECT c.id AS clan_id, pt.tag AS clan, c.unregistered
+         FROM clan_tags ct
+         JOIN clans c ON c.id = ct.clan_id AND c.active
+         JOIN clan_tags pt ON pt.clan_id = c.id AND pt.is_primary
+        WHERE clan_tag_matches(p.name, ct.tag)
+        ORDER BY length(ct.tag) DESC, c.sort_order, c.id
+        LIMIT 1) m ON true
+ WHERE NOT p.is_bot;
+
+DROP FUNCTION IF EXISTS ladder_clans(text, text);
+DROP FUNCTION IF EXISTS clan_duels(text, text, integer);
+DROP FUNCTION IF EXISTS clan_preview(integer, text[]);
+
+-- Ranking de clanes: suma de los miembros (por nick) en la temporada y categoria.
+-- kd es NULL si los miembros suman menos de 20 muertes (sin muestra).
+-- elo_avg: promedio del Elo de los miembros con 5 partidas o mas (categoria public
+-- si match_kind es 'all'). mvps: partidas en que un miembro hizo mas kills que
+-- nadie en su partida (bots incluidos; los empates cuentan).
+CREATE FUNCTION ladder_clans(match_kind text DEFAULT 'all', season text DEFAULT 'current')
+RETURNS TABLE (clan_id integer, clan text, unregistered boolean, members_active bigint,
+               matches bigint, kills bigint, deaths bigint, kd numeric, bot_kills bigint,
+               hours numeric, wins bigint, losses bigint, win_pct numeric,
+               best_streak integer, godlikes bigint, headshots bigint, hs_pct numeric,
+               elo_avg numeric, mvps bigint, top_player text)
+LANGUAGE sql STABLE AS $$
+    WITH t AS (
+        SELECT pc.clan_id, pc.clan, pc.unregistered, pt.*
+          FROM player_totals(season, match_kind) pt
+          JOIN v_player_clan pc ON pc.player_id = pt.player_id
+         WHERE pc.clan_id IS NOT NULL
+    ),
+    agg AS (
+        SELECT t.clan_id, t.clan, t.unregistered,
+               count(*) FILTER (WHERE t.matches > 0) AS members_active,
+               sum(t.matches) AS matches, sum(t.kills) AS kills, sum(t.deaths) AS deaths,
+               sum(t.bot_kills) AS bot_kills, sum(t.hours_played) AS hours,
+               sum(t.wins) AS wins, sum(t.losses) AS losses, sum(t.draws) AS draws,
+               max(t.best_streak) AS best_streak, sum(t.godlikes) AS godlikes,
+               sum(t.headshots) AS headshots,
+               (array_agg(t.name ORDER BY t.kills DESC, t.name))[1] AS top_player
+          FROM t
+         GROUP BY t.clan_id, t.clan, t.unregistered
+    ),
+    elo AS (
+        SELECT pc.clan_id, round(avg(r.rating)::numeric) AS elo_avg
+          FROM ratings r
+          JOIN v_player_clan pc ON pc.player_id = r.player_id
+         WHERE pc.clan_id IS NOT NULL AND r.games >= 5
+           AND r.kind = CASE WHEN match_kind = 'all' THEN 'public' ELSE match_kind END
+           AND r.season_id = coalesce(season_lookup(season), 0)
+         GROUP BY pc.clan_id
+    ),
+    f AS (
+        SELECT mp.match_id, mp.player_id, mp.kills
+          FROM match_players mp
+          JOIN matches m ON m.id = mp.match_id
+         WHERE (season = 'all' OR m.season_id = season_lookup(season))
+           AND (match_kind = 'all' OR match_category(m.kind, m.event) = match_kind)
+    ),
+    mx AS (SELECT match_id, max(kills) AS top FROM f GROUP BY match_id),
+    mv AS (
+        SELECT pc.clan_id, count(*) AS mvps
+          FROM f
+          JOIN mx ON mx.match_id = f.match_id AND f.kills = mx.top AND mx.top > 0
+          JOIN v_player_clan pc ON pc.player_id = f.player_id
+         WHERE pc.clan_id IS NOT NULL
+         GROUP BY pc.clan_id
+    )
+    SELECT a.clan_id, a.clan, a.unregistered, a.members_active, a.matches, a.kills, a.deaths,
+           CASE WHEN a.deaths >= 20 THEN round(a.kills::numeric / a.deaths, 2) END,
+           a.bot_kills, a.hours, a.wins, a.losses,
+           round(100.0 * a.wins / greatest(a.wins + a.losses + a.draws, 1), 1),
+           a.best_streak, a.godlikes, a.headshots,
+           round(100.0 * a.headshots / greatest(a.kills + a.bot_kills, 1), 1),
+           e.elo_avg, coalesce(mv.mvps, 0), a.top_player
+      FROM agg a
+      LEFT JOIN elo e ON e.clan_id = a.clan_id
+      LEFT JOIN mv ON mv.clan_id = a.clan_id
+     WHERE a.members_active > 0
+     ORDER BY a.unregistered, a.kills DESC, a.clan;
+$$;
+
+-- Duelos de clanes: partida por equipos, sin ningun bot, en que todos los jugadores
+-- de cada equipo son integrantes de un mismo clan (equipo 0 = solo clan A, equipo 1 =
+-- solo clan B, A <> B, ninguno sin inscribir). Un humano sin clan anula el duelo.
+CREATE FUNCTION clan_duels(match_kind text DEFAULT 'all', season text DEFAULT 'current',
+                           min_per_side integer DEFAULT 2)
+RETURNS TABLE (match_id text, clan0_id integer, clan0 text, clan0_players bigint,
+               clan1_id integer, clan1 text, clan1_players bigint)
+LANGUAGE sql STABLE AS $$
+    WITH v AS (SELECT * FROM v_player_clan),
+    team_comp AS (
+        SELECT mp.match_id, mp.team,
+               count(*) AS players,
+               count(*) FILTER (WHERE p.is_bot) AS bots,
+               count(*) FILTER (WHERE NOT p.is_bot AND (v.clan_id IS NULL OR v.unregistered)) AS outsiders,
+               count(DISTINCT v.clan_id) AS clans,
+               min(v.clan_id) AS clan_id
+          FROM match_players mp
+          JOIN players p ON p.id = mp.player_id
+          LEFT JOIN v ON v.player_id = mp.player_id
+          JOIN matches m ON m.id = mp.match_id
+         WHERE (season = 'all' OR m.season_id = season_lookup(season))
+           AND (match_kind = 'all' OR match_category(m.kind, m.event) = match_kind)
+           AND m.mode <> 'ffa' AND mp.team IN (0, 1)
+         GROUP BY mp.match_id, mp.team
+    ),
+    pure AS (SELECT * FROM team_comp
+              WHERE bots = 0 AND outsiders = 0 AND clans = 1 AND players >= min_per_side)
+    SELECT a.match_id, a.clan_id, ca.tag, a.players, b.clan_id, cb.tag, b.players
+      FROM pure a
+      JOIN pure b ON b.match_id = a.match_id AND a.team = 0 AND b.team = 1
+      JOIN clan_tags ca ON ca.clan_id = a.clan_id AND ca.is_primary
+      JOIN clan_tags cb ON cb.clan_id = b.clan_id AND cb.is_primary
+     WHERE a.clan_id <> b.clan_id
+       AND NOT EXISTS (SELECT 1 FROM match_players x JOIN players px ON px.id = x.player_id
+                        WHERE x.match_id = a.match_id AND px.is_bot);
+$$;
+
+-- Vista previa del mantenedor: que nicks humanos quedarian en el clan p_clan_id (o en
+-- uno nuevo si es NULL) si sus tags fueran p_tags, compitiendo con los tags de todos
+-- los demas clanes activos (gana el tag mas largo). from_clan: clan actual del nick
+-- si es otro; NULL si hoy no tiene clan.
+CREATE FUNCTION clan_preview(p_clan_id integer, p_tags text[])
+RETURNS TABLE (name text, matches bigint, last_match timestamptz, from_clan text)
+LANGUAGE sql STABLE AS $$
+    WITH cand AS (
+        SELECT ct.tag, c.id AS clan_id, c.sort_order, false AS target
+          FROM clan_tags ct
+          JOIN clans c ON c.id = ct.clan_id AND c.active
+         WHERE c.id IS DISTINCT FROM p_clan_id
+        UNION ALL
+        SELECT t.tag, coalesce(p_clan_id, 2147483647),
+               coalesce((SELECT sort_order FROM clans WHERE id = p_clan_id), 2147483647), true
+          FROM unnest(p_tags) AS t(tag)
+         WHERE t.tag <> ''
+    ),
+    hit AS (
+        SELECT p.id AS player_id, p.name, b.target
+          FROM players p
+          CROSS JOIN LATERAL (
+               SELECT cand.target FROM cand
+                WHERE clan_tag_matches(p.name, cand.tag)
+                ORDER BY length(cand.tag) DESC, cand.sort_order, cand.clan_id
+                LIMIT 1) b
+         WHERE NOT p.is_bot
+    )
+    SELECT h.name, count(mp.match_id), max(m.started_at),
+           (SELECT pc.clan FROM v_player_clan pc
+             WHERE pc.player_id = h.player_id AND pc.clan_id IS DISTINCT FROM p_clan_id)
+      FROM hit h
+      LEFT JOIN match_players mp ON mp.player_id = h.player_id
+      LEFT JOIN matches m ON m.id = mp.match_id
+     WHERE h.target
+     GROUP BY h.player_id, h.name
+     ORDER BY count(mp.match_id) DESC, h.name;
+$$;
+
+-- Escritura de clanes: unica via para el rol dday_clans (SECURITY DEFINER).
+-- p_tags[1] es el tag principal; el resto, alternativos. p_id NULL crea el clan.
+-- Un tag repetido lo rechaza el indice clan_tags_key_idx (SQLSTATE 23505).
+CREATE OR REPLACE FUNCTION clan_save(p_id integer, p_tags text[], p_data jsonb, p_admin text)
+RETURNS integer
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+    v_id integer;
+BEGIN
+    IF p_tags IS NULL OR coalesce(array_length(p_tags, 1), 0) = 0 THEN
+        RAISE EXCEPTION 'el clan necesita al menos un tag' USING ERRCODE = '22023';
+    END IF;
+    IF p_id IS NULL THEN
+        INSERT INTO clans (name, leader, declared_members, favorite_map, symbol_player,
+                           phrase, rival, logo_url, unregistered, active, sort_order,
+                           updated_by)
+        VALUES (coalesce(p_data->>'name', ''), coalesce(p_data->>'leader', ''),
+                nullif(p_data->>'declared_members', '')::integer,
+                coalesce(p_data->>'favorite_map', ''), coalesce(p_data->>'symbol_player', ''),
+                coalesce(p_data->>'phrase', ''), coalesce(p_data->>'rival', ''),
+                coalesce(p_data->>'logo_url', ''),
+                coalesce((p_data->>'unregistered')::boolean, false),
+                coalesce((p_data->>'active')::boolean, true),
+                coalesce((p_data->>'sort_order')::integer, 0), p_admin)
+        RETURNING id INTO v_id;
+    ELSE
+        UPDATE clans SET
+            name = coalesce(p_data->>'name', ''), leader = coalesce(p_data->>'leader', ''),
+            declared_members = nullif(p_data->>'declared_members', '')::integer,
+            favorite_map = coalesce(p_data->>'favorite_map', ''),
+            symbol_player = coalesce(p_data->>'symbol_player', ''),
+            phrase = coalesce(p_data->>'phrase', ''), rival = coalesce(p_data->>'rival', ''),
+            logo_url = coalesce(p_data->>'logo_url', ''),
+            unregistered = coalesce((p_data->>'unregistered')::boolean, false),
+            active = coalesce((p_data->>'active')::boolean, true),
+            sort_order = coalesce((p_data->>'sort_order')::integer, 0),
+            updated_at = now(), updated_by = p_admin
+         WHERE id = p_id
+        RETURNING id INTO v_id;
+        IF v_id IS NULL THEN
+            RAISE EXCEPTION 'el clan % no existe', p_id USING ERRCODE = 'no_data_found';
+        END IF;
+        DELETE FROM clan_tags WHERE clan_id = v_id;
+    END IF;
+    INSERT INTO clan_tags (clan_id, tag, is_primary)
+    SELECT v_id, t.tag, t.ord = 1 FROM unnest(p_tags) WITH ORDINALITY AS t(tag, ord);
+    RETURN v_id;
+END $$;
+
+-- Borra un clan (sus tags se van en cascada). true si existia.
+CREATE OR REPLACE FUNCTION clan_delete(p_id integer) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+    DELETE FROM clans WHERE id = p_id;
+    RETURN FOUND;
+END $$;
+
+-- Permisos: las funciones de escritura solo las ejecuta el dueno y dday_clans. El rol
+-- dday_clans (lleva clave) no se crea aqui: ver docs/stats/DESPLIEGUE.md.
+REVOKE ALL ON FUNCTION clan_save(integer, text[], jsonb, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION clan_delete(integer) FROM PUBLIC;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'dday_clans') THEN
+        GRANT EXECUTE ON FUNCTION clan_save(integer, text[], jsonb, text) TO dday_clans;
+        GRANT EXECUTE ON FUNCTION clan_delete(integer) TO dday_clans;
+    END IF;
+END $$;
 
 ------------------------------------------------------------------------------
 -- Comentarios del esquema (se ven en psql con \d+ y en clientes como
@@ -1403,6 +1691,38 @@ COMMENT ON FUNCTION ladder_luck(integer, text, text, text) IS 'Los mas suertudos
 COMMENT ON FUNCTION ladder_unlucky(integer, text, text, text) IS 'Los tiradores mas desafortunados (tiros desviados por cascos).';
 COMMENT ON FUNCTION ladder_streak_tiers(integer, text, text, text) IS 'Rachas por nivel: quien mas llego a GODLIKE, UNSTOPPABLE, etc.';
 COMMENT ON FUNCTION ladder_zone(integer, text, text) IS 'Modo control: capturas, minutos y kills en la zona por jugador.';
-COMMENT ON FUNCTION ladder_ffa(integer, text, text) IS 'Free For All: victorias, podios, puesto promedio, K/D y mejor racha por jugador (sin Elo).';
+COMMENT ON FUNCTION ladder_ffa(integer, text, text) IS 'Free For All: victorias, podios, puesto promedio, K/D y mejor racha por jugador (sin Elo). Partidas y % de victorias cuentan solo las FFA terminadas (con puesto); K/D y racha, todas.';
+
+COMMENT ON TABLE clans IS 'Clanes del Ladder Test (se editan desde el panel de administrador; escritura solo por clan_save / clan_delete).';
+COMMENT ON COLUMN clans.id IS 'Clave interna del clan.';
+COMMENT ON COLUMN clans.name IS 'Nombre del clan (puede estar vacio).';
+COMMENT ON COLUMN clans.leader IS 'Lider del clan.';
+COMMENT ON COLUMN clans.declared_members IS 'Cantidad de miembros declarada (0 a 999); NULL si no se sabe.';
+COMMENT ON COLUMN clans.favorite_map IS 'Mapa favorito declarado.';
+COMMENT ON COLUMN clans.symbol_player IS 'Jugador simbolo del clan.';
+COMMENT ON COLUMN clans.phrase IS 'Frase tipica del clan.';
+COMMENT ON COLUMN clans.rival IS 'Rival historico declarado.';
+COMMENT ON COLUMN clans.logo_url IS 'URL https del logo (puede ser un enlace de Drive); vacio = sin logo.';
+COMMENT ON COLUMN clans.unregistered IS 'true para el clan No Inscritos: va al final de las listas, fuera de los podios y nunca cuenta para duelos de clanes.';
+COMMENT ON COLUMN clans.active IS 'Solo los clanes activos reclaman nicks (v_player_clan).';
+COMMENT ON COLUMN clans.sort_order IS 'Orden manual; desempata cuando dos clanes calzan con un tag del mismo largo.';
+COMMENT ON COLUMN clans.created_at IS 'Cuando se creo el clan.';
+COMMENT ON COLUMN clans.updated_at IS 'Ultima edicion.';
+COMMENT ON COLUMN clans.updated_by IS 'Quien hizo la ultima edicion (administrador, o "carga inicial").';
+
+COMMENT ON TABLE clan_tags IS 'Tags de cada clan: uno principal y 0 o mas alternativos, todos cuentan para la pertenencia (regla en clan_tag_matches).';
+COMMENT ON COLUMN clan_tags.clan_id IS 'Clan al que pertenece el tag (se borra en cascada con el clan).';
+COMMENT ON COLUMN clan_tags.tag IS 'Tag, de 1 a 24 caracteres sin espacios; unico sin distinguir mayusculas.';
+COMMENT ON COLUMN clan_tags.is_primary IS 'true en el tag principal (uno por clan); es el que se muestra.';
+
+COMMENT ON VIEW v_clans IS 'Clanes con su tag principal (tag) y la lista de tags alternativos (aliases).';
+COMMENT ON VIEW v_player_clan IS 'Clan de cada nick humano segun clan_tag_matches (solo clanes activos; gana el tag mas largo). clan_id NULL = sin clan.';
+
+COMMENT ON FUNCTION clan_tag_matches(text, text) IS 'Regla de pertenencia: un tag solo de letras y numeros debe estar al comienzo del nick y seguido de un caracter que no sea letra ni numero; otros tags basta con que el nick los contenga. Sin distinguir mayusculas.';
+COMMENT ON FUNCTION ladder_clans(text, text) IS 'Ranking de clanes: suma de sus miembros activos en la temporada y categoria (K/D sin muestra con menos de 20 muertes, Elo promedio, MVPs).';
+COMMENT ON FUNCTION clan_duels(text, text, integer) IS 'Duelos de clanes: partidas por equipos sin bots donde cada equipo esta formado solo por integrantes de un mismo clan (distintos entre si, ninguno sin inscribir), con un minimo por lado.';
+COMMENT ON FUNCTION clan_preview(integer, text[]) IS 'Vista previa del mantenedor: nicks humanos que quedarian en un clan (o en uno nuevo si el id es NULL) con los tags indicados, y el clan del que vendrian.';
+COMMENT ON FUNCTION clan_save(integer, text[], jsonb, text) IS 'Crea (id NULL) o edita un clan y reemplaza sus tags (el primero es el principal). SECURITY DEFINER: es la unica via de escritura para dday_clans. Un tag repetido da el error 23505.';
+COMMENT ON FUNCTION clan_delete(integer) IS 'Borra un clan y sus tags; true si existia. SECURITY DEFINER.';
 
 COMMIT;

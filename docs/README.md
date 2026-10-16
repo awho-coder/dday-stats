@@ -35,6 +35,7 @@ Si es tu primera vez en el repo, seguí este orden:
 | [`../stats/README.md`](../stats/README.md) | Reglas del ladder, cvars del servidor, consultas y rendimiento. |
 | [`stats/PLAN.md`](stats/PLAN.md) | Diseño: arquitectura, formato de eventos v1 (JSONL) y etapas. |
 | [`stats/INSTALACION.md`](stats/INSTALACION.md) | Instalación genérica paso a paso (Windows y Linux, todo en una máquina). |
+| [`stats/DESPLIEGUE.md`](stats/DESPLIEGUE.md) | Publicar cambios de la base en producción (clanes: respaldo, esquema, rol `dday_clans`, carga inicial). |
 | [`../stats/`](../stats/) | Código del sistema: `schema.sql`, `ingest.py`, `okf_export.py`, `requirements.txt`. |
 
 ## Base de conocimiento (OKF)
