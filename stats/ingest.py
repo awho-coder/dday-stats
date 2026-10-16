@@ -346,10 +346,17 @@ class Ingestor:
         if self.cfg.skip_bot_only and humans == 0:
             raise SkipMatch("partida sin humanos (--skip-bot-only)")
         ranked = is_ranked(match, self.cfg)
-        # "play": primera vez que alguien entro a un equipo (DLL nuevas). El mapa
-        # puede haber estado cargado horas con el servidor vacio antes de eso.
+        # DLL nuevas: el reloj (t, dur) se detiene sin nadie en un equipo y "play"
+        # marca la primera entrada. El mapa puede quedar cargado horas vacio (o
+        # alguien entrar un momento y salir), asi que el inicio es el fin menos el
+        # tiempo jugado, y nunca antes de "play". Archivos viejos: match_start.
         play = next((e for e in events if e["ev"] == "play" and e.get("ts")), None)
-        started = ts(play["ts"] if play else match.start["ts"])
+        if play is None:
+            started = ts(match.start["ts"])
+        elif match.end.get("ts"):
+            started = ts(max(float(play["ts"]), float(match.end["ts"]) - match.duration))
+        else:
+            started = ts(play["ts"])
         ended = ts(match.end["ts"]) if match.end.get("ts") else None
         teams_start = {t["idx"]: t for t in match.start.get("teams", [])}
         teams_end = {t["idx"]: t for t in match.end.get("teams", [])}

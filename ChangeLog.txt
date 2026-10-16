@@ -37,7 +37,8 @@ Versión 5.068
   ni bot) en un equipo. Antes contaba desde que cargaba el mapa, y un
   mapa que quedaba horas con el servidor vacío registraba partidas de
   días. Escribe el evento "play" con la hora real en que entró el primer
-  jugador; ingest.py la usa como inicio de la partida.
+  jugador; ingest.py toma como inicio el fin menos el tiempo jugado,
+  nunca antes de esa hora.
 
 - Corrige `ClientDisconnect()` de p_client.c que escribía las
   estadísticas antiguas aunque "stats" estuviera en 0, y
