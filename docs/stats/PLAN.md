@@ -76,11 +76,13 @@ implementa autenticación.
 La versión 2 agrega campos (`place`, `ffa_winner`, `zone_kills`, `kzone`/`vzone`);
 el ingestor acepta archivos v1 y v2.
 
-Todos llevan `ev` y `t` (segundos desde el inicio del mapa).
+Todos llevan `ev` y `t`: segundos de reloj de la partida, que cuenta desde que carga el mapa pero
+se detiene mientras no hay nadie (humano ni bot) en un equipo.
 
 | ev | campos |
 |---|---|
 | `match_start` | `v`, `match`, `server`, `map`, `mode` (`dm`/`ctb`/`campaign`/`coop`/`control`/`ffa`), `kind` (`public`/`duel`), `event` (torneo), `tournament`, `ts` (unix), `teams[]` (`idx`,`army`,`name`) |
+| `play` | la primera vez que alguien entra a un equipo: `ts` (unix, hora real de la primera entrada; el ingestor toma como `started_at` el fin menos `dur`, nunca antes de esta hora), `idle` (segundos que el mapa estuvo cargado sin nadie) |
 | `live` / `resume` / `live_cancel` | solo duelos: la cuenta llegó a 0 (con `event`) / se reanudó tras una pausa / `sv resetcount` |
 | `team` | `slot`, `name`, `bot`, `team` (-1 = observador) |
 | `kill` | `killer`/`victim` (`name`,`bot`,`team`,`class`,`pos`), `mod`, `weapon`, `hs`, `ff`, `suicide`, `dist`; en mapas con zona de control también `kzone` / `vzone` (0/1: el que mató / el que murió estaba dentro de la zona) |
