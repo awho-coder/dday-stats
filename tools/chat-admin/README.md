@@ -91,7 +91,7 @@ loginctl enable-linger $USER                       # sobrevive al logout
   `tab nuevo on|off` (cvar `tab_panel`, al instante: TAB de equipos con el panel del FFA, banderas y
   columna de curación del Medic; también "admin activa el tab nuevo" / "apaga el marcador nuevo"; sin
   argumento dice el estado)
-  `cuenta` (17 alias: iniciar/start/tira…) `reset` `resetscore` `torneo on|off`
+  `cuenta [minutos]` (17 alias: iniciar/start/tira…; sin minutos usa `timelimit`, o 20) `reset` `resetscore` `torneo on|off`
   `freeze` `proximamapa` `lock` `unlock` `say <texto>`
 - **Moderación**: `kick <nick>` `kickban <nick>` `ban <ip>` `unban <ip>`
   `killjugador <nick>` `kickbots` `bots on|off` `reportar <quien> <motivo>`
