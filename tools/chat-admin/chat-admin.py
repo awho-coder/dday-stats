@@ -211,8 +211,18 @@ def run_cmd(text, by):
     if verb in ("cuenta", "startcount", "tiracuenta", "tira", "tirar", "tiro", "lanza", "lanzar",
                 "iniciar", "inicia", "arrancar", "arranca", "empezar", "empeza", "empieza",
                 "start", "countdown", "count", "cuentaatras"):
-        rcon("sv startcount")
-        return "[ADMIN] cuenta atrás lanzada — ¡a jugar! (la cuenta la pide %s)" % by, True
+        # el DLL exige 'sv startcount <minutos>': los del argumento, o el timelimit, o 20
+        m = re.match(r"^\d{1,3}$", arg.strip())
+        minutos = int(m.group(0)) if m else 0
+        if minutos <= 0:
+            tl = re.search(r'is\s+"(\d+)', rcon("timelimit"))
+            minutos = int(tl.group(1)) if tl else 0
+        if minutos <= 0:
+            minutos = 20
+        r = _cl(rcon("sv startcount %d" % minutos))
+        if re.search(r"Uso:|mayor a 0|remaining time", r):   # errores del DLL (con pausa pendiente: 'freeze')
+            return "[ADMIN] el server no lanzó la cuenta: %s" % r.replace(chr(10), " ")[:90], True
+        return "[ADMIN] cuenta atrás de %d min lanzada — ¡a jugar! (la cuenta la pide %s)" % (minutos, by), True
     if verb in ("reset", "resetcount", "resetcuenta"):
         rcon("sv resetcount")
         return "[ADMIN] cuenta reseteada (lo registrado se descarta)", True
