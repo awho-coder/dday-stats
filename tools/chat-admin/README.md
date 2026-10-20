@@ -66,7 +66,7 @@ loginctl enable-linger $USER                       # sobrevive al logout
 
 | Qué | Dónde | Por defecto |
 |---|---|---|
-| Nicks autorizados | `chat-admin.py` → `ALLOW_RAW` | `>ChL<Snako`, `[MR]+Peruano+`, `[MR]+roman` |
+| Nicks autorizados | `chat-admin.py` → `ALLOW_RAW` (exactos) y `ALLOW_SUB` (contiene) | `>ChL<Snako`, `[MR]+Peruano+`, `[MR]+roman`; cualquier nick con `peruano` |
 | Log del server | `chat-admin.py` → `LOG` | `/var/data/dday/logs/console.log` |
 | URL del relay | `chat-admin.py` → `RELAY_URL` | `http://<ip-tailscale>:8099/ask` |
 | Token (VM) | archivo `.relay-token` | — |
@@ -105,7 +105,9 @@ loginctl enable-linger $USER                       # sobrevive al logout
 
 ## Seguridad (capas)
 
-1. **Allowlist exacta** de nicks (case-sensitive; variantes tipo `[mr]+roman` se ignoran).
+1. **Allowlist exacta** de nicks (case-sensitive; variantes tipo `[mr]+roman` se ignoran). Excepción pedida
+   por el dueño: `ALLOW_SUB` acepta cualquier nick que contenga `peruano` (cambia de tag de clan), a
+   costa de que cualquiera que se ponga ese nombre maneja el admin.
 2. **Whitelist dura** de verbos en código: nada de sistema de archivos, BD ni servicios.
 3. **Rate limit** 3 comandos/30 s por nick.
 4. **Redacción**: el valor de una password **nunca** viaja al LLM ni se repite en
