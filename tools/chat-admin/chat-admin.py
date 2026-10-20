@@ -7,8 +7,9 @@ CFG    = "/home/ubuntu/dday/dday/server.cfg"
 INBOX  = "/home/ubuntu/dday/chat-inbox"           # chat conversacional -> Hermes
 RUNLOG = "/home/ubuntu/dday/chat-admin.actions"   # auditoría de acciones
 DEBUG  = "/home/ubuntu/dday/chat-admin.debug"     # calibración de formato
-ALLOW  = {"chlsnako", "mrperuano", "mrroman"}          # solo para heurística de debug
+ALLOW  = {"chlsnako", "peruano", "mrroman"}            # solo para heurística de debug
 ALLOW_RAW = (">ChL<Snako", "[MR]+Peruano+", "[MR]+roman")  # match EXACTO anti-squatting
+ALLOW_SUB = ("peruano",)   # pedido del dueño: cualquier nick que contenga esto (cambia de clan/tag)
 MAPS   = {"dday2","invade1","invade2","invade6","itadday3","townwar","eurovilla","eurovilla3",
           "inland2","inland3","inland4","inland5","inland6","market1","mp1dday1","mp1dday2",
           "mp1dday3","nav2","nuenen","outpost","townwar1","war3","itadday1","itadday2",
@@ -21,6 +22,9 @@ DRY = False
 TESTMODE = False
 
 def norm(s): return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+
+def is_allowed(nick):
+    return nick in ALLOW_RAW or any(a in norm(nick) for a in ALLOW_SUB)
 
 def rcon_pw():
     try:
@@ -390,7 +394,7 @@ def run_cmd(text, by):
         pl = players()
         n = 0
         for uid, nick in pl:
-            if nick not in ALLOW_RAW:
+            if not is_allowed(nick):
                 rcon("kick %d" % uid); n += 1
         return "[ADMIN] kickeados %d bots (los humanos allowlist se quedan)" % n, True
 
@@ -665,13 +669,13 @@ def parse_chat(line):
         m = re.match(p, line)
         if m:
             nick, text = m.group(1).strip(), m.group(2).strip()
-            if nick in ALLOW_RAW:
+            if is_allowed(nick):
                 return nick, text
     n = norm(line)
     for a in ALLOW:
         if a in n:
             m = re.search(r'([^:\s][^:]{0,30}?):\s+(.+)$', line) or re.search(r'<([^>]+)>\s*(.+)', line)
-            if m and m.group(1) in ALLOW_RAW:
+            if m and is_allowed(m.group(1)):
                 return m.group(1), m.group(2)
             try:
                 with open(DEBUG, "a") as f: f.write(line + "\n")
