@@ -91,7 +91,7 @@ void Cmd_Arty_f (edict_t *ent);
 void Cmd_Objectives_Toggle (edict_t *ent);
 
 
-#define NUM_ID_CMDS     48	
+#define NUM_ID_CMDS     50	
 g_cmds_t id_GameCmds[NUM_ID_CMDS];
 
 struct cmd_list_t

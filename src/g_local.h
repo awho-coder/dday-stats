@@ -876,6 +876,11 @@ extern cvar_t *syringe_heal;       // vida que recupera el companero que recibe 
 extern cvar_t *syringe_poison;     // dano total del veneno por jeringa (se reparte en SYRINGE_POISON_TIME)
 extern cvar_t *syringe_poison_head; // lo mismo cuando la jeringa pega en la cabeza
 extern cvar_t *syringe_heal_head;  // vida que recupera el companero si la jeringa le pega en la cabeza
+extern cvar_t *sleepdart;          // 1 = el Medic tiene el dardo de sueno (comando dardo)
+extern cvar_t *sleepdart_time;     // segundos que duerme el enemigo
+extern cvar_t *sleepdart_cooldown; // segundos entre dos dardos del mismo Medic
+extern cvar_t *sleepdart_wake;     // 1 = el dano despierta al dormido
+extern cvar_t *sleepdart_anim;     // 1, 2 o 3: animacion de muerte con la que se queda dormido en el piso
 extern cvar_t *fast_bleeding;
 extern cvar_t *fast_sniper;
 
@@ -1734,6 +1739,11 @@ struct gclient_s
 	int         launcher_shots;			// Medic with medic_bazooka: shots left in the syringe launcher
 	float       next_launcher_time;		// Medic with medic_bazooka: level.time when he can fire it again
 	float       last_damage_time;		// level.time of the last damage taken (the Medic heals himself after MEDIC_REGEN_DELAY)
+	float       next_sleepdart_time;	// Medic with sleepdart: level.time when he can throw the next sleep dart
+	qboolean    sleepdart_waiting;		// Medic with sleepdart: he threw one and is told when the next is ready
+	qboolean    sleeping;				// put to sleep by a sleep dart (see Sleep_Start)
+	float       sleep_until;			// level.time when he wakes up
+	vec3_t      sleep_angles;			// the view while he sleeps, on his back looking up
 
 	qboolean    tank_hit;//faf
 
@@ -2111,6 +2121,13 @@ extern int jpn_index;
 #define MEDIC_REGEN_DELAY		3		// seconds without damage before he starts to heal
 #define MEDIC_REGEN_RATE		10		// health a second, up to HEALTH_MAX
 
+// Medic sleep dart (sleepdart): the command "dardo" throws a dart that puts an enemy to sleep on the ground
+#define SLEEPDART_SPEED			1400	// speed of the dart (a thrown syringe flies at KNIFE_THROW_SPEED, 950)
+#define SLEEPDART_GRAVITY		0.3		// gravity of the dart (1 = a thrown syringe)
+#define SLEEPDART_COLOR			0x74	// palette color of its sparks (blue, as the railgun trail)
+#define SLEEP_VIEW_PITCH		-60		// the sleeper looks up, as he lies on his back
+#define SLEEP_FADE_TIME			0.5		// seconds before waking when the dark screen starts to clear
+
 
 
 
@@ -2334,7 +2351,8 @@ typedef enum
 	HEALTHPACK,
 	SYRINGE_POISON,
 	WEAPON_SYRINGE_LAUNCHER,
-	SYRINGE
+	SYRINGE,
+	SLEEPDART
 } classnameb_t;
 
 typedef enum
@@ -2384,6 +2402,10 @@ qboolean Syringe_CanThrow (edict_t *ent);
 qboolean Healthpack_EdictsLeft (void);
 void Medic_Regen (edict_t *ent);
 void Weapon_SyringeLauncher (edict_t *ent);
+void Cmd_SleepDart_f (edict_t *ent);
+void SleepDart_ClientThink (edict_t *ent, usercmd_t *ucmd);
+void Sleep_End (edict_t *ent, qboolean woke);
+qboolean Sleep_BlocksCommand (edict_t *ent, char *cmd);
 void Weapon_Generic (edict_t *ent, int FRAME_ACTIVATE_LAST, int FRAME_LFIRE_LAST, int FRAME_LIDLE_LAST, int FRAME_RELOAD_LAST, int FRAME_LASTRD_LAST,
 					 int FRAME_DEACTIVATE_LAST, int FRAME_RAISE_LAST,int FRAME_AFIRE_LAST, int FRAME_AIDLE_LAST,
 					 int *pause_frames, int *fire_frames, void (*fire)(edict_t *ent));

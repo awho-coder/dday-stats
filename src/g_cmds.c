@@ -260,6 +260,8 @@ g_cmds_t id_GameCmds[NUM_ID_CMDS] = // remember to set back to NUM_ID_COMDS
 	{ "autopickup",	1,	Cmd_AutoPickUp_f },
 	{ "id",			1,	Cmd_PlayerID_f },
 	{ "medic",		1,  Cmd_Medic_Call_f },
+	{ "dardo",		1,  Cmd_SleepDart_f },		// sleepdart: the sleep dart of the Medic
+	{ "sleepdart",	1,  Cmd_SleepDart_f },
 	{ "motd",			1,	Cmd_MOTD },
 
 	{ "dday_menu_main",	1,	Cmd_Menu_Main_f },
@@ -2630,6 +2632,9 @@ void change_stance(edict_t *self, int stance)
 		return;
 
 
+	if (self->client && self->client->sleeping && stance != STANCE_CRAWL)
+		return;	// asleep (sleep dart): he stays on the ground
+
 	if (self->stanceflags == stance ) // if the ent is already in the stance, return
 //	{ gi.dprintf("Same Stance\n");
 		return;
@@ -3507,6 +3512,8 @@ void ClientCommand (edict_t *ent)
 	}
 
     cmdptr = FindCommand(cmd);
+	if (cmdptr && Sleep_BlocksCommand (ent, cmd))
+		return;	// asleep (sleep dart)
     if(cmdptr)
     {
         switch (cmdptr->numArgs)

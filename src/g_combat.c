@@ -1416,6 +1416,11 @@ void T_Damage (edict_t *targ, edict_t *inflictor, edict_t *attacker, vec3_t dir,
 
 		if (client && take > 0)
 			client->last_damage_time = level.time;	// the regeneration of the Medic waits for MEDIC_REGEN_DELAY
+
+		// the damage wakes up a sleeper (sleep dart), but not the bleeding of his own wounds
+		if (client && take > 0 && client->sleeping && sleepdart_wake->value && mod != MOD_WOUND &&
+			targ->health > 0)
+			Sleep_End (targ, true);
 		
 		if (targ->health <= 0)
 		{

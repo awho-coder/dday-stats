@@ -1385,7 +1385,13 @@ void player_die (edict_t *self, edict_t *inflictor, edict_t *attacker, int damag
 
 			// start a death animation
 			self->client->anim_priority = ANIM_DEATH;
-			if (self->stanceflags==STANCE_DUCK)
+			if (self->client->sleeping)
+			{
+				// asleep (sleep dart): he already lies on the ground, so he stays as he is
+				self->client->anim_end = self->s.frame;
+				Sleep_End (self, false);
+			}
+			else if (self->stanceflags==STANCE_DUCK)
 			{
 				self->s.frame = FRAME_crdeath1-1;
 				self->client->anim_end = FRAME_crdeath5;
@@ -3841,6 +3847,8 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 
 	//DDAY
 
+	SleepDart_ClientThink (ent, ucmd);	// a sleeper does not move or shoot
+
 	if (ent->client->resp.scopewobble < 40)
 	{
 		++ent->client->resp.scopewobble;
@@ -4329,6 +4337,13 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 
 		VectorCopy (pm.viewangles, client->v_angle);		
 		VectorCopy (pm.viewangles, client->ps.viewangles);
+
+		if (client->sleeping)
+		{
+			// asleep: he lies on his back looking up, whatever the mouse does
+			VectorCopy (client->sleep_angles, client->v_angle);
+			VectorCopy (client->sleep_angles, client->ps.viewangles);
+		}
 /* faf
 		//Wheaty: Limit the PITCH angle when in prone mode
 		if (ent->stanceflags == STANCE_CRAWL) //prone

@@ -66,6 +66,12 @@ void Shrapnel_Touch (edict_t *ent, edict_t *other, cplane_t *plane, csurface_t *
 void check_unscope (edict_t *ent);//faf
 void SpawnDamage (int type, vec3_t origin, vec3_t normal, int damage);
 int Damage_Loc (edict_t *targ, vec3_t point, edict_t *attacker);
+void change_stance (edict_t *self, int stance);
+
+// tournament: before the match starts nobody takes damage, and nobody is put to sleep either (see T_Damage)
+extern qboolean freeze_mode;
+extern int countdownActive;
+extern float countdownTimeLimit;
 
 void P_ProjectSource (gclient_t *client, vec3_t point, vec3_t distance, vec3_t forward, vec3_t right, vec3_t result)
 {
@@ -2419,7 +2425,7 @@ static void syringe_touch (edict_t *self, edict_t *other, cplane_t *plane, csurf
 
 	// the Medic, and the other syringes: the ones of a shot of the launcher start at the same point and, as they
 	// move, G_TouchTriggers makes them touch each other
-	if (other == owner || other->classnameb == SYRINGE)
+	if (other == owner || other->classnameb == SYRINGE || other->classnameb == SLEEPDART)
 		return;
 
 	if (surf && (surf->flags & SURF_SKY))
@@ -2498,19 +2504,33 @@ static void syringe_touch (edict_t *self, edict_t *other, cplane_t *plane, csurf
 	G_FreeEdict (self);
 }
 
+static void sleepdart_touch (edict_t *self, edict_t *other, cplane_t *plane, csurface_t *surf);
+
 // one syringe in the air from start toward dir (normalized), thrown by ent at speed, with gravity (1 = normal);
-// the thrown syringe and the syringe launcher use it. ent must have a team. solid is SOLID_BBOX for a thrown
-// syringe; the launcher uses SOLID_TRIGGER: the syringes of a shot start at the same point and, solid, they hit each other
-// (SV_Impact) and broke at the muzzle (syringe_touch also ignores the other syringes). Its own move still hits the
-// players and the walls
-static void Syringe_Launch (edict_t *ent, vec3_t start, vec3_t dir, float speed, float gravity, solid_t solid)
+// the thrown syringe, the syringe launcher and the sleep dart (dart true) use it. ent must have a team. solid is
+// SOLID_BBOX for a thrown syringe; the launcher uses SOLID_TRIGGER: the syringes of a shot start at the same point
+// and, solid, they hit each other (SV_Impact) and broke at the muzzle (syringe_touch also ignores the other
+// syringes). Its own move still hits the players and the walls
+static void Syringe_Launch (edict_t *ent, vec3_t start, vec3_t dir, float speed, float gravity, solid_t solid,
+							qboolean dart)
 {
 	edict_t	*syringe;
 	trace_t	tr;
 
 	syringe = G_Spawn ();
-	syringe->classname = "syringe";
-	syringe->classnameb = SYRINGE;
+	if (dart)
+	{
+		// the same syringe with a blue glow
+		syringe->classname = "sleepdart";
+		syringe->classnameb = SLEEPDART;
+		syringe->s.effects |= EF_COLOR_SHELL;
+		syringe->s.renderfx |= RF_SHELL_BLUE;
+	}
+	else
+	{
+		syringe->classname = "syringe";
+		syringe->classnameb = SYRINGE;
+	}
 	syringe->owner = ent;
 	syringe->obj_owner = ent->client->resp.team_on->index;	// the team when it is thrown
 	VectorCopy (start, syringe->s.origin);
@@ -2526,7 +2546,7 @@ static void Syringe_Launch (edict_t *ent, vec3_t start, vec3_t dir, float speed,
 	VectorSet (syringe->maxs, 1, 1, 1);
 	syringe->s.modelindex = gi.modelindex ("models/weapons/g_syringe/tris.md2");
 	syringe->s.frame = 0;
-	syringe->touch = syringe_touch;
+	syringe->touch = dart ? sleepdart_touch : syringe_touch;
 	syringe->think = G_FreeEdict;
 	syringe->nextthink = level.time + SYRINGE_LIFE;
 	gi.linkentity (syringe);
@@ -2540,26 +2560,9 @@ static void Syringe_Launch (edict_t *ent, vec3_t start, vec3_t dir, float speed,
 	}
 }
 
-// throws a syringe in the direction the Medic is aiming (as Knife_Throw); returns false if it could not be thrown
-static qboolean Syringe_Throw (edict_t *ent)
+// part of the wave animation when the Medic throws a syringe or a sleep dart, as when the healthpack is thrown
+static void Syringe_ThrowAnim (edict_t *ent)
 {
-	vec3_t	forward, right, offset, start;
-
-	if (!ent->client->resp.team_on)
-		return false;
-
-	AngleVectors (ent->client->v_angle, forward, right, NULL);
-	VectorSet (offset, 24, 8, ent->viewheight - 8);
-	P_ProjectSource (ent->client, ent->s.origin, offset, forward, right, start);
-	start[2] += 5;
-	VectorNormalize (forward);
-
-	Syringe_Launch (ent, start, forward, KNIFE_THROW_SPEED, 1.0, SOLID_BBOX);
-
-	Play_WepSound (ent, "knife/fire.wav");
-	PlayerNoise (ent, ent->s.origin, PNOISE_SELF);
-
-	// part of the wave animation, as when the healthpack is thrown
 	if (ent->stanceflags == STANCE_STAND)
 	{
 		ent->client->anim_priority = ANIM_WAVE;
@@ -2578,8 +2581,297 @@ static qboolean Syringe_Throw (edict_t *ent)
 		ent->s.frame = 222;
 		ent->client->anim_end = 225;
 	}
+}
+
+// throws a syringe in the direction the Medic is aiming (as Knife_Throw); returns false if it could not be thrown
+static qboolean Syringe_Throw (edict_t *ent)
+{
+	vec3_t	forward, right, offset, start;
+
+	if (!ent->client->resp.team_on)
+		return false;
+
+	AngleVectors (ent->client->v_angle, forward, right, NULL);
+	VectorSet (offset, 24, 8, ent->viewheight - 8);
+	P_ProjectSource (ent->client, ent->s.origin, offset, forward, right, start);
+	start[2] += 5;
+	VectorNormalize (forward);
+
+	Syringe_Launch (ent, start, forward, KNIFE_THROW_SPEED, 1.0, SOLID_BBOX, false);
+
+	Play_WepSound (ent, "knife/fire.wav");
+	PlayerNoise (ent, ent->s.origin, PNOISE_SELF);
+	Syringe_ThrowAnim (ent);
 
 	return true;
+}
+
+/*
+======================================================================
+
+SLEEP DART
+
+With sleepdart on, the command "dardo" (or "sleepdart") throws a dart where the Medic aims, whatever he has in
+his hands, once every sleepdart_cooldown seconds. An enemy it hits falls asleep on his back for sleepdart_time
+seconds: he does not move, shoot or use the commands of the game, and his screen goes dark. With sleepdart_wake,
+any damage wakes him up, except the bleeding of his wounds. He wakes up prone. Teammates, players with the spawn
+protection and an invulnerable Medic are not affected.
+
+======================================================================
+*/
+
+// the dart can put other to sleep
+static qboolean SleepDart_CanSleep (edict_t *dart, edict_t *other)
+{
+	gclient_t	*client = other->client;
+
+	if (!client || other->health <= 0 || other->deadflag || other->flyingnun || client->limbo_mode ||
+		!client->resp.team_on || client->kamikaze_plane)
+		return false;
+	if (!G_IsFFA () && client->resp.team_on->index == dart->obj_owner)
+		return false;	// a teammate
+	if (level.time < client->spawntime + invuln_spawn->value)
+		return false;
+	if (client->resp.mos == MEDIC && invuln_medic->value)
+		return false;
+	if (tournament->value && (freeze_mode || countdownTimeLimit <= 0 || countdownActive > 0))
+		return false;
+	return true;
+}
+
+// puts the victim to sleep: on the ground on his back, his view looking up; another dart makes it last longer
+static void Sleep_Start (edict_t *victim)
+{
+	gclient_t	*client = victim->client;
+
+	if (client->sleeping)
+	{
+		if (level.time + sleepdart_time->value > client->sleep_until)
+			client->sleep_until = level.time + sleepdart_time->value;
+		return;
+	}
+
+	turret_off (victim);
+	if (client->aim)
+	{
+		client->aim = false;
+		check_unscope (victim);
+		client->ps.fov = STANDARD_FOV;
+	}
+
+	// prone: his box and the zones of his body are the ones of somebody lying on the ground
+	change_stance (victim, STANCE_CRAWL);
+
+	client->sleeping = true;
+	client->sleep_until = level.time + sleepdart_time->value;
+	VectorSet (client->sleep_angles, SLEEP_VIEW_PITCH, client->v_angle[YAW], 0);
+	client->ps.gunindex = 0;
+	client->ps.pmove.pm_flags |= PMF_NO_PREDICTION;	// the server holds his view
+
+	// a death animation that ends on his back; G_SetClientFrame leaves it on its last frame while he sleeps
+	client->anim_priority = ANIM_DEATH;
+	switch ((int)sleepdart_anim->value)
+	{
+	case 2:
+		victim->s.frame = FRAME_death201 - 1;
+		client->anim_end = FRAME_death206;
+		break;
+	case 3:
+		victim->s.frame = FRAME_death301 - 1;
+		client->anim_end = FRAME_death308;
+		break;
+	default:
+		victim->s.frame = FRAME_death101 - 1;
+		client->anim_end = FRAME_death106;
+		break;
+	}
+}
+
+// ends the sleep; woke is false when he died or left the game, and then nothing else is touched
+void Sleep_End (edict_t *ent, qboolean woke)
+{
+	gclient_t	*client = ent->client;
+	vec3_t		angles;
+	int			i;
+
+	if (!client || !client->sleeping)
+		return;
+
+	client->sleeping = false;
+	client->sleep_until = 0;
+	client->ps.pmove.pm_flags &= ~PMF_NO_PREDICTION;
+
+	if (!woke)
+		return;
+
+	// he looks ahead again; the mouse moved while he slept, so the view is set from his last command
+	VectorSet (angles, 0, client->sleep_angles[YAW], 0);
+	for (i = 0; i < 3; i++)
+		client->ps.pmove.delta_angles[i] = ANGLE2SHORT (angles[i] - client->resp.cmd_angles[i]);
+	VectorCopy (angles, client->v_angle);
+	VectorCopy (angles, client->ps.viewangles);
+
+	if (client->pers.weapon && client->pers.weapon->view_model)
+		client->ps.gunindex = gi.modelindex (client->pers.weapon->view_model);
+
+	client->anim_priority = ANIM_BASIC;	// G_SetClientFrame goes on with the prone animation
+
+	safe_cprintf (ent, PRINT_HIGH, "You woke up.\n");
+}
+
+static void sleepdart_touch (edict_t *self, edict_t *other, cplane_t *plane, csurface_t *surf)
+{
+	edict_t	*owner = self->owner;
+	vec3_t	back, dir;
+
+	if (other == owner || other->classnameb == SYRINGE || other->classnameb == SLEEPDART)
+		return;
+
+	if (surf && (surf->flags & SURF_SKY))
+	{
+		G_FreeEdict (self);
+		return;
+	}
+
+	if (owner && owner->client)
+		PlayerNoise (owner, self->s.origin, PNOISE_IMPACT);
+
+	VectorNegate (self->velocity, back);
+	VectorNormalize (back);
+
+	if (SleepDart_CanSleep (self, other))
+	{
+		Sleep_Start (other);
+
+		gi.sound (other, CHAN_ITEM, gi.soundindex ("misc/hittorso.wav"), 1, ATTN_NORM, 0);
+		Syringe_Sparks (self->s.origin, back, 50, SLEEPDART_COLOR);
+
+		if (owner && owner->inuse && owner->client)
+		{
+			safe_centerprintf (other, "%s put you to sleep!\n", owner->client->pers.netname);
+			safe_cprintf (owner, PRINT_HIGH, "You put %s to sleep.\n", other->client->pers.netname);
+		}
+		else
+			safe_centerprintf (other, "You were put to sleep!\n");
+	}
+	else
+	{
+		// a teammate, a protected player, a wall, an objective or a body: it breaks
+		if (plane)
+			VectorCopy (plane->normal, dir);
+		else
+			VectorCopy (back, dir);
+
+		gi.sound (self, CHAN_VOICE, gi.soundindex (va ("bullet/glass%i.wav", 1 + (rand() % 3))), 1, ATTN_NORM, 0);
+		SpawnDamage (TE_SPARKS, self->s.origin, dir, 0);
+		Syringe_Sparks (self->s.origin, dir, 15, SLEEPDART_COLOR);
+	}
+
+	G_FreeEdict (self);
+}
+
+// the command "dardo" / "sleepdart"
+void Cmd_SleepDart_f (edict_t *ent)
+{
+	gclient_t	*client = ent->client;
+	vec3_t		forward, right, offset, start;
+
+	if (!sleepdart->value || !client)
+		return;
+
+	if (ent->deadflag || ent->health <= 0 || client->limbo_mode || ent->flyingnun || !client->resp.team_on ||
+		client->sleeping || client->kamikaze_plane || client->turret || level.intermissiontime)
+		return;
+
+	if (client->resp.mos != MEDIC)
+	{
+		safe_cprintf (ent, PRINT_HIGH, "Only the Medic has the sleep dart.\n");
+		return;
+	}
+
+	if (level.time < client->next_sleepdart_time)
+	{
+		safe_cprintf (ent, PRINT_HIGH, "Sleep dart ready in %i s.\n", (int)ceil (client->next_sleepdart_time - level.time));
+		return;
+	}
+
+	if (!Healthpack_EdictsLeft ())
+		return;
+
+	// from the same point as a thrown syringe
+	AngleVectors (client->v_angle, forward, right, NULL);
+	VectorSet (offset, 24, 8, ent->viewheight - 8);
+	P_ProjectSource (client, ent->s.origin, offset, forward, right, start);
+	start[2] += 5;
+	VectorNormalize (forward);
+
+	Syringe_Launch (ent, start, forward, SLEEPDART_SPEED, SLEEPDART_GRAVITY, SOLID_BBOX, true);
+
+	Play_WepSound (ent, "knife/fire.wav");
+	PlayerNoise (ent, ent->s.origin, PNOISE_SELF);
+	Syringe_ThrowAnim (ent);
+
+	client->next_sleepdart_time = level.time + sleepdart_cooldown->value;
+	client->sleepdart_waiting = true;
+}
+
+// the game commands that a sleeper cannot use (the chat, the menus and the scoreboard still work)
+qboolean Sleep_BlocksCommand (edict_t *ent, char *cmd)
+{
+	static char	*blocked[] = { "use", "drop", "invuse", "weapprev", "weapnext", "kill", "putaway", "wave",
+							   "stance", "arty", "attack2", "reload", "scope", "dardo", "sleepdart", NULL };
+	int			i;
+
+	if (!ent->client || !ent->client->sleeping)
+		return false;
+
+	for (i = 0; blocked[i]; i++)
+		if (!Q_stricmp (cmd, blocked[i]))
+			return true;
+	return false;
+}
+
+// every frame, from ClientThink: tells the Medic when his next dart is ready, and holds the sleeper still
+void SleepDart_ClientThink (edict_t *ent, usercmd_t *ucmd)
+{
+	gclient_t	*client = ent->client;
+	vec3_t		pos, up = {0, 0, 1};
+
+	if (client->sleepdart_waiting && level.time >= client->next_sleepdart_time)
+	{
+		client->sleepdart_waiting = false;
+		if (sleepdart->value && client->resp.mos == MEDIC && ent->health > 0 && !ent->deadflag)
+			safe_cprintf (ent, PRINT_HIGH, "Sleep dart ready.\n");
+	}
+
+	if (!client->sleeping)
+		return;
+
+	if (ent->deadflag || ent->health <= 0 || client->limbo_mode || ent->flyingnun || !client->resp.team_on)
+	{
+		Sleep_End (ent, false);
+		return;
+	}
+
+	if (level.time >= client->sleep_until)
+	{
+		Sleep_End (ent, true);
+		return;
+	}
+
+	// no moving, no jumping, no shooting
+	ucmd->forwardmove = ucmd->sidemove = ucmd->upmove = 0;
+	ucmd->buttons = 0;
+	client->ps.gunindex = 0;
+	client->ps.pmove.pm_flags |= PMF_NO_PREDICTION;
+
+	// blue sparks over him every half second, so everybody sees that he sleeps
+	if (level.framenum % 5 == 0)
+	{
+		VectorCopy (ent->s.origin, pos);
+		pos[2] += 4;
+		Syringe_Sparks (pos, up, 8, SLEEPDART_COLOR);
+	}
 }
 
 void Weapon_Morphine_Use(edict_t *ent)
@@ -2805,7 +3097,7 @@ static void Weapon_SyringeLauncher_Fire (edict_t *ent)
 		VectorMA (forward, crandom () * SYRINGE_LAUNCHER_SPREAD, right, dir);
 		VectorMA (dir, crandom () * SYRINGE_LAUNCHER_SPREAD, up, dir);
 		VectorNormalize (dir);
-		Syringe_Launch (ent, start, dir, SYRINGE_LAUNCHER_SPEED, SYRINGE_LAUNCHER_GRAVITY, SOLID_TRIGGER);
+		Syringe_Launch (ent, start, dir, SYRINGE_LAUNCHER_SPEED, SYRINGE_LAUNCHER_GRAVITY, SOLID_TRIGGER, false);
 	}
 
 	ent->client->launcher_shots--;
