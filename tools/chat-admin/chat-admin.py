@@ -135,7 +135,7 @@ def find_player(name):
 HELP = ("[ADMIN] comandos: estado, kick <quien>, kickban <quien>, ban <ip>, unban <ip>, "
         "mapa <nombre>, duelo <mapa>, publico, cuenta, reset, resetscore, tiempo, mapas, bans, "
         "bots on|off, kickbots, screenshot, stuff <cmd>, autostuff <cmd>, autostuffoff, "
-        "control <mapa>, ffa <mapa>, dm <mapa>, kamikaze on|off, medic on|off, medic bazooka on|off, officer bonus on|off, tab nuevo on|off, "
+        "control <mapa>, ffa <mapa>, dm <mapa>, kamikaze on|off, medic on|off, medic bazooka on|off, dardo on|off, officer bonus on|off, tab nuevo on|off, "
         "lock, unlock, say <texto>, ayuda")
 
 def run_cmd(text, by):
@@ -302,6 +302,21 @@ def run_cmd(text, by):
         m = re.search(r'is\s+"(\d+)"', rcon("tab_panel"))
         estado = "?" if not m else ("ON" if m.group(1) != "0" else "OFF")
         return "[ADMIN] TAB nuevo: %s (uso: tab nuevo on|off)" % estado, True
+    if verb in ("dardo", "sleepdart"):
+        # cvar de la DLL (no latched): el dardo de sueno del Medic (comando 'dardo' del jugador) rige al instante;
+        # un reinicio del server lo deja como diga server.cfg
+        a = norm(arg)
+        if a in ("on", "1", "si", "activar", "activa", "prender", "prende", "encender", "enciende", "poner", "pon"):
+            rcon("set sleepdart 1")
+            cd = re.search(r'is\s+"([\d.]+)"', rcon("sleepdart_cooldown"))
+            return ("[ADMIN] DARDO DE SUENO activado: el Medic duerme a un enemigo con 'bind <tecla> dardo' "
+                    "(uno cada %s s)" % (cd.group(1) if cd else "15")), True
+        if a in ("off", "0", "no", "desactivar", "desactiva", "apagar", "apaga", "quitar", "quita", "sacar", "saca"):
+            rcon("set sleepdart 0")
+            return "[ADMIN] dardo de sueno DESACTIVADO", True
+        m = re.search(r'is\s+"(\d+)"', rcon("sleepdart"))
+        estado = "?" if not m else ("ON" if m.group(1) != "0" else "OFF")
+        return "[ADMIN] dardo de sueno: %s (uso: dardo on|off)" % estado, True
     if verb in ("medic", "medico", "mdico"):  # norm() borra los acentos: médico -> mdico
         # cvar latched de la DLL: el Medic nuevo (Browning, botiquin y jeringas lanzables) rige desde el
         # proximo mapa; un reinicio del server lo deja como diga server.cfg
@@ -633,6 +648,13 @@ def medic_phrase(text):
     kamikaze: 'quiero un medico' no prende nada (hace falta 'nuevo' o un verbo de activar).
     None si no hablan del medic."""
     low = " " + text.lower() + " "
+    # el dardo de sueno: 'activa el dardo', 'saca el dardo del medic' (antes que el Medic: nombran a los dos)
+    if re.search(r"\bdardos?\b|\bsleep ?dart", low):
+        if any(w in low for w in KAMIKAZE_OFF):
+            return "dardo off"
+        if any(re.search(r"\b%s" % re.escape(w), low) for w in KAMIKAZE_ON + ("dale", "da ")):
+            return "dardo on"
+        return "dardo"
     # el lanzajeringas: 'activa la bazooka de jeringas', 'saca el lanzajeringas'
     if re.search(r"lanzajeringa|\bbazooka\b.*jeringa|jeringa.*\bbazooka\b|\bbazuca\b.*jeringa|\bm[eé]dic[oa]?\b.*\bbazooka\b|\bbazooka\b.*\bm[eé]dic", low):
         if any(w in low for w in KAMIKAZE_OFF):
@@ -689,7 +711,7 @@ def looks_command(text):
     return v in {"ayuda","help","estado","status","jugadores","players","kick","kickea","echar",
                  "kickban","ban","unban","delban","desban","lock","unlock","bloquear","abrir",
                  "mapa","map","cambiamapa","duelo","duel","publico","publica","cuenta","startcount",
-                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","dm","kamikaze","kamikase","kamicase","medic","medico","mdico","officer","oficial","officers","oficiales","tab","scoreboard","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
+                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","dm","kamikaze","kamikase","kamicase","medic","medico","mdico","dardo","sleepdart","officer","oficial","officers","oficiales","tab","scoreboard","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
                  "restart","reload"}
 
 def handle_line(line, dry=False):
