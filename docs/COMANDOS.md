@@ -147,6 +147,41 @@ todas las facciones (modelos y sonidos que ya tiene todo el mundo). Funciona con
 |---|---|---|
 | `medic_bazooka` | `0` | `1` le da el lanzajeringas al Medic en el próximo mapa. |
 
+## Servidor: dardo de sueño del Medic (`sleepdart`)
+
+Apagado por defecto. Con `sleepdart 1` el Medic tiene un **dardo que duerme a un enemigo**, como
+el de Ana de Overwatch. Se dispara con el comando **`dardo`** (o `sleepdart`), que cada jugador
+asigna a una tecla: `bind q dardo`. Sale hacia donde apunta, con cualquier arma en la mano, y
+hay **uno cada `sleepdart_cooldown` segundos**: si no está listo avisa cuántos segundos faltan,
+y cuando se recarga llega el mensaje `Sleep dart ready.`. Al reaparecer está listo. Es un
+proyectil (la jeringa con brillo azul, más rápida y con menos caída): se puede esquivar.
+
+El **enemigo** que toca se cae de espaldas al piso (cuerpo a tierra, con una animación de
+muerte) y queda dormido `sleepdart_time` segundos:
+
+- no se mueve, no salta ni dispara, y la vista le queda fija mirando hacia arriba;
+- no puede cambiar de arma, recargar, tirar cosas, cambiar de postura, pedir airstrike ni
+  suicidarse (`kill`); el chat, los menús y el TAB siguen andando;
+- ve la pantalla azul oscura (se aclara en el último medio segundo) y se le ven chispas
+  azules encima;
+- **cualquier daño lo despierta** (con `sleepdart_wake 1`), salvo el sangrado de sus propias
+  heridas. Se despierta cuerpo a tierra.
+
+A los **compañeros** no les hace nada (el dardo se rompe), tampoco a quien tiene la protección
+de spawn, al Medic invulnerable (`invuln_medic`) ni durante la cuenta de un torneo. En FFA
+duerme a cualquiera. Los bots también se duermen, pero no usan el dardo. No hay archivos nuevos
+que subir. Funciona con el Medic clásico y con `medic_new`. No es latched: rige al instante.
+Desde el bot: `dardo on|off` (o "admin activa el dardo"). Constantes `SLEEPDART_*` y
+`SLEEP_*` en `src/g_local.h`.
+
+| Cvar | Por defecto | Qué hace |
+|---|---|---|
+| `sleepdart` | `0` | `1` le da el dardo de sueño al Medic. |
+| `sleepdart_time` | `3` | Segundos que duerme el enemigo. |
+| `sleepdart_cooldown` | `15` | Segundos entre dos dardos del mismo Medic. |
+| `sleepdart_wake` | `1` | `1` = cualquier daño lo despierta; `0` = duerme todo el tiempo aunque le peguen. |
+| `sleepdart_anim` | `1` | `1`, `2` o `3`: cuál de las tres animaciones de muerte de pie usa para caerse. |
+
 ## Servidor: TAB de equipos nuevo (`tab_panel`)
 
 Apagado por defecto: con `tab_panel 0` el TAB de equipos es el de siempre. Con `tab_panel 1` usa el
@@ -219,7 +254,7 @@ comando.
 - **Info:** `estado` `ayuda` `bans` `tiempo` `mapas` `infomapa` `marcador`
   `zona` `versiones` `lag` `tiempos`
 - **Juego:** `mapa <x>` `duelo <mapa>` `publico` `normal` `control <mapa>`
-  `ffa <mapa>` `dm <mapa>` `modo normal|control|ffa|dm|duelo [mapa]` `kamikaze on|off` `tab nuevo on|off` `evento <nombre>` `cuenta [minutos]`
+  `ffa <mapa>` `dm <mapa>` `modo normal|control|ffa|dm|duelo [mapa]` `kamikaze on|off` `tab nuevo on|off` `dardo on|off` `evento <nombre>` `cuenta [minutos]`
   `reset` `resetscore` `torneo on|off` `freeze` `proximamapa` `lock` `unlock`
   `say <texto>`
 - `control <mapa>` (o `modo control <mapa>`) deja solo ese mapa y **apaga la
@@ -231,6 +266,9 @@ comando.
 - `kamikaze on|off` prende o apaga el airstrike kamikaze del Officer (`kamikaze_arty`);
   sin argumento dice el estado. También entiende frases ("admin activa el kamikaze").
   Rige desde el próximo airstrike y un reinicio del server lo apaga.
+- `dardo on|off` prende o apaga el dardo de sueño del Medic (`sleepdart`); sin argumento
+  dice el estado. También entiende frases ("admin activa el dardo", "apaga el dardo del
+  medic"). Rige al instante y un reinicio del server lo apaga.
 - La votación de fin de mapa **nunca** lleva al modo control: el mapa votado
   siempre arranca en deathmatch (la DLL pone `control_mode 0`).
 - **Moderación:** `kick <nick>` `kickban <nick>` `ban <ip>` `unban <ip>`
