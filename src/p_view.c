@@ -2583,6 +2583,10 @@ void ClientEndServerFrame (edict_t *ent)
 	ent->s.angles[ROLL] = 0;
 	ent->s.angles[ROLL] = SV_CalcRoll (ent->s.angles, ent->velocity)*4;
 
+	// asleep (sleep dart): his view looks up, but his body lies flat on the ground, as a corpse (player_die)
+	if (ent->client->sleeping && !ent->deadflag)
+		ent->s.angles[PITCH] = ent->s.angles[ROLL] = 0;
+
 	//
 	// calculate speed and cycle to be used for
 	// all cyclic walking effects
