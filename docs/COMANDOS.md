@@ -92,6 +92,7 @@ solo la jeringa). Con `medic_new 1` el Medic de todas las facciones lleva:
 - la **Browning Hi-Power** en lugar de la pistola de su facción;
 - **2 botiquines lanzables** por vida (`use special` y fuego);
 - **jeringas lanzables** (abajo);
+- el **dardo de sueño** (ver "Servidor: dardo de sueño del Medic");
 - **regeneración**: como ya no se cura con aim + fuego mientras tenga jeringas para lanzar,
   después de 3 segundos sin recibir daño recupera 10 de vida por segundo hasta 100
   (`MEDIC_REGEN_*` en `src/g_local.h`). No cura heridas: cada vez que el sangrado le hace daño,
@@ -106,7 +107,7 @@ El Medic con la jeringa en la mano y en modo
 apuntado (aim) la **lanza** al apretar fuego, igual que el cuchillo lanzado (misma velocidad
 y cadencia, `SYRINGE_THROW_DELAY` en `src/g_local.h`). Al **compañero** que toca lo cura
 `syringe_heal` (no cura sangrado ni cojera). Al **enemigo** lo envenena: `syringe_poison` de
-daño repartido en 2 segundos; los venenos de varias jeringas se acumulan, pueden matar y la
+daño repartido en `syringe_poison_time` segundos; los venenos de varias jeringas se acumulan, pueden matar y la
 muerte cuenta como kill del Medic (`was poisoned by`, `syringe` en el log de stats). Contra
 una pared, un objetivo o un cadáver la jeringa se rompe. Lleva `syringe_count` jeringas
 lanzables por vida (el HUD muestra cuántas le quedan), además de la de la mano, que es
@@ -122,12 +123,13 @@ bajan solos con `allow_download 1`. Sin jeringas lanzables, con un bot o con
 
 | Cvar | Por defecto | Qué hace |
 |---|---|---|
-| `medic_new` | `0` | `1` activa el Medic nuevo (Browning, botiquín y jeringas) en el próximo mapa. |
+| `medic_new` | `0` | `1` activa el Medic nuevo (Browning, botiquín, jeringas y dardo de sueño) en el próximo mapa. |
 | `syringe_count` | `9` | Jeringas lanzables por vida (sin contar la de la mano). Se reparten al aparecer. |
-| `syringe_heal` | `33` | Vida que recupera el compañero (tope `HEALTH_MAX`). |
-| `syringe_heal_head` | `45` | Vida que recupera el compañero si la jeringa le pega en la cabeza (tope `HEALTH_MAX`). |
-| `syringe_poison` | `33` | Daño total del veneno de una jeringa, en 2 segundos. |
-| `syringe_poison_head` | `50` | Lo mismo cuando la jeringa le pega en la cabeza. |
+| `syringe_heal` | `50` | Vida que recupera el compañero (tope `HEALTH_MAX`). |
+| `syringe_heal_head` | `100` | Vida que recupera el compañero si la jeringa le pega en la cabeza (tope `HEALTH_MAX`). |
+| `syringe_poison` | `50` | Daño total del veneno de una jeringa, repartido en `syringe_poison_time`. |
+| `syringe_poison_head` | `100` | Lo mismo cuando la jeringa le pega en la cabeza. |
+| `syringe_poison_time` | `4` | Segundos en que se reparte el daño del veneno (el de cada jeringa queda fijo al pegar). |
 
 Lo que se ponga por rcon se pierde al reiniciar el servidor; para dejarlo fijo va en
 `dday/server.cfg`.
@@ -146,6 +148,60 @@ todas las facciones (modelos y sonidos que ya tiene todo el mundo). Funciona con
 | Cvar | Por defecto | Qué hace |
 |---|---|---|
 | `medic_bazooka` | `0` | `1` le da el lanzajeringas al Medic en el próximo mapa. |
+
+## Servidor: dardo de sueño del Medic (con `medic_new`)
+
+Viene con el **Medic nuevo**: con `medic_new 1` (apagado por defecto) el Medic tiene además un
+**dardo que duerme a un enemigo**, como el de Ana de Overwatch. Se dispara con el comando **`dardo`** (o `sleepdart`), que cada jugador
+asigna a una tecla: `bind q dardo`. Solo se tira **con la jeringa en la mano**: hace la
+animación de la jeringa (la de lanzar si está apuntando, la de inyectar si no) y el dardo sale
+hacia donde apunta en ese momento. Con la jeringa en la mano ve la **cruz de Quake** en el
+centro de la pantalla para apuntar (D-Day deja vacías las miras del cliente, `ch1` a `ch3`). Y
+hay **uno cada `sleepdart_cooldown` segundos**: mientras espera, el HUD muestra los segundos que
+faltan junto al ícono "NEXT DART" (como el contador del airstrike del Officer); si lo aprieta
+antes avisa cuántos segundos faltan, y cuando se recarga llega el mensaje `Sleep dart ready.`. Al reaparecer está listo. Es un
+proyectil (la jeringa con brillo azul, más rápida y con menos caída): se puede esquivar.
+
+El **enemigo** que toca se cae de espaldas al piso (cuerpo a tierra, con una animación de
+muerte) y queda dormido `sleepdart_time` segundos. La animación deja el cuerpo lejos de donde
+estaba parado (hasta 100 unidades), así que antes de caer el server prueba hacia dónde entra sin
+atravesar paredes ni a otros jugadores ni quedar colgando de un borde: hacia donde miraba, a los
+costados o hacia atrás (en ángulo recto). Si no entra para ningún lado, duerme boca abajo en el
+lugar. La caja que recibe los disparos va **donde está el cuerpo**; un tiro cerca de la cabeza
+es headshot y el resto cuenta como torso (igual que cuerpo a tierra). Al despertarse queda
+cuerpo a tierra donde estaba el cuerpo. Mientras duerme:
+
+- no se mueve, no salta ni dispara, y la vista le queda fija mirando hacia arriba;
+- no puede cambiar de arma, recargar, tirar cosas, cambiar de postura, pedir airstrike ni
+  suicidarse (`kill`); el chat, los menús y el TAB siguen andando;
+- ve la pantalla azul oscura (se aclara en el último medio segundo);
+- le salen **Z que suben** de la cabeza (un sprite que crece) y **ronca**; el ronquido se
+  oye solo cerca de él y se corta cuando se despierta;
+- **cualquier daño lo despierta** (con `sleepdart_wake 1`), salvo el sangrado de sus propias
+  heridas. Se despierta cuerpo a tierra.
+- si **lo matan dormido, explota en pedazos** (sangre y gibs, como con una granada) desde donde
+  está el cuerpo, para que se note.
+
+A los **compañeros** no les hace nada (el dardo se rompe), tampoco a quien tiene la protección
+de spawn, al Medic invulnerable (`invuln_medic`) ni durante la cuenta de un torneo. En FFA
+duerme a cualquiera. Los bots también se duermen, pero no usan el dardo. Como `medic_new` es
+latched, se prende y se apaga en el **próximo mapa**; los `sleepdart_*` rigen al instante.
+
+**Archivos nuevos** (hay que subirlos al server; los jugadores los bajan solos con
+`allow_download 1`): `sprites/zzz.sp2`, `sprites/zzz_0.pcx`, `sprites/zzz_0.png`,
+`sound/misc/snore.wav`, `pics/i_nextdart.pcx` y `pics/dartcross.pcx`. Están en el repo y los genera `tools/assets/gen_sleep_assets.py`.
+El server los precachea solo con `medic_new 1`, al empezar el mapa.
+Desde el bot: `medic on|off` (`dardo on|off` y "admin activa el dardo" hacen lo mismo).
+Constantes `SLEEPDART_*` y `SLEEP_*` en `src/g_local.h`.
+
+| Cvar | Por defecto | Qué hace |
+|---|---|---|
+| `sleepdart_time` | `5` | Segundos que duerme el enemigo. |
+| `sleepdart_cooldown` | `15` | Segundos entre dos dardos del mismo Medic. |
+| `sleepdart_wake` | `1` | `1` = cualquier daño lo despierta; `0` = duerme todo el tiempo aunque le peguen. |
+| `sleepdart_anim` | `1` | `1`, `2` o `3`: cuál de las tres animaciones de muerte de pie usa para caerse. |
+
+Para probarlo con bots: `bot_noshoot 1` (en `0` por defecto) hace que los bots no disparen.
 
 ## Servidor: TAB de equipos nuevo (`tab_panel`)
 
@@ -219,7 +275,7 @@ comando.
 - **Info:** `estado` `ayuda` `bans` `tiempo` `mapas` `infomapa` `marcador`
   `zona` `versiones` `lag` `tiempos`
 - **Juego:** `mapa <x>` `duelo <mapa>` `publico` `normal` `control <mapa>`
-  `ffa <mapa>` `dm <mapa>` `modo normal|control|ffa|dm|duelo [mapa]` `kamikaze on|off` `tab nuevo on|off` `evento <nombre>` `cuenta [minutos]`
+  `ffa <mapa>` `dm <mapa>` `modo normal|control|ffa|dm|duelo [mapa]` `kamikaze on|off` `tab nuevo on|off` `dardo on|off` `evento <nombre>` `cuenta [minutos]`
   `reset` `resetscore` `torneo on|off` `freeze` `proximamapa` `lock` `unlock`
   `say <texto>`
 - `control <mapa>` (o `modo control <mapa>`) deja solo ese mapa y **apaga la
@@ -231,6 +287,8 @@ comando.
 - `kamikaze on|off` prende o apaga el airstrike kamikaze del Officer (`kamikaze_arty`);
   sin argumento dice el estado. También entiende frases ("admin activa el kamikaze").
   Rige desde el próximo airstrike y un reinicio del server lo apaga.
+- `dardo on|off` es lo mismo que `medic on|off`: el dardo de sueño viene con el Medic nuevo
+  (`medic_new`, próximo mapa). También entiende frases ("admin activa el dardo").
 - La votación de fin de mapa **nunca** lleva al modo control: el mapa votado
   siempre arranca en deathmatch (la DLL pone `control_mode 0`).
 - **Moderación:** `kick <nick>` `kickban <nick>` `ban <ip>` `unban <ip>`

@@ -86,6 +86,8 @@ loginctl enable-linger $USER                       # sobrevive al logout
   "admin deja el medic clásico", detector local, sin LLM; "quiero un médico" solo dice el estado)
   `medic bazooka on|off` (lanzajeringas, cvar `medic_bazooka`; próximo mapa; también "admin activa
   la bazooka de jeringas" / "dale la bazooka al medic")
+  `dardo on|off` (el dardo de sueño viene con el Medic nuevo: es lo mismo que `medic on|off`; también
+  "admin activa el dardo" / "apaga el dardo del medic", detector local, sin LLM)
   `officer bonus on|off` (cvar `officer_bonus`, al instante; también "admin activa el bonus del
   officer" / "apaga el bonus de arty"; sin argumento dice el estado)
   `tab nuevo on|off` (cvar `tab_panel`, al instante: TAB de equipos con el panel del FFA, banderas y

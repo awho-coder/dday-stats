@@ -2190,6 +2190,16 @@ void G_SetStats (edict_t *ent)
 		ent->client->ps.stats[STAT_TIMER_ICON] = gi.imageindex("i_nextarty");
 		ent->client->ps.stats[STAT_TIMER] = (int)airstrikecd + 1;
 	}
+	// the wait of the Medic for his next sleep dart, as the airstrike of the Officer
+	else if (medic_new->value &&
+			 ent->client->resp.mos == MEDIC &&
+			 ent->client->resp.team_on &&
+			 !ent->deadflag &&
+			 ent->client->next_sleepdart_time > level.time)
+	{
+		ent->client->ps.stats[STAT_TIMER_ICON] = gi.imageindex (SLEEPDART_ICON);
+		ent->client->ps.stats[STAT_TIMER] = (int)(ent->client->next_sleepdart_time - level.time) + 1;
+	}
 
 
 
@@ -2288,6 +2298,13 @@ void G_SetStats (edict_t *ent)
 	else
 		ent->client->ps.stats[STAT_CROSSHAIR] = 0;
 	
+	// medic_new: the Medic with the syringe in his hand sees the cross of Quake, to aim the sleep dart (no free stat
+	// for it: an image as big as the scopes, with the cross in the middle)
+	if (medic_new->value && ent->client->resp.mos == MEDIC && ent->client->pers.weapon &&
+		ent->client->pers.weapon->classnameb == WEAPON_MORPHINE && !ent->deadflag && !ent->client->sleeping &&
+		!ent->client->limbo_mode)
+		ent->client->ps.stats[STAT_CROSSHAIR] = gi.imageindex (SLEEPDART_CROSSHAIR);
+
 	if (ent->client->chasetarget && ent->client->chasetarget->client->aim && ent->client->aim)
 		ent->client->ps.stats[STAT_CROSSHAIR] = ent->client->chasetarget->client->ps.stats[STAT_CROSSHAIR];
 

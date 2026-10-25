@@ -201,8 +201,14 @@ cvar_t *medic_bazooka;
 cvar_t *syringe_count;
 cvar_t *syringe_heal;
 cvar_t *syringe_poison;
+cvar_t *syringe_poison_time;
 cvar_t *syringe_poison_head;
 cvar_t *syringe_heal_head;
+cvar_t *sleepdart_time;
+cvar_t *sleepdart_cooldown;
+cvar_t *sleepdart_wake;
+cvar_t *sleepdart_anim;
+cvar_t *bot_noshoot;
 cvar_t *fast_bleeding;
 cvar_t *fast_sniper;
 

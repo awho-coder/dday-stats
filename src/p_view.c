@@ -870,6 +870,17 @@ void SV_CalcBlend (edict_t *ent)
 	if (ent->burnout)
 		SV_AddBlend (0.9, 0.9, 0.6, 0.84, ent->client->ps.blend);
 
+	// asleep (sleep dart): a dark blue screen, which clears in the last SLEEP_FADE_TIME seconds
+	if (ent->client->sleeping && !ent->deadflag)
+	{
+		float	left = ent->client->sleep_until - level.time;
+		float	alpha = 0.85;
+
+		if (left < SLEEP_FADE_TIME)
+			alpha *= (left > 0) ? left / SLEEP_FADE_TIME : 0;
+		SV_AddBlend (0.02, 0.03, 0.12, alpha, ent->client->ps.blend);
+	}
+
 
 	if (level.fog)
 		SV_AddBlend (1.0, 1.0, 1.0, level.fog, ent->client->ps.blend);
@@ -1852,6 +1863,14 @@ void G_SetClientFrame (edict_t *ent)
 
 	client = ent->client;
 
+	// asleep (sleep dart): the fall on his back, then its last frame until he wakes up
+	if (client->sleeping && !ent->deadflag)
+	{
+		if (ent->s.frame < client->anim_end)
+			ent->s.frame++;
+		return;
+	}
+
 
 
 	if (ent->client->turret &&
@@ -2563,6 +2582,10 @@ void ClientEndServerFrame (edict_t *ent)
 	ent->s.angles[YAW] = ent->client->v_angle[YAW];
 	ent->s.angles[ROLL] = 0;
 	ent->s.angles[ROLL] = SV_CalcRoll (ent->s.angles, ent->velocity)*4;
+
+	// asleep (sleep dart): his view looks up, but his body lies flat on the ground, as a corpse (player_die)
+	if (ent->client->sleeping && !ent->deadflag)
+		ent->s.angles[PITCH] = ent->s.angles[ROLL] = 0;
 
 	//
 	// calculate speed and cycle to be used for

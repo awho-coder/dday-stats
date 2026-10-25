@@ -1251,6 +1251,7 @@ player_die
 void player_die (edict_t *self, edict_t *inflictor, edict_t *attacker, int damage, vec3_t point)
 {
 	int		i, n;
+	qboolean	asleep;
 	vec3_t	forward, right;
 	vec3_t	s_up={0.0,0.0,1.0}, s_forward={0.0,1.0,1.0}, s_behind={0.0,-1.0,1.0}, s_right={1.0,0.0,1.0}, s_left={-1.0,0.0,1.0};
 
@@ -1336,8 +1337,17 @@ void player_die (edict_t *self, edict_t *inflictor, edict_t *attacker, int damag
 
 	// clear inventory
 	memset(self->client->pers.inventory, 0, sizeof(self->client->pers.inventory));
-	
-	if ((meansOfDeath == MOD_HELD_GRENADE) 
+
+	// killed asleep (sleep dart): he blows up in pieces, from where his body lies
+	asleep = self->client->sleeping;
+	if (asleep)
+	{
+		Sleep_MoveToBody (self);
+		Sleep_End (self, false);
+	}
+
+	if (asleep
+		|| (meansOfDeath == MOD_HELD_GRENADE) 
 		|| (meansOfDeath == MOD_GRENADE) 
 		|| (meansOfDeath == MOD_ROCKET) 
 		|| (meansOfDeath == MOD_R_SPLASH)
@@ -3841,6 +3851,11 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 
 	//DDAY
 
+	SleepDart_ClientThink (ent, ucmd);	// a sleeper does not move or shoot
+
+	if (ent->ai && bot_noshoot->value)
+		ucmd->buttons &= ~BUTTON_ATTACK;	// bot_noshoot: bots that do not shoot, to test things with them
+
 	if (ent->client->resp.scopewobble < 40)
 	{
 		++ent->client->resp.scopewobble;
@@ -4256,6 +4271,13 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 	VectorCopy (pm.mins, ent->mins);
 	VectorCopy (pm.maxs, ent->maxs);
 
+	if (client->sleeping)
+	{
+		// asleep (sleep dart): his box is around his body, which the death animation leaves away from his origin
+		VectorCopy (client->sleep_mins, ent->mins);
+		VectorCopy (client->sleep_maxs, ent->maxs);
+	}
+
 	client->resp.cmd_angles[0] = SHORT2ANGLE(ucmd->angles[0]);
 	client->resp.cmd_angles[1] = SHORT2ANGLE(ucmd->angles[1]);
 	client->resp.cmd_angles[2] = SHORT2ANGLE(ucmd->angles[2]);
@@ -4329,6 +4351,13 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 
 		VectorCopy (pm.viewangles, client->v_angle);		
 		VectorCopy (pm.viewangles, client->ps.viewangles);
+
+		if (client->sleeping)
+		{
+			// asleep: he lies on his back looking up, whatever the mouse does
+			VectorCopy (client->sleep_angles, client->v_angle);
+			VectorCopy (client->sleep_angles, client->ps.viewangles);
+		}
 /* faf
 		//Wheaty: Limit the PITCH angle when in prone mode
 		if (ent->stanceflags == STANCE_CRAWL) //prone
@@ -4361,7 +4390,8 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 
 	gi.linkentity (ent);
 
-	if (ent->movetype != MOVETYPE_NOCLIP)
+	if (ent->movetype != MOVETYPE_NOCLIP &&
+		!client->sleeping)	// his long box (sleep dart) must not reach triggers that he is not in
 		G_TouchTriggers (ent);
 
 	// touch other objects

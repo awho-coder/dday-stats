@@ -415,10 +415,16 @@ void InitGame (void)
 	medic_new       = gi.cvar("medic_new", "0", CVAR_LATCH); // 1 = Medic nuevo (Browning, botiquin, jeringas); se aplica en el proximo mapa
 	medic_bazooka   = gi.cvar("medic_bazooka", "0", CVAR_LATCH); // 1 = lanzajeringas en lugar de la pistola del Medic; se aplica en el proximo mapa
 	syringe_count   = gi.cvar("syringe_count", "9", 0);      // jeringas lanzables por vida
-	syringe_heal    = gi.cvar("syringe_heal", "33", 0);      // vida que recupera el companero
-	syringe_heal_head = gi.cvar("syringe_heal_head", "45", 0); // vida que recupera el companero si le pega en la cabeza
-	syringe_poison  = gi.cvar("syringe_poison", "33", 0);    // dano del veneno por jeringa
-	syringe_poison_head = gi.cvar("syringe_poison_head", "50", 0); // dano del veneno de una jeringa en la cabeza
+	syringe_heal    = gi.cvar("syringe_heal", "50", 0);      // vida que recupera el companero
+	syringe_heal_head = gi.cvar("syringe_heal_head", "100", 0); // vida que recupera el companero si le pega en la cabeza
+	syringe_poison  = gi.cvar("syringe_poison", "50", 0);    // dano del veneno por jeringa
+	syringe_poison_time = gi.cvar("syringe_poison_time", "4", 0); // segundos en que se reparte el veneno
+	syringe_poison_head = gi.cvar("syringe_poison_head", "100", 0); // dano del veneno de una jeringa en la cabeza
+	sleepdart_time  = gi.cvar("sleepdart_time", "5", 0);     // segundos que duerme el enemigo
+	sleepdart_cooldown = gi.cvar("sleepdart_cooldown", "15", 0); // segundos entre dos dardos
+	sleepdart_wake  = gi.cvar("sleepdart_wake", "1", 0);     // 1 = el dano lo despierta
+	sleepdart_anim  = gi.cvar("sleepdart_anim", "1", 0);     // 1, 2 o 3: animacion de muerte con la que queda en el piso
+	bot_noshoot     = gi.cvar("bot_noshoot", "0", 0);        // 1 = los bots no disparan (pruebas)
 	fast_bleeding = gi.cvar("fast_bleeding", "0", 0);
 	fast_sniper = gi.cvar("fast_sniper", "1", 0);
 

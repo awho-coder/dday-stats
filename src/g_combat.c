@@ -483,6 +483,19 @@ int Damage_Loc(edict_t *targ, vec3_t point, edict_t *attacker)
 		targ->s.frame <= 294 )
 		return STOMACH_WOUND;
 
+	// asleep (sleep dart): he lies along the yaw of his view; near his head it is a head wound, as prone the rest
+	if (targ->client && targ->client->sleeping)
+	{
+		vec3_t	yaw, forward, head;
+
+		VectorSet (yaw, 0, targ->client->sleep_angles[YAW], 0);
+		AngleVectors (yaw, forward, NULL, NULL);
+		VectorMA (targ->s.origin, targ->client->sleep_head, forward, head);
+		VectorSubtract (point, head, head);
+		head[2] = 0;
+		return (VectorLength (head) < SLEEP_HEAD_RADIUS) ? HEAD_WOUND : STOMACH_WOUND;
+	}
+
 	
 	
 	switch (targ->stanceflags)
@@ -1416,6 +1429,11 @@ void T_Damage (edict_t *targ, edict_t *inflictor, edict_t *attacker, vec3_t dir,
 
 		if (client && take > 0)
 			client->last_damage_time = level.time;	// the regeneration of the Medic waits for MEDIC_REGEN_DELAY
+
+		// the damage wakes up a sleeper (sleep dart), but not the bleeding of his own wounds
+		if (client && take > 0 && client->sleeping && sleepdart_wake->value && mod != MOD_WOUND &&
+			targ->health > 0)
+			Sleep_End (targ, true);
 		
 		if (targ->health <= 0)
 		{
