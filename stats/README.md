@@ -127,6 +127,12 @@ python3 stats/ingest.py --events /srv/q2/dday/stats/events --loop 60
 - Los archivos con errores de formato se mueven a `events/failed/`.
 - Si la base no responde, los archivos quedan donde están y se reintentan.
 - Reprocesar un archivo no duplica nada (el id de partida es único).
+- En cada vuelta (también sin archivos nuevos) aplica los **cambios de torneo
+  pedidos desde la app** (agregar o sacar partidas de un torneo, tabla
+  `match_event_changes`): cambia `matches.event` y, si algo cambió, recalcula los
+  resúmenes y el Elo una sola vez. Con el servicio en `--loop 60` el cambio
+  se ve en la app en un minuto como máximo. A mano:
+  `python3 stats/ingest.py --apply-event-changes`.
 - Un `.part` sin cambios por más de 6 h (`--stale-hours`) es una partida de
   un servidor caído: se carga como `aborted`, sin rating, y se reconstruyen
   las kills y muertes de cada jugador a partir de los eventos `kill`.
