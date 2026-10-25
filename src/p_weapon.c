@@ -2677,14 +2677,17 @@ static void Sleep_Start (edict_t *victim)
 	case 2:
 		victim->s.frame = FRAME_death201 - 1;
 		client->anim_end = FRAME_death206;
+		client->sleep_head = SLEEP_HEAD_DEATH2;
 		break;
 	case 3:
 		victim->s.frame = FRAME_death301 - 1;
 		client->anim_end = FRAME_death308;
+		client->sleep_head = SLEEP_HEAD_DEATH3;
 		break;
 	default:
 		victim->s.frame = FRAME_death101 - 1;
 		client->anim_end = FRAME_death106;
+		client->sleep_head = SLEEP_HEAD_DEATH1;
 		break;
 	}
 }
@@ -2850,6 +2853,7 @@ static void sleep_z_think (edict_t *self)
 static void Sleep_SpawnZ (edict_t *ent)
 {
 	edict_t	*z;
+	vec3_t	forward, yaw;
 
 	if (!Healthpack_EdictsLeft ())
 		return;
@@ -2862,11 +2866,13 @@ static void Sleep_SpawnZ (edict_t *ent)
 	z->s.renderfx |= RF_FULLBRIGHT;
 	z->s.frame = 0;
 
-	// just over his body (prone, it is between 24 and 15 units under his origin), and a little to a side
-	VectorCopy (ent->s.origin, z->s.origin);
-	z->s.origin[0] += crandom () * 4;
-	z->s.origin[1] += crandom () * 4;
-	z->s.origin[2] -= 6;
+	// from his head: the death animation leaves it far from his origin (sleep_head, along the yaw of his body)
+	VectorSet (yaw, 0, ent->s.angles[YAW], 0);
+	AngleVectors (yaw, forward, NULL, NULL);
+	VectorMA (ent->s.origin, ent->client->sleep_head, forward, z->s.origin);
+	z->s.origin[0] += crandom () * 3;
+	z->s.origin[1] += crandom () * 3;
+	z->s.origin[2] += SLEEP_HEAD_Z + 8;	// just over his face
 	VectorSet (z->velocity, crandom () * 6, crandom () * 6, SLEEP_Z_RISE);
 
 	z->think = sleep_z_think;

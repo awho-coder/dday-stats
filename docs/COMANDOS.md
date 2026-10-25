@@ -163,7 +163,7 @@ muerte) y queda dormido `sleepdart_time` segundos:
 - no puede cambiar de arma, recargar, tirar cosas, cambiar de postura, pedir airstrike ni
   suicidarse (`kill`); el chat, los menús y el TAB siguen andando;
 - ve la pantalla azul oscura (se aclara en el último medio segundo);
-- le salen **Z que suben** sobre el cuerpo (un sprite que crece) y **ronca**; el ronquido se
+- le salen **Z que suben** de la cabeza (un sprite que crece) y **ronca**; el ronquido se
   oye solo cerca de él y se corta cuando se despierta;
 - **cualquier daño lo despierta** (con `sleepdart_wake 1`), salvo el sangrado de sus propias
   heridas. Se despierta cuerpo a tierra.
@@ -184,7 +184,7 @@ Desde el bot: `dardo on|off` (o "admin activa el dardo"). Constantes `SLEEPDART_
 | Cvar | Por defecto | Qué hace |
 |---|---|---|
 | `sleepdart` | `0` | `1` le da el dardo de sueño al Medic. |
-| `sleepdart_time` | `3` | Segundos que duerme el enemigo. |
+| `sleepdart_time` | `5` | Segundos que duerme el enemigo. |
 | `sleepdart_cooldown` | `15` | Segundos entre dos dardos del mismo Medic. |
 | `sleepdart_wake` | `1` | `1` = cualquier daño lo despierta; `0` = duerme todo el tiempo aunque le peguen. |
 | `sleepdart_anim` | `1` | `1`, `2` o `3`: cuál de las tres animaciones de muerte de pie usa para caerse. |

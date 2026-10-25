@@ -420,7 +420,7 @@ void InitGame (void)
 	syringe_poison  = gi.cvar("syringe_poison", "33", 0);    // dano del veneno por jeringa
 	syringe_poison_head = gi.cvar("syringe_poison_head", "50", 0); // dano del veneno de una jeringa en la cabeza
 	sleepdart       = gi.cvar("sleepdart", "0", 0);          // 1 = el Medic tiene el dardo de sueno (comando dardo)
-	sleepdart_time  = gi.cvar("sleepdart_time", "3", 0);     // segundos que duerme el enemigo
+	sleepdart_time  = gi.cvar("sleepdart_time", "5", 0);     // segundos que duerme el enemigo
 	sleepdart_cooldown = gi.cvar("sleepdart_cooldown", "15", 0); // segundos entre dos dardos
 	sleepdart_wake  = gi.cvar("sleepdart_wake", "1", 0);     // 1 = el dano lo despierta
 	sleepdart_anim  = gi.cvar("sleepdart_anim", "1", 0);     // 1, 2 o 3: animacion de muerte con la que queda en el piso
