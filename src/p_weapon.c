@@ -2664,6 +2664,8 @@ static void Sleep_Start (edict_t *victim)
 
 	client->sleeping = true;
 	client->sleep_until = level.time + sleepdart_time->value;
+	client->sleep_next_z = level.time + 0.2;
+	client->sleep_next_snore = level.time + SLEEP_SNORE_DELAY;
 	VectorSet (client->sleep_angles, SLEEP_VIEW_PITCH, client->v_angle[YAW], 0);
 	client->ps.gunindex = 0;
 	client->ps.pmove.pm_flags |= PMF_NO_PREDICTION;	// the server holds his view
@@ -2715,6 +2717,9 @@ void Sleep_End (edict_t *ent, qboolean woke)
 		client->ps.gunindex = gi.modelindex (client->pers.weapon->view_model);
 
 	client->anim_priority = ANIM_BASIC;	// G_SetClientFrame goes on with the prone animation
+
+	// cuts his snore short (a sound on the same channel replaces it)
+	gi.sound (ent, CHAN_VOICE, gi.soundindex ("misc/null.wav"), 1, ATTN_IDLE, 0);
 
 	safe_cprintf (ent, PRINT_HIGH, "You woke up.\n");
 }
@@ -2831,11 +2836,48 @@ qboolean Sleep_BlocksCommand (edict_t *ent, char *cmd)
 	return false;
 }
 
+// a "Z" over a sleeper goes up and grows (the 3 frames of SLEEP_Z_MODEL), then goes away
+static void sleep_z_think (edict_t *self)
+{
+	if (++self->s.frame >= 3)
+	{
+		G_FreeEdict (self);
+		return;
+	}
+	self->nextthink = level.time + SLEEP_Z_FRAME_TIME;
+}
+
+static void Sleep_SpawnZ (edict_t *ent)
+{
+	edict_t	*z;
+
+	if (!Healthpack_EdictsLeft ())
+		return;
+
+	z = G_Spawn ();
+	z->classname = "sleep_z";
+	z->movetype = MOVETYPE_NOCLIP;
+	z->solid = SOLID_NOT;
+	z->s.modelindex = gi.modelindex (SLEEP_Z_MODEL);
+	z->s.renderfx |= RF_FULLBRIGHT;
+	z->s.frame = 0;
+
+	// just over his body (prone, it is between 24 and 15 units under his origin), and a little to a side
+	VectorCopy (ent->s.origin, z->s.origin);
+	z->s.origin[0] += crandom () * 4;
+	z->s.origin[1] += crandom () * 4;
+	z->s.origin[2] -= 6;
+	VectorSet (z->velocity, crandom () * 6, crandom () * 6, SLEEP_Z_RISE);
+
+	z->think = sleep_z_think;
+	z->nextthink = level.time + SLEEP_Z_FRAME_TIME;
+	gi.linkentity (z);
+}
+
 // every frame, from ClientThink: tells the Medic when his next dart is ready, and holds the sleeper still
 void SleepDart_ClientThink (edict_t *ent, usercmd_t *ucmd)
 {
 	gclient_t	*client = ent->client;
-	vec3_t		pos, up = {0, 0, 1};
 
 	if (client->sleepdart_waiting && level.time >= client->next_sleepdart_time)
 	{
@@ -2865,12 +2907,16 @@ void SleepDart_ClientThink (edict_t *ent, usercmd_t *ucmd)
 	client->ps.gunindex = 0;
 	client->ps.pmove.pm_flags |= PMF_NO_PREDICTION;
 
-	// blue sparks over him every half second, so everybody sees that he sleeps
-	if (level.framenum % 5 == 0)
+	// Zs that rise over him, so everybody sees that he sleeps, and his snore (heard only near him)
+	if (level.time >= client->sleep_next_z)
 	{
-		VectorCopy (ent->s.origin, pos);
-		pos[2] += 4;
-		Syringe_Sparks (pos, up, 8, SLEEPDART_COLOR);
+		Sleep_SpawnZ (ent);
+		client->sleep_next_z = level.time + SLEEP_Z_INTERVAL;
+	}
+	if (level.time >= client->sleep_next_snore)
+	{
+		gi.sound (ent, CHAN_VOICE, gi.soundindex (SLEEP_SNORE_SOUND), 1, ATTN_IDLE, 0);
+		client->sleep_next_snore = level.time + SLEEP_SNORE_INTERVAL;
 	}
 }
 

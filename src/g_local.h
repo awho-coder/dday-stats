@@ -1744,6 +1744,8 @@ struct gclient_s
 	qboolean    sleeping;				// put to sleep by a sleep dart (see Sleep_Start)
 	float       sleep_until;			// level.time when he wakes up
 	vec3_t      sleep_angles;			// the view while he sleeps, on his back looking up
+	float       sleep_next_z;			// level.time of the next "Z" over the sleeper
+	float       sleep_next_snore;		// level.time of his next snore
 
 	qboolean    tank_hit;//faf
 
@@ -2127,6 +2129,13 @@ extern int jpn_index;
 #define SLEEPDART_COLOR			0x74	// palette color of its sparks (blue, as the railgun trail)
 #define SLEEP_VIEW_PITCH		-60		// the sleeper looks up, as he lies on his back
 #define SLEEP_FADE_TIME			0.5		// seconds before waking when the dark screen starts to clear
+#define SLEEP_Z_MODEL			"sprites/zzz.sp2"	// the "Z" that rises over a sleeper: 3 frames, small to big
+#define SLEEP_Z_INTERVAL		0.7		// seconds between two Zs
+#define SLEEP_Z_FRAME_TIME		0.4		// seconds of every frame of a Z (it lives 3 frames)
+#define SLEEP_Z_RISE			18		// units a second that a Z goes up
+#define SLEEP_SNORE_SOUND		"misc/snore.wav"	// 2.5 seconds
+#define SLEEP_SNORE_DELAY		0.4		// seconds after he falls asleep before the first snore
+#define SLEEP_SNORE_INTERVAL	2.7		// seconds between two snores
 
 
 

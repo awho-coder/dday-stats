@@ -1969,6 +1969,11 @@ void SP_worldspawn (edict_t *ent)
 	// pbowens: precache these here b/c players use them
 	PrecacheItem ( FindItem("Morphine")		);
 	PrecacheItem ( FindItem("Syringe Launcher") );	// medic_bazooka: models of the bazooka of USA, for every faction
+	if (sleepdart->value)	// the files of the sleep dart: the players download them when the map starts
+	{
+		gi.modelindex (SLEEP_Z_MODEL);
+		gi.soundindex (SLEEP_SNORE_SOUND);
+	}
 	PrecacheItem ( FindItem("Healthpack")	);
 	PrecacheItem ( FindItem("Helmet")		);
 	PrecacheItem ( FindItem("Fists")		);
