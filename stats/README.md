@@ -78,6 +78,10 @@ Si se olvidó ponerla, se corrige después:
 python3 stats/ingest.py --set-event <id_partida> "copa-verano"   # '' para volver a casual
 ```
 
+La ficha del torneo (fases, inscritos, correcciones) se edita en el panel de
+administrador de la app, y desde ahí también se agregan o sacan partidas sin
+usar la consola (ver [Torneos](#torneos)).
+
 Y para el público:
 
 ```
@@ -127,6 +131,12 @@ python3 stats/ingest.py --events /srv/q2/dday/stats/events --loop 60
 - Los archivos con errores de formato se mueven a `events/failed/`.
 - Si la base no responde, los archivos quedan donde están y se reintentan.
 - Reprocesar un archivo no duplica nada (el id de partida es único).
+- En cada vuelta (también sin archivos nuevos) aplica los **cambios de torneo
+  pedidos desde la app** (agregar o sacar partidas de un torneo, tabla
+  `match_event_changes`): cambia `matches.event` y, si algo cambió, recalcula los
+  resúmenes y el Elo una sola vez. Con el servicio en `--loop 60` el cambio
+  se ve en la app en un minuto como máximo. A mano:
+  `python3 stats/ingest.py --apply-event-changes`.
 - Un `.part` sin cambios por más de 6 h (`--stale-hours`) es una partida de
   un servidor caído: se carga como `aborted`, sin rating, y se reconstruyen
   las kills y muertes de cada jugador a partir de los eventos `kill`.
@@ -349,6 +359,81 @@ SELECT * FROM ladder_clans();                         -- temporada actual, todas
 SELECT * FROM ladder_clans('public', 'all');          -- solo público, histórico
 SELECT * FROM clan_duels('all', 'all');               -- duelos de clanes (mínimo 2 por lado)
 SELECT * FROM clan_preview(NULL, ARRAY['=SL=', 'SL+']);  -- quién quedaría con estos tags
+```
+
+## Torneos
+
+Un torneo es un valor de `stats_event` (`matches.event`); la DLL no cambia. La
+**ficha** es opcional y se edita en el panel de administrador de la app
+(Ladder Test → Torneos), igual que los clanes: datos básicos, **fases**,
+**participantes** (clanes inscritos, con grupo), el clan de cada lado, la
+fase y la ronda de cada partida, y agregar o sacar partidas. Sin ficha, un
+`stats_event` igual aparece como torneo (nombre = clave); una ficha sin partidas
+aparece como torneo próximo.
+
+| Objeto | Qué es |
+|---|---|
+| `tournaments` | La ficha: clave (`event`, única), nombre, estado, fechas, formato, descripción, bases, logo, campeón y subcampeón, `visible`. |
+| `tournament_phases` | De 1 a 10 fases por torneo, en orden, cada una con su modalidad (`scoring`) y sus puntos. |
+| `tournament_teams` | Clanes inscritos y su grupo (solo se usan en la primera fase). |
+| `tournament_match_sides` | Datos manuales de una partida: clan de cada lado, «no cuenta», fase y ronda. |
+| `match_event_changes` | Pedidos de agregar o sacar una partida de un torneo; los aplica el ingestor. |
+| `v_tournaments` | Fichas más las claves usadas en partidas sin ficha (`registered = false`). |
+| `tournament_sides(event)` | Clan, fase y ronda de cada partida, y `counted`. |
+| `tournament_series(event)` | Cruces. |
+| `tournament_standings(event)` | Tabla de posiciones por fase y grupo. |
+| `tournament_save` / `tournament_delete` / `tournament_side_save` / `tournament_side_clear` / `tournament_assign_save` / `tournament_event_request` | Únicas vías de escritura (`SECURITY DEFINER`, las ejecuta `dday_clans`). |
+| `apply_event_changes()` | Aplica los pedidos pendientes. Solo la ejecuta el dueño (el ingestor). |
+
+**Fases y modalidades.** Un torneo tiene una o más fases, todas con el mismo
+`stats_event`: en el servidor no se cambia nada entre fases. Cada fase elige su
+modalidad: **liga** (`league`: tabla de posiciones con puntos y cruces),
+**eliminación** (`knockout`: cruces por ronda, sin tabla) o **solo resultados**
+(`results`: solo los cruces con su marcador). Una partida cae en la última fase
+que ya empezó según su fecha (la primera fase empieza siempre desde el inicio),
+o en la que el administrador le fije a mano. Un torneo sin ficha no tiene fases:
+sus cruces salen con `phase_id` NULL.
+
+**Clan de cada lado.** Por partida y por lado (equipo 0 y 1) es el clan que
+tiene **al menos la mitad de los humanos** de ese lado, sin empate, entre los
+clanes inscritos (o entre los clanes activos si no hay inscritos; el clan No
+Inscritos nunca). Un mercenario no anula el lado si su clan tiene mayoría; si
+ningún clan llega a la mitad, el lado queda **sin asignar**. El administrador
+puede fijar los clanes a mano o marcar la partida como «no cuenta».
+
+**La partida «cuenta»** (`tournament_sides.counted`, la única definición; la usan
+`tournament_series`, `tournament_standings`, el backend y el mantenedor) solo si
+los dos lados tienen clan, son clanes distintos, `winner` es -1, 0 o 1, el
+final no fue `aborted` y no está marcada «no cuenta».
+
+**Cruces.** Todas las partidas que cuentan entre los mismos dos clanes, en la
+misma fase y la misma ronda (la ronda es una etiqueta libre por partida, p. ej.
+«Semifinal»; sin ronda, todas las partidas entre dos clanes son un cruce). El
+marcador son los mapas ganados por cada clan; gana quien tiene más mapas, si
+empatan quien tiene más frags (`by_frags`) y si siguen empatados el cruce es un
+empate (`winner_id` NULL).
+
+**Tabla de posiciones.** Por fase y por grupo. Con `points_per = 'match'` cada
+mapa es una partida jugada; con `'series'`, cada cruce. PTS = G × `points_win` +
+E × `points_draw` + P × `points_loss`; F+ y F− son los kills del clan y del
+rival; se ordena por PTS, diferencia, F+ y tag. Los inscritos sin partidas y los
+grupos solo aparecen en la primera fase.
+
+**Agregar o sacar partidas.** El panel pide el cambio (`tournament_event_request`,
+tabla `match_event_changes`) y el **ingestor lo aplica** en su siguiente vuelta
+(`apply_event_changes`), con el recálculo de resúmenes y Elo de siempre. Una
+partida sacada pierde sus datos manuales (clanes, fase y ronda). Distinto de
+«no cuenta»: esa sigue en el torneo (estadísticas) pero no suma a cruces ni tabla.
+
+**Permisos.** `dday_ro` lee las tablas y la vista; `dday_clans` solo ejecuta las
+funciones de escritura de la tabla de arriba. `tournament_side_prune` y
+`apply_event_changes` no se dan a ningún rol.
+
+```sql
+SELECT * FROM v_tournaments;
+SELECT * FROM tournament_sides('copa-verano');
+SELECT * FROM tournament_series('copa-verano');
+SELECT * FROM tournament_standings('copa-verano');
 ```
 
 ## Rendimiento

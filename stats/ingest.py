@@ -578,6 +578,27 @@ def set_event(conn, match_id, event):
     log.info("partida %s marcada como %s", match_id, f"torneo '{event}'" if event else "casual")
 
 
+def apply_event_changes(conn, cfg):
+    """Aplica los cambios de torneo que el panel admin dejo pedidos (tabla
+    match_event_changes): agregar o sacar partidas de un torneo. Si alguna
+    partida cambio, recalcula resumenes y Elo (una sola vez por tanda).
+    Devuelve cuantas partidas cambiaron de torneo."""
+    pending = conn.execute(
+        "SELECT EXISTS (SELECT 1 FROM match_event_changes WHERE applied_at IS NULL)").fetchone()[0]
+    if not pending:
+        return 0
+    # todo en una transaccion: si el recalculo falla, los pedidos siguen pendientes
+    # y se reintentan en la proxima vuelta (nunca quedan aplicados a medias)
+    with conn.transaction():
+        changed = conn.execute("SELECT apply_event_changes()").fetchone()[0]
+        if changed:
+            conn.execute("SELECT rebuild_rollups()")
+            rebuild_ratings(conn, cfg)
+    if changed:
+        log.info("cambios de torneo aplicados: %d partidas; resumenes y Elo recalculados", changed)
+    return changed
+
+
 def pending_files(events_dir, stale_hours):
     files = sorted(events_dir.glob("*.jsonl"))
     if stale_hours > 0:
@@ -652,6 +673,8 @@ def main():
                     help="inicio de la temporada nueva, ej. '2026-11-01 00:00-03'")
     ap.add_argument("--set-event", nargs=2, metavar=("PARTIDA", "TORNEO"),
                     help="marcar una partida como de un torneo ('' para casual) y recalcular")
+    ap.add_argument("--apply-event-changes", action="store_true",
+                    help="aplicar ahora los cambios de torneo pedidos desde la app y recalcular")
     ap.add_argument("--log-file", metavar="ARCHIVO",
                     help="escribir el registro en un archivo (util en servicios sin consola)")
     ap.add_argument("-v", "--verbose", action="store_true")
@@ -670,7 +693,7 @@ def main():
                  ffa_min_humans=args.ffa_min_humans, skip_bot_only=args.skip_bot_only)
 
     maintenance = (args.init_schema or args.rebuild_ratings or args.rebuild_stats
-                   or args.new_season or args.set_event)
+                   or args.new_season or args.set_event or args.apply_event_changes)
     if args.events is None and not maintenance:
         ap.error("falta --events o DDAY_STATS_EVENTS")
     if args.events is not None and not args.events.is_dir():
@@ -692,6 +715,9 @@ def main():
             if args.set_event:
                 set_event(conn, *args.set_event)
                 args.rebuild_stats = rebuild_elo = True
+            if args.apply_event_changes:
+                # si hubo cambios ya recalcula resumenes y Elo por su cuenta
+                apply_event_changes(conn, cfg)
             if args.rebuild_stats:
                 conn.execute("SELECT rebuild_rollups()")
                 log.info("tablas de resumen recalculadas")
@@ -704,11 +730,13 @@ def main():
     while True:
         files = pending_files(args.events, args.stale_hours)
         try:
-            # solo se conecta si hay algo que cargar; conexion nueva en cada
-            # vuelta para sobrevivir a reinicios de PostgreSQL
-            if files:
-                with psycopg.connect(args.dsn, autocommit=True) as conn:
+            # conexion nueva en cada vuelta (sobrevive a reinicios de PostgreSQL):
+            # primero carga los archivos nuevos, si hay, y despues aplica los
+            # cambios de torneo pedidos desde la app
+            with psycopg.connect(args.dsn, autocommit=True) as conn:
+                if files:
                     run_once(conn, args, cfg, files)
+                apply_event_changes(conn, cfg)
         except psycopg.Error as e:
             # el archivo queda donde estaba y se reintenta en la proxima vuelta
             log.error("error de base de datos: %s", e)

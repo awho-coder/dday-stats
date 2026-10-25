@@ -64,10 +64,46 @@ app.
 **Rollback:** restaurar el `.dump` del paso 1
 (`pg_restore -U dday -d dday --clean <archivo>`).
 
+## Torneos (fichas, fases y cruces)
+
+El esquema nuevo **solo agrega objetos** (5 tablas, la vista `v_tournaments` y
+las funciones `tournament_*` y `apply_event_changes`). El rol `dday_clans` ya
+existe, así que los `GRANT EXECUTE` se aplican solos con `schema.sql`.
+
+1. **Respaldo de la base**:
+
+   ```sh
+   ssh plexpi-opencode 'docker exec dday-stats-pg pg_dump -U dday -Fc dday > /home/pi/dday-backups/dday-pre-torneos-$(date +%Y%m%d%H%M%S).dump'
+   ```
+
+2. **Aplicar `schema.sql`** (idempotente), como en Clanes:
+
+   ```sh
+   docker exec -i dday-stats-pg psql -U dday -d dday -v ON_ERROR_STOP=1 -q < schema.sql
+   ```
+
+   Comprobar: `\dt tournament*` y `\df+ tournament_save` (con `dday_clans` entre
+   los privilegios de ejecución) y que `apply_event_changes` **no** los tenga.
+
+3. **Actualizar el ingestor**: copiar `stats/ingest.py` a la Pi y reiniciar el
+   servicio (`systemctl --user restart dday-stats.service`). Desde esta versión
+   el servicio se conecta a la base en cada vuelta (no solo cuando hay archivos
+   nuevos) para aplicar los cambios de torneo pedidos desde la app. Si se
+   actualiza el esquema pero no el ingestor, los pedidos de agregar o sacar
+   partidas quedan pendientes hasta que se actualice.
+
+4. Registrar en el panel los clanes que jueguen el torneo (si no existen, sus
+   partidas salen «Sin asignar»). El backend usa el mismo `DDAY_PG_CLANS_DSN`;
+   eso se publica desde el repositorio de la app.
+
+**Rollback:** restaurar el `.dump` del paso 1.
+
 ## Si se reinicia la base
 
-Si algún procedimiento vacía las tablas con `TRUNCATE`, **debe excluir `clans` y
-`clan_tags`**: son datos que se editan a mano y no salen de las partidas.
+Si algún procedimiento vacía las tablas con `TRUNCATE`, **debe excluir `clans`,
+`clan_tags`, `tournaments`, `tournament_phases` y `tournament_teams`**: son datos
+que se editan a mano y no salen de las partidas. (`tournament_match_sides` y
+`match_event_changes` dependen de `matches`: se vacían con ella, y está bien.)
 
 > **Borra todas las estadísticas. Solo con permiso de Aldo y después de un
 > respaldo. Para empezar de nuevo sin borrar, crear una temporada nueva.**
@@ -75,4 +111,4 @@ Si algún procedimiento vacía las tablas con `TRUNCATE`, **debe excluir `clans`
 
 En este repositorio no hay un procedimiento de ese tipo: el único `TRUNCATE` es
 el de `rebuild_rollups()`, que solo vacía las tablas de resumen y no toca
-`clans` ni `clan_tags`.
+`clans`, `clan_tags` ni las tablas de torneos.
