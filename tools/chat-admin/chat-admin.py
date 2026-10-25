@@ -303,20 +303,8 @@ def run_cmd(text, by):
         estado = "?" if not m else ("ON" if m.group(1) != "0" else "OFF")
         return "[ADMIN] TAB nuevo: %s (uso: tab nuevo on|off)" % estado, True
     if verb in ("dardo", "sleepdart"):
-        # cvar de la DLL (no latched): el dardo de sueno del Medic (comando 'dardo' del jugador) rige al instante;
-        # un reinicio del server lo deja como diga server.cfg
-        a = norm(arg)
-        if a in ("on", "1", "si", "activar", "activa", "prender", "prende", "encender", "enciende", "poner", "pon"):
-            rcon("set sleepdart 1")
-            cd = re.search(r'is\s+"([\d.]+)"', rcon("sleepdart_cooldown"))
-            return ("[ADMIN] DARDO DE SUENO activado: el Medic duerme a un enemigo con 'bind <tecla> dardo' "
-                    "(uno cada %s s)" % (cd.group(1) if cd else "15")), True
-        if a in ("off", "0", "no", "desactivar", "desactiva", "apagar", "apaga", "quitar", "quita", "sacar", "saca"):
-            rcon("set sleepdart 0")
-            return "[ADMIN] dardo de sueno DESACTIVADO", True
-        m = re.search(r'is\s+"(\d+)"', rcon("sleepdart"))
-        estado = "?" if not m else ("ON" if m.group(1) != "0" else "OFF")
-        return "[ADMIN] dardo de sueno: %s (uso: dardo on|off)" % estado, True
+        # el dardo de sueno viene con el Medic nuevo (medic_new): 'dardo on|off' es 'medic on|off'
+        return run_cmd(("medic " + arg).strip(), by)
     if verb in ("medic", "medico", "mdico"):  # norm() borra los acentos: médico -> mdico
         # cvar latched de la DLL: el Medic nuevo (Browning, botiquin y jeringas lanzables) rige desde el
         # proximo mapa; un reinicio del server lo deja como diga server.cfg
@@ -340,8 +328,8 @@ def run_cmd(text, by):
             return "[ADMIN] lanzajeringas: %s (uso: medic bazooka on|off)" % estado, True
         if a in ("on", "1", "si", "nuevo", "activar", "activa", "prender", "prende", "encender", "enciende", "poner", "pon"):
             rcon("set medic_new 1")
-            return ("[ADMIN] Medic NUEVO desde el proximo mapa: Browning, botiquin lanzable y jeringas "
-                    "lanzables (aim + fuego)"), True
+            return ("[ADMIN] Medic NUEVO desde el proximo mapa: Browning, botiquin lanzable, jeringas "
+                    "lanzables (aim + fuego) y dardo de sueno ('bind <tecla> dardo' con la jeringa)"), True
         if a in ("off", "0", "no", "clasico", "clsico", "desactivar", "desactiva", "apagar", "apaga", "quitar", "quita", "sacar", "saca"):
             rcon("set medic_new 0")
             return "[ADMIN] Medic CLASICO desde el proximo mapa: la pistola de su faccion y solo la jeringa", True

@@ -43,7 +43,7 @@ opaque light blue-white).
 
 ## Dardo de sueño del Medic
 
-Files used by the sleep dart (`sleepdart`, see `Sleep_SpawnZ` and `SleepDart_ClientThink` in `src/p_weapon.c`). They
+Files used by the sleep dart (with `medic_new`, see `Sleep_SpawnZ` and `SleepDart_ClientThink` in `src/p_weapon.c`). They
 are in the repo at these paths (`sprites/` and `sound/` next to `models/`): copy them to the `dday` folder of the
 server; players download them on their own with `allow_download 1` (Q2PRO downloads the frames of a `.sp2`). They are
 made by `tools/assets/gen_sleep_assets.py <colormap.pcx> <out dir>` (Python standard library and ffmpeg).

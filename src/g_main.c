@@ -203,7 +203,6 @@ cvar_t *syringe_heal;
 cvar_t *syringe_poison;
 cvar_t *syringe_poison_head;
 cvar_t *syringe_heal_head;
-cvar_t *sleepdart;
 cvar_t *sleepdart_time;
 cvar_t *sleepdart_cooldown;
 cvar_t *sleepdart_wake;

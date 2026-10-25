@@ -876,7 +876,6 @@ extern cvar_t *syringe_heal;       // vida que recupera el companero que recibe 
 extern cvar_t *syringe_poison;     // dano total del veneno por jeringa (se reparte en SYRINGE_POISON_TIME)
 extern cvar_t *syringe_poison_head; // lo mismo cuando la jeringa pega en la cabeza
 extern cvar_t *syringe_heal_head;  // vida que recupera el companero si la jeringa le pega en la cabeza
-extern cvar_t *sleepdart;          // 1 = el Medic tiene el dardo de sueno (comando dardo)
 extern cvar_t *sleepdart_time;     // segundos que duerme el enemigo
 extern cvar_t *sleepdart_cooldown; // segundos entre dos dardos del mismo Medic
 extern cvar_t *sleepdart_wake;     // 1 = el dano despierta al dormido
@@ -2129,7 +2128,7 @@ extern int jpn_index;
 #define MEDIC_REGEN_DELAY		3		// seconds without damage before he starts to heal
 #define MEDIC_REGEN_RATE		10		// health a second, up to HEALTH_MAX
 
-// Medic sleep dart (sleepdart): the command "dardo" throws a dart that puts an enemy to sleep on the ground
+// Medic sleep dart (with medic_new): the command "dardo" throws a dart that puts an enemy to sleep on the ground
 #define SLEEPDART_SPEED			1400	// speed of the dart (a thrown syringe flies at KNIFE_THROW_SPEED, 950)
 #define SLEEPDART_GRAVITY		0.3		// gravity of the dart (1 = a thrown syringe)
 #define SLEEPDART_COLOR			0x74	// palette color of its sparks (blue, as the railgun trail)

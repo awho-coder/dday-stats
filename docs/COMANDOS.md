@@ -92,6 +92,7 @@ solo la jeringa). Con `medic_new 1` el Medic de todas las facciones lleva:
 - la **Browning Hi-Power** en lugar de la pistola de su facción;
 - **2 botiquines lanzables** por vida (`use special` y fuego);
 - **jeringas lanzables** (abajo);
+- el **dardo de sueño** (ver "Servidor: dardo de sueño del Medic");
 - **regeneración**: como ya no se cura con aim + fuego mientras tenga jeringas para lanzar,
   después de 3 segundos sin recibir daño recupera 10 de vida por segundo hasta 100
   (`MEDIC_REGEN_*` en `src/g_local.h`). No cura heridas: cada vez que el sangrado le hace daño,
@@ -147,10 +148,10 @@ todas las facciones (modelos y sonidos que ya tiene todo el mundo). Funciona con
 |---|---|---|
 | `medic_bazooka` | `0` | `1` le da el lanzajeringas al Medic en el próximo mapa. |
 
-## Servidor: dardo de sueño del Medic (`sleepdart`)
+## Servidor: dardo de sueño del Medic (con `medic_new`)
 
-Apagado por defecto. Con `sleepdart 1` el Medic tiene un **dardo que duerme a un enemigo**, como
-el de Ana de Overwatch. Se dispara con el comando **`dardo`** (o `sleepdart`), que cada jugador
+Viene con el **Medic nuevo**: con `medic_new 1` (apagado por defecto) el Medic tiene además un
+**dardo que duerme a un enemigo**, como el de Ana de Overwatch. Se dispara con el comando **`dardo`** (o `sleepdart`), que cada jugador
 asigna a una tecla: `bind q dardo`. Solo se tira **con la jeringa en la mano**: hace la
 animación de la jeringa (la de lanzar si está apuntando, la de inyectar si no) y el dardo sale
 hacia donde apunta en ese momento. Con la jeringa en la mano ve la **cruz de Quake** en el
@@ -182,20 +183,18 @@ cuerpo a tierra donde estaba el cuerpo. Mientras duerme:
 
 A los **compañeros** no les hace nada (el dardo se rompe), tampoco a quien tiene la protección
 de spawn, al Medic invulnerable (`invuln_medic`) ni durante la cuenta de un torneo. En FFA
-duerme a cualquiera. Los bots también se duermen, pero no usan el dardo. Funciona con el Medic
-clásico y con `medic_new`. No es latched: rige al instante.
+duerme a cualquiera. Los bots también se duermen, pero no usan el dardo. Como `medic_new` es
+latched, se prende y se apaga en el **próximo mapa**; los `sleepdart_*` rigen al instante.
 
 **Archivos nuevos** (hay que subirlos al server; los jugadores los bajan solos con
 `allow_download 1`): `sprites/zzz.sp2`, `sprites/zzz_0.pcx`, `sprites/zzz_0.png`,
 `sound/misc/snore.wav`, `pics/i_nextdart.pcx` y `pics/dartcross.pcx`. Están en el repo y los genera `tools/assets/gen_sleep_assets.py`.
-El server los precachea solo si `sleepdart` está en 1 **al empezar el mapa**: si se prende a
-mitad de mapa, quien no los tenga no ve las Z ni oye el ronquido hasta el mapa siguiente.
-Desde el bot: `dardo on|off` (o "admin activa el dardo"). Constantes `SLEEPDART_*` y
-`SLEEP_*` en `src/g_local.h`.
+El server los precachea solo con `medic_new 1`, al empezar el mapa.
+Desde el bot: `medic on|off` (`dardo on|off` y "admin activa el dardo" hacen lo mismo).
+Constantes `SLEEPDART_*` y `SLEEP_*` en `src/g_local.h`.
 
 | Cvar | Por defecto | Qué hace |
 |---|---|---|
-| `sleepdart` | `0` | `1` le da el dardo de sueño al Medic. |
 | `sleepdart_time` | `5` | Segundos que duerme el enemigo. |
 | `sleepdart_cooldown` | `15` | Segundos entre dos dardos del mismo Medic. |
 | `sleepdart_wake` | `1` | `1` = cualquier daño lo despierta; `0` = duerme todo el tiempo aunque le peguen. |
@@ -287,9 +286,8 @@ comando.
 - `kamikaze on|off` prende o apaga el airstrike kamikaze del Officer (`kamikaze_arty`);
   sin argumento dice el estado. También entiende frases ("admin activa el kamikaze").
   Rige desde el próximo airstrike y un reinicio del server lo apaga.
-- `dardo on|off` prende o apaga el dardo de sueño del Medic (`sleepdart`); sin argumento
-  dice el estado. También entiende frases ("admin activa el dardo", "apaga el dardo del
-  medic"). Rige al instante y un reinicio del server lo apaga.
+- `dardo on|off` es lo mismo que `medic on|off`: el dardo de sueño viene con el Medic nuevo
+  (`medic_new`, próximo mapa). También entiende frases ("admin activa el dardo").
 - La votación de fin de mapa **nunca** lleva al modo control: el mapa votado
   siempre arranca en deathmatch (la DLL pone `control_mode 0`).
 - **Moderación:** `kick <nick>` `kickban <nick>` `ban <ip>` `unban <ip>`

@@ -2611,11 +2611,12 @@ static qboolean Syringe_Throw (edict_t *ent)
 
 SLEEP DART
 
-With sleepdart on, the command "dardo" (or "sleepdart") throws a dart where the Medic aims, whatever he has in
-his hands, once every sleepdart_cooldown seconds. An enemy it hits falls asleep on his back for sleepdart_time
-seconds: he does not move, shoot or use the commands of the game, and his screen goes dark. With sleepdart_wake,
-any damage wakes him up, except the bleeding of his wounds. He wakes up prone. Teammates, players with the spawn
-protection and an invulnerable Medic are not affected.
+With medic_new on, the command "dardo" (or "sleepdart") throws a dart where the Medic aims, with the syringe in
+his hand (its fire animation), once every sleepdart_cooldown seconds. An enemy it hits falls asleep on his back for
+sleepdart_time seconds: he does not move, shoot or use the commands of the game, his screen goes dark, Zs rise from
+his head and he snores. With sleepdart_wake, any damage wakes him up, except the bleeding of his wounds. He wakes up
+prone where his body lay; killed asleep, he blows up in pieces. Teammates, players with the spawn protection and an
+invulnerable Medic are not affected.
 
 ======================================================================
 */
@@ -2925,7 +2926,7 @@ void Cmd_SleepDart_f (edict_t *ent)
 {
 	gclient_t	*client = ent->client;
 
-	if (!sleepdart->value || !client)
+	if (!medic_new->value || !client)
 		return;
 
 	if (ent->deadflag || ent->health <= 0 || client->limbo_mode || ent->flyingnun || !client->resp.team_on ||
@@ -3039,7 +3040,7 @@ void SleepDart_ClientThink (edict_t *ent, usercmd_t *ucmd)
 	if (client->sleepdart_waiting && level.time >= client->next_sleepdart_time)
 	{
 		client->sleepdart_waiting = false;
-		if (sleepdart->value && client->resp.mos == MEDIC && ent->health > 0 && !ent->deadflag)
+		if (medic_new->value && client->resp.mos == MEDIC && ent->health > 0 && !ent->deadflag)
 			safe_cprintf (ent, PRINT_HIGH, "Sleep dart ready.\n");
 	}
 

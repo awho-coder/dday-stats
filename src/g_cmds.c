@@ -260,7 +260,7 @@ g_cmds_t id_GameCmds[NUM_ID_CMDS] = // remember to set back to NUM_ID_COMDS
 	{ "autopickup",	1,	Cmd_AutoPickUp_f },
 	{ "id",			1,	Cmd_PlayerID_f },
 	{ "medic",		1,  Cmd_Medic_Call_f },
-	{ "dardo",		1,  Cmd_SleepDart_f },		// sleepdart: the sleep dart of the Medic
+	{ "dardo",		1,  Cmd_SleepDart_f },		// medic_new: the sleep dart of the Medic
 	{ "sleepdart",	1,  Cmd_SleepDart_f },
 	{ "motd",			1,	Cmd_MOTD },
 

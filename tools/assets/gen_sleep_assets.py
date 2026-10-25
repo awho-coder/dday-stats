@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Genera los archivos del dardo de sueno del Medic (sleepdart):
+"""Genera los archivos del dardo de sueno del Medic (con medic_new):
 
   sprites/zzz.sp2     sprite de la "Z" que sube sobre el dormido (3 cuadros: chica, mediana, grande)
   sprites/zzz_0.pcx   la Z en 8 bits con la paleta de Quake 2 (indice 255 = transparente): la que se baja del server
