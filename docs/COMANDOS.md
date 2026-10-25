@@ -240,6 +240,20 @@ Detalle: [`../stats/README.md`](../stats/README.md).
 | `stats_mode` | `public` | `public` o `duel` (en duelo solo cuenta desde `sv startcount`). |
 | `stats_event` | `""` | Nombre del torneo: marca las partidas como duelo oficial. Vaciarlo al terminar. |
 
+## Servidor: MVD de la partida (para bajarlo desde la web)
+
+Graba con el MVD de Q2PRO (`sv_mvd_enable 1` en `server.cfg`) y le pone de nombre
+el id de la partida de las stats: `demos/<match_id>.mvd2.gz`. Hace falta `stats_log 1`.
+Se corta solo al cambiar de mapa (`sv_mvd_maxmaps 1`). Sin jugadores humanos
+Q2PRO no graba nada (los bots no cuentan).
+
+| Cvar / comando | Por defecto | Qué hace |
+|---|---|---|
+| `mvd_partidas` | `0` | `1` graba un MVD de cada partida, desde la actual. Al instante; un reinicio lo apaga. |
+| `sv mvd_partida` | — | Graba solo la partida en curso, desde ese momento. |
+
+Un `mvdrecord` manual con otro nombre sigue funcionando, pero esa grabación no sale en la web.
+
 ## Servidor: valores por defecto cambiados
 
 | Cvar / constante | Antes | Ahora | Por qué |
@@ -280,7 +294,7 @@ comando.
 - **Info:** `estado` `ayuda` `bans` `tiempo` `mapas` `infomapa` `marcador`
   `zona` `versiones` `lag` `tiempos`
 - **Juego:** `mapa <x>` `duelo <mapa>` `publico` `normal` `control <mapa>`
-  `ffa <mapa>` `dm <mapa>` `modo normal|control|ffa|dm|duelo [mapa]` `kamikaze on|off` `tab nuevo on|off` `dardo on|off` `evento <nombre>` `cuenta [minutos]`
+  `ffa <mapa>` `dm <mapa>` `modo normal|control|ffa|dm|duelo [mapa]` `kamikaze on|off` `tab nuevo on|off` `dardo on|off` `grabar on|off|ahora` `evento <nombre>` `cuenta [minutos]`
   `reset` `resetscore` `torneo on|off` `freeze` `proximamapa` `lock` `unlock`
   `say <texto>`
 - `control <mapa>` (o `modo control <mapa>`) deja solo ese mapa y **apaga la

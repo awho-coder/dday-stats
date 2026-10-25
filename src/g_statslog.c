@@ -57,6 +57,7 @@ static cvar_t *stats_server;
 static cvar_t *stats_log_dir;
 static cvar_t *stats_mode;
 static cvar_t *stats_event;
+static cvar_t *mvd_partidas;	// 1 = grabar un MVD de cada partida (nombre = match_id)
 
 // contador que nunca retrocede aunque el valor original se reinicie
 // (por ejemplo resp.accuracy_hits vuelve a 0 con InitClientResp)
@@ -115,6 +116,7 @@ static struct
 	qboolean	duel;			// stats_mode duel al iniciar el mapa
 	qboolean	live;			// duel: la cuenta ya llego a 0
 	int			live_seconds;	// duel: segundos jugados (sin pausas ni cuentas)
+	qboolean	mvd_started;	// ya se pidio mvdrecord para esta partida
 	stats_player_t	players[MAX_CLIENTS];
 } sl;
 
@@ -734,6 +736,7 @@ void StatsLog_Init (void)
 	stats_log_dir = gi.cvar ("stats_log_dir", "", 0);
 	stats_mode = gi.cvar ("stats_mode", "public", 0);
 	stats_event = gi.cvar ("stats_event", "", 0);
+	mvd_partidas = gi.cvar ("mvd_partidas", "0", 0);
 
 	memset (&sl, 0, sizeof(sl));
 	sl.winner = STATS_WINNER_UNSET;
@@ -804,6 +807,7 @@ void StatsLog_MatchBegin (void)
 	sl.duel = !Q_stricmp (stats_mode->string, "duel");
 	sl.live = false;
 	sl.live_seconds = 0;
+	sl.mvd_started = false;
 
 	if (!stats_log->value || !deathmatch->value)
 		return;
@@ -864,10 +868,53 @@ void StatsLog_MatchBegin (void)
 	fflush (sl.file);
 }
 
+/*
+=================
+MVD de la partida
+
+Q2PRO graba con "mvdrecord"; aca se le pone de nombre el match_id para que
+la web pueda unir el archivo con la partida (demos/<match_id>.mvd2.gz).
+La grabacion se corta sola al cambiar de mapa (sv_mvd_maxmaps 1).
+=================
+*/
+
+static void StatsLog_StartMvd (void)
+{
+	sl.mvd_started = true;
+	// mvdstop por si quedo una grabacion manual abierta
+	gi.AddCommandString (va ("mvdstop\nmvdrecord -z %s\n", sl.match_id));
+}
+
+// "sv mvd_partida": graba solo la partida en curso, desde ahora
+void StatsLog_MvdPartida_f (void)
+{
+	if (!stats_log || !stats_log->value)
+	{
+		safe_cprintf (NULL, PRINT_HIGH, "mvd_partida: hace falta stats_log 1\n");
+		return;
+	}
+	if (!sl.open || level.intermissiontime)
+	{
+		safe_cprintf (NULL, PRINT_HIGH, "mvd_partida: no hay partida en curso\n");
+		return;
+	}
+	if (sl.mvd_started)
+	{
+		safe_cprintf (NULL, PRINT_HIGH, "mvd_partida: ya se esta grabando %s\n", sl.match_id);
+		return;
+	}
+	StatsLog_StartMvd ();
+	safe_cprintf (NULL, PRINT_HIGH, "mvd_partida: grabando %s\n", sl.match_id);
+}
+
 void StatsLog_RunFrame (void)
 {
 	if (!sl.open || level.intermissiontime)
 		return;
+
+	// mvd_partidas 1: cada partida se graba (tambien la actual si se prende a mitad)
+	if (mvd_partidas->value && !sl.mvd_started)
+		StatsLog_StartMvd ();
 
 	// tiempo por equipo y clase, con resolucion de 1 segundo
 	if (level.framenum % 10 == 0)

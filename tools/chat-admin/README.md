@@ -90,6 +90,9 @@ loginctl enable-linger $USER                       # sobrevive al logout
   "admin activa el dardo" / "apaga el dardo del medic", detector local, sin LLM)
   `officer bonus on|off` (cvar `officer_bonus`, al instante; también "admin activa el bonus del
   officer" / "apaga el bonus de arty"; sin argumento dice el estado)
+  `grabar on|off|ahora` (MVD de la partida para bajarlo desde la web: `on` graba esta y todas las
+  siguientes, cvar `mvd_partidas`; `ahora` solo esta, `sv mvd_partida`; `off` deja de grabar las
+  siguientes y la actual se termina de grabar; sin argumento dice el estado)
   `tab nuevo on|off` (cvar `tab_panel`, al instante: TAB de equipos con el panel del FFA, banderas y
   columna de curación del Medic; también "admin activa el tab nuevo" / "apaga el marcador nuevo"; sin
   argumento dice el estado)

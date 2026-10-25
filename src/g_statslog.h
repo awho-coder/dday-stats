@@ -44,4 +44,6 @@ void StatsLog_Luck (edict_t *targ, edict_t *attacker, int mod, const char *type)
 void StatsLog_CountdownDone (void);
 void StatsLog_CountdownReset (void);
 
+void StatsLog_MvdPartida_f (void);	// sv mvd_partida
+
 #endif
