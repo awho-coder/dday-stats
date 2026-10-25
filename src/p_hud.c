@@ -2190,6 +2190,16 @@ void G_SetStats (edict_t *ent)
 		ent->client->ps.stats[STAT_TIMER_ICON] = gi.imageindex("i_nextarty");
 		ent->client->ps.stats[STAT_TIMER] = (int)airstrikecd + 1;
 	}
+	// the wait of the Medic for his next sleep dart, as the airstrike of the Officer
+	else if (sleepdart->value &&
+			 ent->client->resp.mos == MEDIC &&
+			 ent->client->resp.team_on &&
+			 !ent->deadflag &&
+			 ent->client->next_sleepdart_time > level.time)
+	{
+		ent->client->ps.stats[STAT_TIMER_ICON] = gi.imageindex (SLEEPDART_ICON);
+		ent->client->ps.stats[STAT_TIMER] = (int)(ent->client->next_sleepdart_time - level.time) + 1;
+	}
 
 
 

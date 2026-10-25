@@ -54,4 +54,5 @@ made by `tools/assets/gen_sleep_assets.py <colormap.pcx> <out dir>` (Python stan
 | `sprites/zzz_0.pcx` | 32x32 Z, 8 bits with the Quake 2 palette, index 255 transparent (what the download gets). |
 | `sprites/zzz_0.png` | 64x64 RGBA Z with soft edges (Q2PRO uses it when it has it). |
 | `sound/misc/snore.wav` | The snore: 2.5 s, 22050 Hz, mono, 16 bits, synthesized (no license issues). |
+| `pics/i_nextdart.pcx` | 48x24 "NEXT DART" icon of the HUD countdown, made with the letters of `pics/i_nextarty.pcx` (pass it as the third argument of the script). |
 

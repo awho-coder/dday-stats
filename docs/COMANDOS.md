@@ -152,8 +152,9 @@ todas las facciones (modelos y sonidos que ya tiene todo el mundo). Funciona con
 Apagado por defecto. Con `sleepdart 1` el Medic tiene un **dardo que duerme a un enemigo**, como
 el de Ana de Overwatch. Se dispara con el comando **`dardo`** (o `sleepdart`), que cada jugador
 asigna a una tecla: `bind q dardo`. Sale hacia donde apunta, con cualquier arma en la mano, y
-hay **uno cada `sleepdart_cooldown` segundos**: si no está listo avisa cuántos segundos faltan,
-y cuando se recarga llega el mensaje `Sleep dart ready.`. Al reaparecer está listo. Es un
+hay **uno cada `sleepdart_cooldown` segundos**: mientras espera, el HUD muestra los segundos que
+faltan junto al ícono "NEXT DART" (como el contador del airstrike del Officer); si lo aprieta
+antes avisa cuántos segundos faltan, y cuando se recarga llega el mensaje `Sleep dart ready.`. Al reaparecer está listo. Es un
 proyectil (la jeringa con brillo azul, más rápida y con menos caída): se puede esquivar.
 
 El **enemigo** que toca se cae de espaldas al piso (cuerpo a tierra, con una animación de
@@ -180,8 +181,8 @@ duerme a cualquiera. Los bots también se duermen, pero no usan el dardo. Funcio
 clásico y con `medic_new`. No es latched: rige al instante.
 
 **Archivos nuevos** (hay que subirlos al server; los jugadores los bajan solos con
-`allow_download 1`): `sprites/zzz.sp2`, `sprites/zzz_0.pcx`, `sprites/zzz_0.png` y
-`sound/misc/snore.wav`. Están en el repo y los genera `tools/assets/gen_sleep_assets.py`.
+`allow_download 1`): `sprites/zzz.sp2`, `sprites/zzz_0.pcx`, `sprites/zzz_0.png`,
+`sound/misc/snore.wav` y `pics/i_nextdart.pcx`. Están en el repo y los genera `tools/assets/gen_sleep_assets.py`.
 El server los precachea solo si `sleepdart` está en 1 **al empezar el mapa**: si se prende a
 mitad de mapa, quien no los tenga no ve las Z ni oye el ronquido hasta el mapa siguiente.
 Desde el bot: `dardo on|off` (o "admin activa el dardo"). Constantes `SLEEPDART_*` y

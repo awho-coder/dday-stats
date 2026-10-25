@@ -2135,6 +2135,7 @@ extern int jpn_index;
 #define SLEEP_VIEW_PITCH		-60		// the sleeper looks up, as he lies on his back
 #define SLEEP_FADE_TIME			0.5		// seconds before waking when the dark screen starts to clear
 #define SLEEP_Z_MODEL			"sprites/zzz.sp2"	// the "Z" that rises over a sleeper: 3 frames, small to big
+#define SLEEPDART_ICON			"i_nextdart"	// "NEXT DART" by the seconds the Medic waits for his next dart
 #define SLEEP_Z_INTERVAL		0.7		// seconds between two Zs
 #define SLEEP_Z_FRAME_TIME		0.4		// seconds of every frame of a Z (it lives 3 frames)
 #define SLEEP_Z_RISE			18		// units a second that a Z goes up

@@ -5,9 +5,11 @@
   sprites/zzz_0.pcx   la Z en 8 bits con la paleta de Quake 2 (indice 255 = transparente): la que se baja del server
   sprites/zzz_0.png   la misma Z en RGBA con bordes suaves: Q2PRO la prefiere si la tiene
   sound/misc/snore.wav  el ronquido (22050 Hz, mono, 16 bits), sintetizado con ffmpeg
+  pics/i_nextdart.pcx   icono "NEXT DART" del contador del HUD, armado con las letras de pics/i_nextarty.pcx
 
-Uso: gen_sleep_assets.py <paleta> <carpeta de salida>
+Uso: gen_sleep_assets.py <paleta> <carpeta de salida> [<i_nextarty.pcx>]
   <paleta> es la de pics/colormap.pcx (sus ultimos 768 bytes) o un .bin de 768 bytes.
+  Sin <i_nextarty.pcx> no se hace el icono.
 Solo usa la biblioteca estandar de Python y ffmpeg.
 """
 import os
@@ -148,8 +150,95 @@ def write_snore(path):
                     "-ac", "1", "-ar", str(sr), "-c:a", "pcm_s16le", path], check=True)
 
 
+def read_pcx(path):
+    """(ancho, alto, filas de indices, paleta) de un .pcx de 8 bits."""
+    d = open(path, "rb").read()
+    xmin, ymin, xmax, ymax = struct.unpack("<HHHH", d[4:12])
+    w, h = xmax - xmin + 1, ymax - ymin + 1
+    bpl = struct.unpack("<H", d[66:68])[0]
+    rows, i = [], 128
+    for _ in range(h):
+        row = []
+        while len(row) < bpl:
+            b = d[i]
+            i += 1
+            if b >= 0xc0:
+                row += [d[i]] * (b & 0x3f)
+                i += 1
+            else:
+                row.append(b)
+        rows.append(row[:w])
+    return w, h, rows, d[-768:]
+
+
+def pcx_bytes(w, h, rows, pal):
+    head = struct.pack("<BBBBHHHHHH", 10, 5, 1, 8, 0, 0, w - 1, h - 1, 72, 72)
+    head += bytes(48) + bytes((0, 1)) + struct.pack("<HH", w, 1) + bytes(58)
+    body = bytearray()
+    for line in rows:
+        i = 0
+        while i < w:
+            v, run = line[i], 1
+            while i + run < w and line[i + run] == v and run < 63:
+                run += 1
+            if run > 1 or v >= 0xc0:
+                body += bytes((0xc0 | run, v))
+            else:
+                body.append(v)
+            i += run
+    return head + bytes(body) + b"\x0c" + pal
+
+
+# "NEXT DART": la fila de abajo de i_nextarty ("ARTY", letras en las filas 14 a 20, borde en 13 y 21) se rearma
+# como D + A + R + T, con las mismas letras (la D se dibuja con el mismo trazo de 3 pixeles)
+LETTER, OUTLINE = 9, 0
+D_GLYPH = ("XXXXXXX..",
+           "XXX..XXX.",
+           "XXX...XXX",
+           "XXX...XXX",
+           "XXX...XXX",
+           "XXX..XXX.",
+           "XXXXXXX..")
+
+
+def write_nextdart(src, path):
+    w, h, rows, pal = read_pcx(src)
+    out = [r[:] for r in rows]
+    top, bottom = 13, 21
+    # el fondo de la fila de abajo: el de la fila 22, columna por columna
+    for y in range(top, bottom + 1):
+        for x in range(2, w - 2):
+            out[y][x] = rows[22][x]
+    # A, R y T de "ARTY" (columnas en el original)
+    glyphs = {"A": (4, 13), "R": (15, 23), "T": (25, 33)}
+    x = 4
+    mask = {}   # (x, y) -> True donde va letra
+    for y, line in enumerate(D_GLYPH):
+        for i, c in enumerate(line):
+            if c == "X":
+                mask[(x + i, 14 + y)] = True
+    x += len(D_GLYPH[0]) + 1
+    for g in "ART":
+        a, b = glyphs[g]
+        for sx in range(a, b + 1):
+            for y in range(14, 21):
+                if rows[y][sx] == LETTER:
+                    mask[(x + sx - a, y)] = True
+        x += b - a + 2
+    for (mx, my) in mask:
+        out[my][mx] = LETTER
+    # borde negro alrededor de las letras
+    for y in range(top, bottom + 1):
+        for xx in range(2, w - 2):
+            if (xx, y) in mask:
+                continue
+            if any((xx + dx, y + dy) in mask for dx in (-1, 0, 1) for dy in (-1, 0, 1)):
+                out[y][xx] = OUTLINE
+    open(path, "wb").write(pcx_bytes(w, h, out, pal))
+
+
 def main():
-    if len(sys.argv) != 3:
+    if len(sys.argv) not in (3, 4):
         sys.exit(__doc__)
     data = open(sys.argv[1], "rb").read()
     pal = data[-768:]
@@ -160,6 +249,9 @@ def main():
     write_pcx(os.path.join(out, "sprites", "zzz_0.pcx"), SIZE, pal)
     write_png(os.path.join(out, "sprites", "zzz_0.png"), PNG_SIZE)
     write_snore(os.path.join(out, "sound", "misc", "snore.wav"))
+    if len(sys.argv) == 4:
+        os.makedirs(os.path.join(out, "pics"), exist_ok=True)
+        write_nextdart(sys.argv[3], os.path.join(out, "pics", "i_nextdart.pcx"))
 
 
 if __name__ == "__main__":
