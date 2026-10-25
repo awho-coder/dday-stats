@@ -54,6 +54,7 @@ made by `tools/assets/gen_sleep_assets.py <colormap.pcx> <out dir>` (Python stan
 | `sprites/zzz_0.pcx` | 32x32 Z, 8 bits with the Quake 2 palette, index 255 transparent (what the download gets). |
 | `sprites/zzz_0.png` | 64x64 RGBA Z with soft edges (Q2PRO uses it when it has it). |
 | `sound/misc/snore.wav` | The snore: 2.5 s, 22050 Hz, mono, 16 bits, synthesized (no license issues). |
+| `models/weapons/g_sleepdart/tris.md2` + `skin.pcx` + `skin.png` | The dart in the air: the `g_syringe` model with its own skin, the liquid violet in the `.png` and lavender (`0xb0`, the closest of the Quake 2 palette, which has no violet) in the `.pcx`. |
 | `pics/dartcross.pcx` | 320x240 crosshair of the Medic with the syringe: transparent, with the cross of `pics/crosshair.pcx` (in `pak0.pak`, fourth argument of the script) in the middle. It is as big as the scopes because the HUD draws it in their place (no free stat). |
 | `pics/i_nextdart.pcx` | 48x24 "NEXT DART" icon of the HUD countdown, made with the letters of `pics/i_nextarty.pcx` (pass it as the third argument of the script). |
 

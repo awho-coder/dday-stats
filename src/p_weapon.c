@@ -2510,6 +2510,23 @@ static void syringe_touch (edict_t *self, edict_t *other, cplane_t *plane, csurf
 
 static void sleepdart_touch (edict_t *self, edict_t *other, cplane_t *plane, csurface_t *surf);
 
+// a sleep dart in the air leaves a small trail of the color of its liquid, so it is told apart from a syringe
+static void sleepdart_think (edict_t *self)
+{
+	vec3_t	back;
+
+	if (level.time >= self->timestamp + SYRINGE_LIFE)
+	{
+		G_FreeEdict (self);
+		return;
+	}
+
+	VectorNegate (self->velocity, back);
+	VectorNormalize (back);
+	Syringe_Sparks (self->s.origin, back, 3, SLEEPDART_COLOR);
+	self->nextthink = level.time + FRAMETIME;
+}
+
 // one syringe in the air from start toward dir (normalized), thrown by ent at speed, with gravity (1 = normal);
 // the thrown syringe, the syringe launcher and the sleep dart (dart true) use it. ent must have a team. solid is
 // SOLID_BBOX for a thrown syringe; the launcher uses SOLID_TRIGGER: the syringes of a shot start at the same point
@@ -2524,11 +2541,8 @@ static void Syringe_Launch (edict_t *ent, vec3_t start, vec3_t dir, float speed,
 	syringe = G_Spawn ();
 	if (dart)
 	{
-		// the same syringe with a blue glow
 		syringe->classname = "sleepdart";
 		syringe->classnameb = SLEEPDART;
-		syringe->s.effects |= EF_COLOR_SHELL;
-		syringe->s.renderfx |= RF_SHELL_BLUE;
 	}
 	else
 	{
@@ -2548,11 +2562,20 @@ static void Syringe_Launch (edict_t *ent, vec3_t start, vec3_t dir, float speed,
 	syringe->solid = solid;
 	VectorSet (syringe->mins, -1, -1, -1);
 	VectorSet (syringe->maxs, 1, 1, 1);
-	syringe->s.modelindex = gi.modelindex ("models/weapons/g_syringe/tris.md2");
+	syringe->s.modelindex = gi.modelindex (dart ? SLEEPDART_MODEL : "models/weapons/g_syringe/tris.md2");
 	syringe->s.frame = 0;
 	syringe->touch = dart ? sleepdart_touch : syringe_touch;
-	syringe->think = G_FreeEdict;
-	syringe->nextthink = level.time + SYRINGE_LIFE;
+	if (dart)
+	{
+		syringe->timestamp = level.time;
+		syringe->think = sleepdart_think;
+		syringe->nextthink = level.time + FRAMETIME;
+	}
+	else
+	{
+		syringe->think = G_FreeEdict;
+		syringe->nextthink = level.time + SYRINGE_LIFE;
+	}
 	gi.linkentity (syringe);
 
 	// do not go through a wall that is right in front of the Medic
@@ -3393,7 +3416,8 @@ HEALTHPACK
 
 The Medic selects it (use special) and throws it with fire. A teammate that touches the pack
 recovers HEALTHPACK_HEAL health and is cured of bleeding and leg wounds, as with the syringe.
-Packs belong to the Medic that threw them and are removed when he dies or leaves (RemoveHealthpacks).
+Packs belong to the Medic that threw them: they stay HEALTHPACK_LIFE seconds, also after he dies, and are removed
+when he leaves (RemoveHealthpacks). He has at most HEALTHPACK_MAX_PER_MEDIC on the ground: a new one removes his oldest.
 
 ======================================================================
 */
@@ -3504,6 +3528,24 @@ static qboolean Healthpack_Throw (edict_t *ent)
 	{
 		safe_cprintf (ent, PRINT_HIGH, "You cannot throw a healthpack now.\n");
 		return false;
+	}
+
+	// his packs stay after he dies: at most HEALTHPACK_MAX_PER_MEDIC on the ground, the oldest goes
+	{
+		edict_t	*e, *oldest = NULL;
+		int		i, n = 0;
+
+		for (i = game.maxclients + 1; i < globals.num_edicts; i++)
+		{
+			e = &g_edicts[i];
+			if (!e->inuse || e->classnameb != HEALTHPACK || e->owner != ent)
+				continue;
+			n++;
+			if (!oldest || e->timestamp < oldest->timestamp)
+				oldest = e;
+		}
+		if (n >= HEALTHPACK_MAX_PER_MEDIC && oldest)
+			G_FreeEdict (oldest);
 	}
 
 	AngleVectors (ent->client->v_angle, forward, right, NULL);
