@@ -2750,7 +2750,7 @@ static void Sleep_Start (edict_t *victim)
 
 	client->sleeping = true;
 	client->sleep_until = level.time + sleepdart_time->value;
-	client->sleep_next_z = level.time + 0.2;
+	client->sleep_next_z = level.time + SLEEP_Z_FIRST;	// once he lies on the ground
 	client->sleep_next_snore = level.time + SLEEP_SNORE_DELAY;
 	client->ps.gunindex = 0;
 	client->ps.pmove.pm_flags |= PMF_NO_PREDICTION;	// the server holds his view
@@ -2987,8 +2987,11 @@ static void sleep_z_think (edict_t *self)
 
 static void Sleep_SpawnZ (edict_t *ent)
 {
+	gclient_t	*client = ent->client;
 	edict_t	*z;
-	vec3_t	forward, yaw;
+	vec3_t	forward, yaw, head, top, bottom;
+	float	floor;
+	trace_t	tr;
 
 	if (!Healthpack_EdictsLeft ())
 		return;
@@ -3001,13 +3004,26 @@ static void Sleep_SpawnZ (edict_t *ent)
 	z->s.renderfx |= RF_FULLBRIGHT;
 	z->s.frame = 0;
 
-	// from his head: the death animation leaves it far from his origin (sleep_head, along the yaw of his body)
-	VectorSet (yaw, 0, ent->s.angles[YAW], 0);
+	// from his head: the death animation leaves it far from his origin (sleep_head, along the yaw of his body; not
+	// s.angles, which the bots turn during the frame and ClientEndServerFrame puts back)
+	VectorSet (yaw, 0, client->sleep_angles[YAW], 0);
 	AngleVectors (yaw, forward, NULL, NULL);
-	VectorMA (ent->s.origin, ent->client->sleep_head, forward, z->s.origin);
+	VectorMA (ent->s.origin, client->sleep_head, forward, head);
+
+	// just over his face, from the ground under his head: on a slope it is not at the height of his feet
+	floor = ent->s.origin[2] - 24;
+	VectorCopy (head, top);
+	top[2] += 16;
+	VectorCopy (head, bottom);
+	bottom[2] -= 48;
+	tr = gi.trace (top, NULL, NULL, bottom, ent, MASK_SOLID);
+	if (!tr.startsolid && tr.fraction < 1.0)
+		floor = tr.endpos[2];
+
+	VectorCopy (head, z->s.origin);
 	z->s.origin[0] += crandom () * 3;
 	z->s.origin[1] += crandom () * 3;
-	z->s.origin[2] += ent->client->sleep_head_z + 8;	// just over his face
+	z->s.origin[2] = floor + (client->sleep_head_z + 24) + 8;	// sleep_head_z is from his origin, 24 over the floor
 	VectorSet (z->velocity, crandom () * 6, crandom () * 6, SLEEP_Z_RISE);
 
 	z->think = sleep_z_think;

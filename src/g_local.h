@@ -2141,6 +2141,7 @@ extern int jpn_index;
 #define SYRINGE_FIRE_FIRST		4		// first frame of the injection of v_morphine (see Weapon_Morphine)
 #define SYRINGE_AIM_FIRE_FIRST	53		// first frame of its throw, with aim
 #define SLEEP_Z_INTERVAL		0.7		// seconds between two Zs
+#define SLEEP_Z_FIRST			0.7		// seconds before the first Z: his fall (the death animation) is over
 #define SLEEP_Z_FRAME_TIME		0.4		// seconds of every frame of a Z (it lives 3 frames)
 #define SLEEP_Z_RISE			18		// units a second that a Z goes up
 #define SLEEP_BODY_HALF_WIDTH	14		// half the width of the box of a sleeper's body (without the arms)
