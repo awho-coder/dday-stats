@@ -208,6 +208,7 @@ cvar_t *sleepdart_time;
 cvar_t *sleepdart_cooldown;
 cvar_t *sleepdart_wake;
 cvar_t *sleepdart_anim;
+cvar_t *bot_noshoot;
 cvar_t *fast_bleeding;
 cvar_t *fast_sniper;
 

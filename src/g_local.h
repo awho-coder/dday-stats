@@ -880,6 +880,7 @@ extern cvar_t *sleepdart;          // 1 = el Medic tiene el dardo de sueno (coma
 extern cvar_t *sleepdart_time;     // segundos que duerme el enemigo
 extern cvar_t *sleepdart_cooldown; // segundos entre dos dardos del mismo Medic
 extern cvar_t *sleepdart_wake;     // 1 = el dano despierta al dormido
+extern cvar_t *bot_noshoot;        // 1 = los bots no disparan (para probar cosas con bots)
 extern cvar_t *sleepdart_anim;     // 1, 2 o 3: animacion de muerte con la que se queda dormido en el piso
 extern cvar_t *fast_bleeding;
 extern cvar_t *fast_sniper;

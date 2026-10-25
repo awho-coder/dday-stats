@@ -189,6 +189,8 @@ Desde el bot: `dardo on|off` (o "admin activa el dardo"). Constantes `SLEEPDART_
 | `sleepdart_wake` | `1` | `1` = cualquier daño lo despierta; `0` = duerme todo el tiempo aunque le peguen. |
 | `sleepdart_anim` | `1` | `1`, `2` o `3`: cuál de las tres animaciones de muerte de pie usa para caerse. |
 
+Para probarlo con bots: `bot_noshoot 1` (en `0` por defecto) hace que los bots no disparen.
+
 ## Servidor: TAB de equipos nuevo (`tab_panel`)
 
 Apagado por defecto: con `tab_panel 0` el TAB de equipos es el de siempre. Con `tab_panel 1` usa el

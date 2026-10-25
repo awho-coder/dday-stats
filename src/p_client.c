@@ -3849,6 +3849,9 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 
 	SleepDart_ClientThink (ent, ucmd);	// a sleeper does not move or shoot
 
+	if (ent->ai && bot_noshoot->value)
+		ucmd->buttons &= ~BUTTON_ATTACK;	// bot_noshoot: bots that do not shoot, to test things with them
+
 	if (ent->client->resp.scopewobble < 40)
 	{
 		++ent->client->resp.scopewobble;

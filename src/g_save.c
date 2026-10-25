@@ -424,6 +424,7 @@ void InitGame (void)
 	sleepdart_cooldown = gi.cvar("sleepdart_cooldown", "15", 0); // segundos entre dos dardos
 	sleepdart_wake  = gi.cvar("sleepdart_wake", "1", 0);     // 1 = el dano lo despierta
 	sleepdart_anim  = gi.cvar("sleepdart_anim", "1", 0);     // 1, 2 o 3: animacion de muerte con la que queda en el piso
+	bot_noshoot     = gi.cvar("bot_noshoot", "0", 0);        // 1 = los bots no disparan (pruebas)
 	fast_bleeding = gi.cvar("fast_bleeding", "0", 0);
 	fast_sniper = gi.cvar("fast_sniper", "1", 0);
 
