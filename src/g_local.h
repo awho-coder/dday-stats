@@ -2131,7 +2131,7 @@ extern int jpn_index;
 
 // Medic sleep dart (with medic_new): the command "dardo" throws a dart that puts an enemy to sleep on the ground
 #define SLEEPDART_SPEED			1400	// speed of the dart (a thrown syringe flies at KNIFE_THROW_SPEED, 950)
-#define SLEEPDART_GRAVITY		0.3		// gravity of the dart (1 = a thrown syringe)
+#define SLEEPDART_GRAVITY		0		// gravity of the dart (1 = a thrown syringe): none, it flies straight as the one of Ana
 #define SLEEPDART_MODEL			"models/weapons/g_sleepdart/tris.md2"	// the thrown syringe with a violet liquid
 #define SLEEPDART_COLOR			0xb0	// palette color of its trail and sparks: lavender (Quake 2 has no violet)
 #define SLEEP_VIEW_PITCH		-60		// the sleeper looks up, as he lies on his back

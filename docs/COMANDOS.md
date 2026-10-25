@@ -162,7 +162,7 @@ centro de la pantalla para apuntar (D-Day deja vacías las miras del cliente, `c
 hay **uno cada `sleepdart_cooldown` segundos**: mientras espera, el HUD muestra los segundos que
 faltan junto al ícono "NEXT DART" (como el contador del airstrike del Officer); si lo aprieta
 antes avisa cuántos segundos faltan, y cuando se recarga llega el mensaje `Sleep dart ready.`. Al reaparecer está listo. Es un
-proyectil (la jeringa con el líquido **violeta**, más rápida y con menos caída, que deja una
+proyectil (la jeringa con el líquido **violeta**, más rápida y **sin caída**: va recto como el de Ana, y deja una
 **estela lavanda** chica): se puede esquivar. Quake 2 no tiene violeta en su paleta: quien baja la
 textura del server (`.pcx`) y la estela lo ven lavanda; con el `.png` se ve violeta.
 
