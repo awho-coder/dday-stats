@@ -2298,6 +2298,13 @@ void G_SetStats (edict_t *ent)
 	else
 		ent->client->ps.stats[STAT_CROSSHAIR] = 0;
 	
+	// sleepdart: the Medic with the syringe in his hand sees the cross of Quake, to aim the dart (no free stat for
+	// it: an image as big as the scopes, with the cross in the middle)
+	if (sleepdart->value && ent->client->resp.mos == MEDIC && ent->client->pers.weapon &&
+		ent->client->pers.weapon->classnameb == WEAPON_MORPHINE && !ent->deadflag && !ent->client->sleeping &&
+		!ent->client->limbo_mode)
+		ent->client->ps.stats[STAT_CROSSHAIR] = gi.imageindex (SLEEPDART_CROSSHAIR);
+
 	if (ent->client->chasetarget && ent->client->chasetarget->client->aim && ent->client->aim)
 		ent->client->ps.stats[STAT_CROSSHAIR] = ent->client->chasetarget->client->ps.stats[STAT_CROSSHAIR];
 

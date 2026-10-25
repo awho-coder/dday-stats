@@ -2785,6 +2785,26 @@ static void Sleep_Start (edict_t *victim)
 	client->anim_end = pose->last;
 }
 
+// moves a sleeper to the middle of his body (the death animation leaves it away from his origin), with the box of a
+// prone player: he wakes up, or he is killed, where everybody sees him
+void Sleep_MoveToBody (edict_t *ent)
+{
+	gclient_t	*client = ent->client;
+	vec3_t		yaw, forward, end;
+	vec3_t		mins = {-16, -16, -24}, maxs = {16, 16, -15};	// prone (Set_Stance_Max)
+	trace_t		tr;
+
+	VectorSet (yaw, 0, client->sleep_angles[YAW], 0);
+	AngleVectors (yaw, forward, NULL, NULL);
+	VectorMA (ent->s.origin, client->sleep_center, forward, end);
+	tr = gi.trace (ent->s.origin, mins, maxs, end, ent, MASK_PLAYERSOLID);
+	if (!tr.startsolid && !tr.allsolid)
+		VectorCopy (tr.endpos, ent->s.origin);
+	VectorCopy (mins, ent->mins);
+	VectorCopy (maxs, ent->maxs);
+	gi.linkentity (ent);
+}
+
 // ends the sleep; woke is false when he died or left the game, and then nothing else is touched
 void Sleep_End (edict_t *ent, qboolean woke)
 {
@@ -2802,22 +2822,7 @@ void Sleep_End (edict_t *ent, qboolean woke)
 	if (!woke)
 		return;
 
-	// he gets up prone where his body lay, not where he stood
-	{
-		vec3_t	yaw, forward, end;
-		vec3_t	mins = {-16, -16, -24}, maxs = {16, 16, -15};	// prone (Set_Stance_Max)
-		trace_t	tr;
-
-		VectorSet (yaw, 0, client->sleep_angles[YAW], 0);
-		AngleVectors (yaw, forward, NULL, NULL);
-		VectorMA (ent->s.origin, client->sleep_center, forward, end);
-		tr = gi.trace (ent->s.origin, mins, maxs, end, ent, MASK_PLAYERSOLID);
-		if (!tr.startsolid && !tr.allsolid)
-			VectorCopy (tr.endpos, ent->s.origin);
-		VectorCopy (mins, ent->mins);
-		VectorCopy (maxs, ent->maxs);
-		gi.linkentity (ent);
-	}
+	Sleep_MoveToBody (ent);	// he gets up prone where his body lay, not where he stood
 
 	// he looks ahead again; the mouse moved while he slept, so the view is set from his last command
 	VectorSet (angles, 0, client->sleep_angles[YAW], 0);
@@ -2888,11 +2893,37 @@ static void sleepdart_touch (edict_t *self, edict_t *other, cplane_t *plane, csu
 	G_FreeEdict (self);
 }
 
-// the command "dardo" / "sleepdart"
-void Cmd_SleepDart_f (edict_t *ent)
+// throws the sleep dart where the Medic aims; from Weapon_Morphine_Use, at the fire frame of the animation
+static void SleepDart_Throw (edict_t *ent)
 {
 	gclient_t	*client = ent->client;
 	vec3_t		forward, right, offset, start;
+
+	if (!client->resp.team_on || !Healthpack_EdictsLeft ())
+		return;
+
+	// from the same point as a thrown syringe
+	AngleVectors (client->v_angle, forward, right, NULL);
+	VectorSet (offset, 24, 8, ent->viewheight - 8);
+	P_ProjectSource (client, ent->s.origin, offset, forward, right, start);
+	start[2] += 5;
+	VectorNormalize (forward);
+
+	Syringe_Launch (ent, start, forward, SLEEPDART_SPEED, SLEEPDART_GRAVITY, SOLID_BBOX, true);
+
+	Play_WepSound (ent, "knife/fire.wav");
+	PlayerNoise (ent, ent->s.origin, PNOISE_SELF);
+	Syringe_ThrowAnim (ent);
+
+	client->next_sleepdart_time = level.time + sleepdart_cooldown->value;
+	client->sleepdart_waiting = true;
+}
+
+// the command "dardo" / "sleepdart": with the syringe in his hand, the Medic plays its fire animation (the throw
+// with aim, the injection without it) and the dart leaves at its fire frame (see Weapon_Morphine_Use)
+void Cmd_SleepDart_f (edict_t *ent)
+{
+	gclient_t	*client = ent->client;
 
 	if (!sleepdart->value || !client)
 		return;
@@ -2913,24 +2944,18 @@ void Cmd_SleepDart_f (edict_t *ent)
 		return;
 	}
 
-	if (!Healthpack_EdictsLeft ())
+	if (!client->pers.weapon || client->pers.weapon->classnameb != WEAPON_MORPHINE)
+	{
+		safe_cprintf (ent, PRINT_HIGH, "Take the syringe to throw the sleep dart.\n");
 		return;
+	}
 
-	// from the same point as a thrown syringe
-	AngleVectors (client->v_angle, forward, right, NULL);
-	VectorSet (offset, 24, 8, ent->viewheight - 8);
-	P_ProjectSource (client, ent->s.origin, offset, forward, right, start);
-	start[2] += 5;
-	VectorNormalize (forward);
+	if (client->weaponstate != WEAPON_READY || client->newweapon)
+		return;	// raising, lowering or already using the syringe
 
-	Syringe_Launch (ent, start, forward, SLEEPDART_SPEED, SLEEPDART_GRAVITY, SOLID_BBOX, true);
-
-	Play_WepSound (ent, "knife/fire.wav");
-	PlayerNoise (ent, ent->s.origin, PNOISE_SELF);
-	Syringe_ThrowAnim (ent);
-
-	client->next_sleepdart_time = level.time + sleepdart_cooldown->value;
-	client->sleepdart_waiting = true;
+	client->sleepdart_throw = 1;
+	client->weaponstate = WEAPON_FIRING;
+	client->ps.gunframe = client->aim ? SYRINGE_AIM_FIRE_FIRST : SYRINGE_FIRE_FIRST;
 }
 
 // the game commands that a sleeper cannot use (the chat, the menus and the scoreboard still work)
@@ -3045,6 +3070,15 @@ void Weapon_Morphine_Use(edict_t *ent)
 	qboolean	full_recovery;	// pbowens: healing rewards
 
 	ent->client->ps.gunframe++;
+
+	// this firing animation throws the sleep dart (Cmd_SleepDart_f): once, at its first fire frame
+	if (ent->client->sleepdart_throw)
+	{
+		if (ent->client->sleepdart_throw == 1)
+			SleepDart_Throw (ent);
+		ent->client->sleepdart_throw = 2;
+		return;
+	}
 
 	if (ent->client->aim)
 	{
@@ -3203,6 +3237,9 @@ void Weapon_Morphine(edict_t *ent)
 	fire_frames[2] = (ent->client->aim)?53:6;
 
 	ent->client->crosshair = true;
+
+	if (ent->client->weaponstate != WEAPON_FIRING)
+		ent->client->sleepdart_throw = 0;	// the animation of a sleep dart ended (or was cut)
 
 	// the HUD shows the syringes that are left to throw
 	ent->client->p_rnd = Syringe_Enabled (ent) ? &ent->client->syringes : NULL;

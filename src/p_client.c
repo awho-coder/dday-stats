@@ -1251,6 +1251,7 @@ player_die
 void player_die (edict_t *self, edict_t *inflictor, edict_t *attacker, int damage, vec3_t point)
 {
 	int		i, n;
+	qboolean	asleep;
 	vec3_t	forward, right;
 	vec3_t	s_up={0.0,0.0,1.0}, s_forward={0.0,1.0,1.0}, s_behind={0.0,-1.0,1.0}, s_right={1.0,0.0,1.0}, s_left={-1.0,0.0,1.0};
 
@@ -1336,8 +1337,17 @@ void player_die (edict_t *self, edict_t *inflictor, edict_t *attacker, int damag
 
 	// clear inventory
 	memset(self->client->pers.inventory, 0, sizeof(self->client->pers.inventory));
-	
-	if ((meansOfDeath == MOD_HELD_GRENADE) 
+
+	// killed asleep (sleep dart): he blows up in pieces, from where his body lies
+	asleep = self->client->sleeping;
+	if (asleep)
+	{
+		Sleep_MoveToBody (self);
+		Sleep_End (self, false);
+	}
+
+	if (asleep
+		|| (meansOfDeath == MOD_HELD_GRENADE) 
 		|| (meansOfDeath == MOD_GRENADE) 
 		|| (meansOfDeath == MOD_ROCKET) 
 		|| (meansOfDeath == MOD_R_SPLASH)
@@ -1385,13 +1395,7 @@ void player_die (edict_t *self, edict_t *inflictor, edict_t *attacker, int damag
 
 			// start a death animation
 			self->client->anim_priority = ANIM_DEATH;
-			if (self->client->sleeping)
-			{
-				// asleep (sleep dart): he already lies on the ground, so he stays as he is
-				self->client->anim_end = self->s.frame;
-				Sleep_End (self, false);
-			}
-			else if (self->stanceflags==STANCE_DUCK)
+			if (self->stanceflags==STANCE_DUCK)
 			{
 				self->s.frame = FRAME_crdeath1-1;
 				self->client->anim_end = FRAME_crdeath5;

@@ -6,10 +6,12 @@
   sprites/zzz_0.png   la misma Z en RGBA con bordes suaves: Q2PRO la prefiere si la tiene
   sound/misc/snore.wav  el ronquido (22050 Hz, mono, 16 bits), sintetizado con ffmpeg
   pics/i_nextdart.pcx   icono "NEXT DART" del contador del HUD, armado con las letras de pics/i_nextarty.pcx
+  pics/dartcross.pcx    mira del Medic con la jeringa: 320x240 como las miras de francotirador (el HUD no tiene
+                        otro lugar), transparente, con la cruz de pics/crosshair.pcx (la de Quake) en el centro
 
-Uso: gen_sleep_assets.py <paleta> <carpeta de salida> [<i_nextarty.pcx>]
+Uso: gen_sleep_assets.py <paleta> <carpeta de salida> [<i_nextarty.pcx> [<crosshair.pcx>]]
   <paleta> es la de pics/colormap.pcx (sus ultimos 768 bytes) o un .bin de 768 bytes.
-  Sin <i_nextarty.pcx> no se hace el icono.
+  Sin <i_nextarty.pcx> no se hace el icono; sin <crosshair.pcx> (esta en pak0.pak del juego) no se hace la mira.
 Solo usa la biblioteca estandar de Python y ffmpeg.
 """
 import os
@@ -237,8 +239,19 @@ def write_nextdart(src, path):
     open(path, "wb").write(pcx_bytes(w, h, out, pal))
 
 
+def write_dartcross(src, path, pal):
+    cw, ch, cross, _ = read_pcx(src)
+    w, h = 320, 240
+    rows = [[255] * w for _ in range(h)]
+    x0, y0 = w // 2 - cw // 2, h // 2 - ch // 2   # su centro en el centro de la pantalla
+    for y in range(ch):
+        for x in range(cw):
+            rows[y0 + y][x0 + x] = cross[y][x]
+    open(path, "wb").write(pcx_bytes(w, h, rows, pal))
+
+
 def main():
-    if len(sys.argv) not in (3, 4):
+    if len(sys.argv) not in (3, 4, 5):
         sys.exit(__doc__)
     data = open(sys.argv[1], "rb").read()
     pal = data[-768:]
@@ -252,6 +265,8 @@ def main():
     if len(sys.argv) == 4:
         os.makedirs(os.path.join(out, "pics"), exist_ok=True)
         write_nextdart(sys.argv[3], os.path.join(out, "pics", "i_nextdart.pcx"))
+    if len(sys.argv) == 5:
+        write_dartcross(sys.argv[4], os.path.join(out, "pics", "dartcross.pcx"), pal)
 
 
 if __name__ == "__main__":

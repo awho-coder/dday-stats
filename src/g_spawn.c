@@ -1974,6 +1974,7 @@ void SP_worldspawn (edict_t *ent)
 		gi.modelindex (SLEEP_Z_MODEL);
 		gi.soundindex (SLEEP_SNORE_SOUND);
 		gi.imageindex (SLEEPDART_ICON);
+		gi.imageindex (SLEEPDART_CROSSHAIR);
 	}
 	PrecacheItem ( FindItem("Healthpack")	);
 	PrecacheItem ( FindItem("Helmet")		);

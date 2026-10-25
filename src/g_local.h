@@ -1742,6 +1742,7 @@ struct gclient_s
 	float       last_damage_time;		// level.time of the last damage taken (the Medic heals himself after MEDIC_REGEN_DELAY)
 	float       next_sleepdart_time;	// Medic with sleepdart: level.time when he can throw the next sleep dart
 	qboolean    sleepdart_waiting;		// Medic with sleepdart: he threw one and is told when the next is ready
+	int         sleepdart_throw;		// Medic: 1 = this syringe animation throws a sleep dart, 2 = it was thrown
 	qboolean    sleeping;				// put to sleep by a sleep dart (see Sleep_Start)
 	float       sleep_until;			// level.time when he wakes up
 	vec3_t      sleep_angles;			// the view while he sleeps, on his back looking up
@@ -2136,6 +2137,9 @@ extern int jpn_index;
 #define SLEEP_FADE_TIME			0.5		// seconds before waking when the dark screen starts to clear
 #define SLEEP_Z_MODEL			"sprites/zzz.sp2"	// the "Z" that rises over a sleeper: 3 frames, small to big
 #define SLEEPDART_ICON			"i_nextdart"	// "NEXT DART" by the seconds the Medic waits for his next dart
+#define SLEEPDART_CROSSHAIR		"dartcross"		// 320x240 as the scopes, with the cross of Quake in the middle
+#define SYRINGE_FIRE_FIRST		4		// first frame of the injection of v_morphine (see Weapon_Morphine)
+#define SYRINGE_AIM_FIRE_FIRST	53		// first frame of its throw, with aim
 #define SLEEP_Z_INTERVAL		0.7		// seconds between two Zs
 #define SLEEP_Z_FRAME_TIME		0.4		// seconds of every frame of a Z (it lives 3 frames)
 #define SLEEP_Z_RISE			18		// units a second that a Z goes up
@@ -2423,6 +2427,7 @@ void Weapon_SyringeLauncher (edict_t *ent);
 void Cmd_SleepDart_f (edict_t *ent);
 void SleepDart_ClientThink (edict_t *ent, usercmd_t *ucmd);
 void Sleep_End (edict_t *ent, qboolean woke);
+void Sleep_MoveToBody (edict_t *ent);
 qboolean Sleep_BlocksCommand (edict_t *ent, char *cmd);
 void Weapon_Generic (edict_t *ent, int FRAME_ACTIVATE_LAST, int FRAME_LFIRE_LAST, int FRAME_LIDLE_LAST, int FRAME_RELOAD_LAST, int FRAME_LASTRD_LAST,
 					 int FRAME_DEACTIVATE_LAST, int FRAME_RAISE_LAST,int FRAME_AFIRE_LAST, int FRAME_AIDLE_LAST,

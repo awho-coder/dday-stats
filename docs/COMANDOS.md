@@ -151,7 +151,10 @@ todas las facciones (modelos y sonidos que ya tiene todo el mundo). Funciona con
 
 Apagado por defecto. Con `sleepdart 1` el Medic tiene un **dardo que duerme a un enemigo**, como
 el de Ana de Overwatch. Se dispara con el comando **`dardo`** (o `sleepdart`), que cada jugador
-asigna a una tecla: `bind q dardo`. Sale hacia donde apunta, con cualquier arma en la mano, y
+asigna a una tecla: `bind q dardo`. Solo se tira **con la jeringa en la mano**: hace la
+animación de la jeringa (la de lanzar si está apuntando, la de inyectar si no) y el dardo sale
+hacia donde apunta en ese momento. Con la jeringa en la mano ve la **cruz de Quake** en el
+centro de la pantalla para apuntar (D-Day deja vacías las miras del cliente, `ch1` a `ch3`). Y
 hay **uno cada `sleepdart_cooldown` segundos**: mientras espera, el HUD muestra los segundos que
 faltan junto al ícono "NEXT DART" (como el contador del airstrike del Officer); si lo aprieta
 antes avisa cuántos segundos faltan, y cuando se recarga llega el mensaje `Sleep dart ready.`. Al reaparecer está listo. Es un
@@ -174,6 +177,8 @@ cuerpo a tierra donde estaba el cuerpo. Mientras duerme:
   oye solo cerca de él y se corta cuando se despierta;
 - **cualquier daño lo despierta** (con `sleepdart_wake 1`), salvo el sangrado de sus propias
   heridas. Se despierta cuerpo a tierra.
+- si **lo matan dormido, explota en pedazos** (sangre y gibs, como con una granada) desde donde
+  está el cuerpo, para que se note.
 
 A los **compañeros** no les hace nada (el dardo se rompe), tampoco a quien tiene la protección
 de spawn, al Medic invulnerable (`invuln_medic`) ni durante la cuenta de un torneo. En FFA
@@ -182,7 +187,7 @@ clásico y con `medic_new`. No es latched: rige al instante.
 
 **Archivos nuevos** (hay que subirlos al server; los jugadores los bajan solos con
 `allow_download 1`): `sprites/zzz.sp2`, `sprites/zzz_0.pcx`, `sprites/zzz_0.png`,
-`sound/misc/snore.wav` y `pics/i_nextdart.pcx`. Están en el repo y los genera `tools/assets/gen_sleep_assets.py`.
+`sound/misc/snore.wav`, `pics/i_nextdart.pcx` y `pics/dartcross.pcx`. Están en el repo y los genera `tools/assets/gen_sleep_assets.py`.
 El server los precachea solo si `sleepdart` está en 1 **al empezar el mapa**: si se prende a
 mitad de mapa, quien no los tenga no ve las Z ni oye el ronquido hasta el mapa siguiente.
 Desde el bot: `dardo on|off` (o "admin activa el dardo"). Constantes `SLEEPDART_*` y
