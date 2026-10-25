@@ -162,15 +162,22 @@ muerte) y queda dormido `sleepdart_time` segundos:
 - no se mueve, no salta ni dispara, y la vista le queda fija mirando hacia arriba;
 - no puede cambiar de arma, recargar, tirar cosas, cambiar de postura, pedir airstrike ni
   suicidarse (`kill`); el chat, los menús y el TAB siguen andando;
-- ve la pantalla azul oscura (se aclara en el último medio segundo) y se le ven chispas
-  azules encima;
+- ve la pantalla azul oscura (se aclara en el último medio segundo);
+- le salen **Z que suben** sobre el cuerpo (un sprite que crece) y **ronca**; el ronquido se
+  oye solo cerca de él y se corta cuando se despierta;
 - **cualquier daño lo despierta** (con `sleepdart_wake 1`), salvo el sangrado de sus propias
   heridas. Se despierta cuerpo a tierra.
 
 A los **compañeros** no les hace nada (el dardo se rompe), tampoco a quien tiene la protección
 de spawn, al Medic invulnerable (`invuln_medic`) ni durante la cuenta de un torneo. En FFA
-duerme a cualquiera. Los bots también se duermen, pero no usan el dardo. No hay archivos nuevos
-que subir. Funciona con el Medic clásico y con `medic_new`. No es latched: rige al instante.
+duerme a cualquiera. Los bots también se duermen, pero no usan el dardo. Funciona con el Medic
+clásico y con `medic_new`. No es latched: rige al instante.
+
+**Archivos nuevos** (hay que subirlos al server; los jugadores los bajan solos con
+`allow_download 1`): `sprites/zzz.sp2`, `sprites/zzz_0.pcx`, `sprites/zzz_0.png` y
+`sound/misc/snore.wav`. Están en el repo y los genera `tools/assets/gen_sleep_assets.py`.
+El server los precachea solo si `sleepdart` está en 1 **al empezar el mapa**: si se prende a
+mitad de mapa, quien no los tenga no ve las Z ni oye el ronquido hasta el mapa siguiente.
 Desde el bot: `dardo on|off` (o "admin activa el dardo"). Constantes `SLEEPDART_*` y
 `SLEEP_*` en `src/g_local.h`.
 

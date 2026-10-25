@@ -40,3 +40,18 @@ the `dday` folder of the server; players download them on their own with `allow_
 license (https://sketchfab.com/licenses). Converted from the `.glb` to `.md2` (3260 triangles): the parts keep their
 color, the graduation decal and the transparency of the barrel were dropped (md2 has no transparency, the barrel is
 opaque light blue-white).
+
+## Dardo de sueño del Medic
+
+Files used by the sleep dart (`sleepdart`, see `Sleep_SpawnZ` and `SleepDart_ClientThink` in `src/p_weapon.c`). They
+are in the repo at these paths (`sprites/` and `sound/` next to `models/`): copy them to the `dday` folder of the
+server; players download them on their own with `allow_download 1` (Q2PRO downloads the frames of a `.sp2`). They are
+made by `tools/assets/gen_sleep_assets.py <colormap.pcx> <out dir>` (Python standard library and ffmpeg).
+
+| File | What it is |
+|---|---|
+| `sprites/zzz.sp2` | The "Z" over a sleeper: 3 frames of 8, 11 and 14 units, all with the same image. |
+| `sprites/zzz_0.pcx` | 32x32 Z, 8 bits with the Quake 2 palette, index 255 transparent (what the download gets). |
+| `sprites/zzz_0.png` | 64x64 RGBA Z with soft edges (Q2PRO uses it when it has it). |
+| `sound/misc/snore.wav` | The snore: 2.5 s, 22050 Hz, mono, 16 bits, synthesized (no license issues). |
+
