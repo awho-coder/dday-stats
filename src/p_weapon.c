@@ -2267,7 +2267,7 @@ SYRINGE
 
 With medic_new on, the Medic throws the syringe in his hand with aim + fire, as the knife. A teammate it
 hits recovers syringe_heal health (syringe_heal_head in the head; wounds are not cured); an enemy is
-poisoned: syringe_poison damage (syringe_poison_head in the head) spread over SYRINGE_POISON_TIME seconds,
+poisoned: syringe_poison damage (syringe_poison_head in the head) spread over syringe_poison_time seconds,
 which stacks with every syringe and can kill (MOD_SYRINGE). The syringe of the hand is never used up; he
 carries syringe_count more to throw.
 
@@ -2316,14 +2316,14 @@ qboolean Syringe_CanThrow (edict_t *ent)
 	return (ent->client && Syringe_Enabled (ent) && ent->client->syringes > 0);
 }
 
-// the poison of one syringe: it does syringe_poison damage in SYRINGE_POISON_TIME seconds, in steps of
+// the poison of one syringe: it does its damage in ent->wait seconds (syringe_poison_time when it hit), in steps of
 // FRAMETIME, and credits the Medic with the kill. There is one entity per syringe so the poisons stack
 static void syringe_poison_think (edict_t *ent)
 {
 	edict_t	*victim = ent->enemy;
 	edict_t	*attacker;
 	vec3_t	pos, up;
-	int		ticks = (int)(SYRINGE_POISON_TIME / FRAMETIME + 0.5);
+	int		ticks = (int)(ent->wait / FRAMETIME + 0.5);
 	int		tick, goal, d;
 
 	if (!victim || !victim->inuse || !victim->client || victim->health <= 0 || victim->deadflag)
@@ -2336,6 +2336,9 @@ static void syringe_poison_think (edict_t *ent)
 	attacker = ent->activator;
 	if (!attacker || !attacker->inuse || !attacker->client)
 		attacker = world;
+
+	if (ticks < 1)
+		ticks = 1;
 
 	tick = (int)((level.time - ent->timestamp) / FRAMETIME + 0.5);
 	if (tick > ticks)
@@ -2392,6 +2395,7 @@ static void Syringe_Poison (edict_t *victim, edict_t *medic, int damage)
 	poison->dmg = damage;
 	poison->count = 0;	// damage done so far
 	poison->timestamp = level.time;
+	poison->wait = syringe_poison_time->value;	// fixed when it hits, if the cvar changes later
 	poison->svflags |= SVF_NOCLIENT;
 	poison->think = syringe_poison_think;
 	poison->nextthink = level.time + FRAMETIME;

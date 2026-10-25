@@ -201,6 +201,7 @@ cvar_t *medic_bazooka;
 cvar_t *syringe_count;
 cvar_t *syringe_heal;
 cvar_t *syringe_poison;
+cvar_t *syringe_poison_time;
 cvar_t *syringe_poison_head;
 cvar_t *syringe_heal_head;
 cvar_t *sleepdart_time;

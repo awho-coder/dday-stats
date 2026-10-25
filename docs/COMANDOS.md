@@ -107,7 +107,7 @@ El Medic con la jeringa en la mano y en modo
 apuntado (aim) la **lanza** al apretar fuego, igual que el cuchillo lanzado (misma velocidad
 y cadencia, `SYRINGE_THROW_DELAY` en `src/g_local.h`). Al **compañero** que toca lo cura
 `syringe_heal` (no cura sangrado ni cojera). Al **enemigo** lo envenena: `syringe_poison` de
-daño repartido en 2 segundos; los venenos de varias jeringas se acumulan, pueden matar y la
+daño repartido en `syringe_poison_time` segundos; los venenos de varias jeringas se acumulan, pueden matar y la
 muerte cuenta como kill del Medic (`was poisoned by`, `syringe` en el log de stats). Contra
 una pared, un objetivo o un cadáver la jeringa se rompe. Lleva `syringe_count` jeringas
 lanzables por vida (el HUD muestra cuántas le quedan), además de la de la mano, que es
@@ -125,10 +125,11 @@ bajan solos con `allow_download 1`. Sin jeringas lanzables, con un bot o con
 |---|---|---|
 | `medic_new` | `0` | `1` activa el Medic nuevo (Browning, botiquín, jeringas y dardo de sueño) en el próximo mapa. |
 | `syringe_count` | `9` | Jeringas lanzables por vida (sin contar la de la mano). Se reparten al aparecer. |
-| `syringe_heal` | `33` | Vida que recupera el compañero (tope `HEALTH_MAX`). |
-| `syringe_heal_head` | `45` | Vida que recupera el compañero si la jeringa le pega en la cabeza (tope `HEALTH_MAX`). |
-| `syringe_poison` | `33` | Daño total del veneno de una jeringa, en 2 segundos. |
-| `syringe_poison_head` | `50` | Lo mismo cuando la jeringa le pega en la cabeza. |
+| `syringe_heal` | `50` | Vida que recupera el compañero (tope `HEALTH_MAX`). |
+| `syringe_heal_head` | `100` | Vida que recupera el compañero si la jeringa le pega en la cabeza (tope `HEALTH_MAX`). |
+| `syringe_poison` | `50` | Daño total del veneno de una jeringa, repartido en `syringe_poison_time`. |
+| `syringe_poison_head` | `100` | Lo mismo cuando la jeringa le pega en la cabeza. |
+| `syringe_poison_time` | `4` | Segundos en que se reparte el daño del veneno (el de cada jeringa queda fijo al pegar). |
 
 Lo que se ponga por rcon se pierde al reiniciar el servidor; para dejarlo fijo va en
 `dday/server.cfg`.

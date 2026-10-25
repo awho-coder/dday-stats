@@ -873,7 +873,8 @@ extern cvar_t *medic_bazooka;      // 1 = el Medic lleva el lanzajeringas en lug
 extern cvar_t *medic_new;          // 1 = Medic nuevo: Browning, botiquin lanzable y jeringas lanzables (latched)
 extern cvar_t *syringe_count;      // jeringas lanzables por vida (sin contar la de la mano)
 extern cvar_t *syringe_heal;       // vida que recupera el companero que recibe la jeringa
-extern cvar_t *syringe_poison;     // dano total del veneno por jeringa (se reparte en SYRINGE_POISON_TIME)
+extern cvar_t *syringe_poison;     // dano total del veneno por jeringa (se reparte en syringe_poison_time)
+extern cvar_t *syringe_poison_time; // segundos en que se reparte el dano del veneno
 extern cvar_t *syringe_poison_head; // lo mismo cuando la jeringa pega en la cabeza
 extern cvar_t *syringe_heal_head;  // vida que recupera el companero si la jeringa le pega en la cabeza
 extern cvar_t *sleepdart_time;     // segundos que duerme el enemigo
@@ -2113,7 +2114,6 @@ extern int jpn_index;
 
 // Medic syringe: with the syringe in hand, aim + fire throws it (see medic_new)
 #define SYRINGE_THROW_DELAY		0.6		// seconds between two throws (the cycle of the thrown knife)
-#define SYRINGE_POISON_TIME		2		// seconds that the poison of one syringe lasts
 #define SYRINGE_LIFE			5		// seconds before a syringe in the air is removed
 
 // syringe launcher (medic_bazooka): a joke bazooka that fires SYRINGE_LAUNCHER_COUNT syringes at once, as a shotgun
