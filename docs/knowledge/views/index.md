@@ -21,4 +21,5 @@
 * [v_player_totals_by_mode](v_player_totals_by_mode.md) - Totales historicos por jugador y modo de juego (dm, ctb, control...).
 * [v_player_weapons](v_player_weapons.md) - Kills de un jugador por arma.
 * [v_seasons](v_seasons.md) - Temporadas con su fecha de fin y cantidad de partidas.
+* [v_tournaments](v_tournaments.md) - Torneos: las fichas mas las claves usadas en partidas sin ficha (registered = false, estado deducido: live si la ultima partida fue hace 7 dias o menos).
 * [v_weapon_stats](v_weapon_stats.md) - Armas globales: kills, headshots y distancia media.

@@ -441,6 +441,85 @@ CREATE UNIQUE INDEX IF NOT EXISTS clan_tags_key_idx ON clan_tags (lower(tag));
 CREATE UNIQUE INDEX IF NOT EXISTS clan_tags_primary_idx ON clan_tags (clan_id) WHERE is_primary;
 CREATE INDEX IF NOT EXISTS clan_tags_clan_idx ON clan_tags (clan_id);
 
+-- Fichas de torneo del Ladder Test. La clave es el valor del cvar stats_event
+-- (matches.event). Se editan desde el panel admin (tournament_save / tournament_delete).
+-- La modalidad y los puntos van en cada fase (tournament_phases).
+CREATE TABLE IF NOT EXISTS tournaments (
+    id           serial PRIMARY KEY,
+    event        text NOT NULL CHECK (length(event) BETWEEN 1 AND 64),
+    name         text NOT NULL DEFAULT '',
+    status       text NOT NULL DEFAULT 'upcoming'
+                 CHECK (status IN ('upcoming', 'live', 'finished')),
+    starts_on    date,
+    ends_on      date,
+    format       text NOT NULL DEFAULT '',
+    description  text NOT NULL DEFAULT '',
+    rules_url    text NOT NULL DEFAULT '',
+    logo_url     text NOT NULL DEFAULT '',
+    champion_id  integer REFERENCES clans (id) ON DELETE SET NULL,
+    runner_up_id integer REFERENCES clans (id) ON DELETE SET NULL,
+    visible      boolean NOT NULL DEFAULT true,
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    updated_at   timestamptz NOT NULL DEFAULT now(),
+    updated_by   text,
+    CHECK (ends_on IS NULL OR starts_on IS NULL OR ends_on >= starts_on)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS tournaments_event_idx ON tournaments (event);
+
+-- Fases de un torneo (D22), cada una con su modalidad. Una partida cae en la fase con el
+-- starts_at mas reciente que no sea posterior a la partida; la primera fase (menor
+-- sort_order) siempre tiene starts_at NULL = desde el inicio.
+CREATE TABLE IF NOT EXISTS tournament_phases (
+    id            serial PRIMARY KEY,
+    tournament_id integer NOT NULL REFERENCES tournaments (id) ON DELETE CASCADE,
+    name          text NOT NULL CHECK (length(name) BETWEEN 1 AND 40),
+    scoring       text NOT NULL DEFAULT 'league'
+                  CHECK (scoring IN ('league', 'knockout', 'results')),
+    points_per    text NOT NULL DEFAULT 'match' CHECK (points_per IN ('match', 'series')),
+    points_win    integer NOT NULL DEFAULT 3 CHECK (points_win BETWEEN 0 AND 100),
+    points_draw   integer NOT NULL DEFAULT 1 CHECK (points_draw BETWEEN 0 AND 100),
+    points_loss   integer NOT NULL DEFAULT 0 CHECK (points_loss BETWEEN 0 AND 100),
+    starts_at     timestamptz,
+    sort_order    integer NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS tournament_phases_tournament_idx ON tournament_phases (tournament_id);
+
+-- Clanes inscritos en un torneo, con su grupo ('' = sin grupo). Los grupos y los
+-- inscritos en cero solo se usan en la PRIMERA fase.
+CREATE TABLE IF NOT EXISTS tournament_teams (
+    tournament_id integer NOT NULL REFERENCES tournaments (id) ON DELETE CASCADE,
+    clan_id       integer NOT NULL REFERENCES clans (id) ON DELETE CASCADE,
+    group_name    text NOT NULL DEFAULT '' CHECK (length(group_name) <= 24),
+    PRIMARY KEY (tournament_id, clan_id)
+);
+
+-- Datos manuales de una partida de torneo: clan de cada lado (NULL = automatico),
+-- "no cuenta", fase (NULL = automatica por fecha) y ronda ('' = sin ronda).
+CREATE TABLE IF NOT EXISTS tournament_match_sides (
+    match_id   text PRIMARY KEY REFERENCES matches (id) ON DELETE CASCADE,
+    clan0_id   integer REFERENCES clans (id) ON DELETE SET NULL,
+    clan1_id   integer REFERENCES clans (id) ON DELETE SET NULL,
+    excluded   boolean NOT NULL DEFAULT false,
+    phase_id   integer REFERENCES tournament_phases (id) ON DELETE SET NULL,
+    round      text NOT NULL DEFAULT '' CHECK (length(round) <= 32),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    updated_by text
+);
+
+-- Pedidos de cambio de torneo de una partida (D23). Los crea el panel admin
+-- (tournament_event_request) y los aplica el ingestor (apply_event_changes + recalculo).
+-- new_event '' = sacar del torneo (partida normal).
+CREATE TABLE IF NOT EXISTS match_event_changes (
+    id           serial PRIMARY KEY,
+    match_id     text NOT NULL REFERENCES matches (id) ON DELETE CASCADE,
+    new_event    text NOT NULL CHECK (length(new_event) <= 64),
+    requested_by text,
+    requested_at timestamptz NOT NULL DEFAULT now(),
+    applied_at   timestamptz
+);
+CREATE INDEX IF NOT EXISTS match_event_changes_pending_idx
+    ON match_event_changes (match_id) WHERE applied_at IS NULL;
+
 -- para ladder_streak (top N sin recorrer toda la tabla)
 CREATE INDEX IF NOT EXISTS match_players_streak_idx ON match_players (best_streak DESC);
 
@@ -1425,6 +1504,524 @@ BEGIN
     END IF;
 END $$;
 
+DROP VIEW IF EXISTS v_tournaments;
+DROP FUNCTION IF EXISTS tournament_standings(text);
+DROP FUNCTION IF EXISTS tournament_series(text);
+DROP FUNCTION IF EXISTS tournament_sides(text);
+
+-- Torneos: fichas + claves usadas en partidas sin ficha (D4, D18).
+CREATE VIEW v_tournaments AS
+SELECT t.id,
+       coalesce(t.event, e.event)                          AS event,
+       coalesce(nullif(t.name, ''), t.event, e.event)      AS name,
+       CASE WHEN t.id IS NOT NULL THEN t.status
+            WHEN e.last_match >= now() - interval '7 days' THEN 'live'
+            ELSE 'finished' END                            AS status,
+       t.starts_on, t.ends_on,
+       coalesce(t.format, '')      AS format,
+       coalesce(t.description, '') AS description,
+       coalesce(t.rules_url, '')   AS rules_url,
+       coalesce(t.logo_url, '')    AS logo_url,
+       t.champion_id, t.runner_up_id,
+       coalesce(t.visible, true)   AS visible,
+       t.id IS NOT NULL            AS registered,
+       (SELECT count(*) FROM tournament_phases p WHERE p.tournament_id = t.id) AS phases,
+       coalesce(e.matches, 0)      AS matches,
+       e.first_match, e.last_match,
+       coalesce(e.maps, '{}')      AS maps,
+       t.updated_at, t.updated_by
+  FROM tournaments t
+  FULL JOIN v_events e ON e.event = t.event;
+
+-- Clan, fase y ronda de cada partida de un torneo (D7 automatico, D8 correccion, D22 fase).
+-- counted: la partida suma a cruces y tabla (D9). Es la UNICA definicion de "cuenta":
+-- la usan tournament_series, tournament_standings, el backend y el mantenedor.
+-- overridden: el admin fijo un clan o la marco "no cuenta" (fase o ronda no cuentan).
+-- phase_id NULL solo si el torneo no tiene ficha.
+CREATE FUNCTION tournament_sides(p_event text)
+RETURNS TABLE (match_id text, detected0 integer, detected1 integer,
+               clan0_id integer, clan1_id integer, excluded boolean,
+               overridden boolean, counted boolean, phase_id integer,
+               phase_manual boolean, round text)
+LANGUAGE sql STABLE AS $$
+    WITH t AS (SELECT id FROM tournaments WHERE event = p_event),
+    ph AS (
+        SELECT p.id, p.sort_order,
+               CASE WHEN row_number() OVER (ORDER BY p.sort_order, p.id) = 1 THEN '-infinity'::timestamptz
+                    ELSE coalesce(p.starts_at, '-infinity') END AS since
+          FROM tournament_phases p JOIN t ON t.id = p.tournament_id
+    ),
+    pool AS (
+        SELECT tt.clan_id FROM tournament_teams tt JOIN t ON t.id = tt.tournament_id
+        UNION
+        SELECT c.id FROM clans c
+         WHERE c.active AND NOT c.unregistered
+           AND NOT EXISTS (SELECT 1 FROM tournament_teams tt JOIN t ON t.id = tt.tournament_id)
+    ),
+    side AS (
+        SELECT mp.match_id, mp.team, count(*) AS humans
+          FROM matches m
+          JOIN match_players mp ON mp.match_id = m.id
+          JOIN players p ON p.id = mp.player_id AND NOT p.is_bot
+         WHERE m.event = p_event AND mp.team IN (0, 1)
+         GROUP BY mp.match_id, mp.team
+    ),
+    votes AS (
+        SELECT mp.match_id, mp.team, pc.clan_id, count(*) AS n
+          FROM matches m
+          JOIN match_players mp ON mp.match_id = m.id
+          JOIN v_player_clan pc ON pc.player_id = mp.player_id
+          JOIN pool ON pool.clan_id = pc.clan_id
+         WHERE m.event = p_event AND mp.team IN (0, 1)
+         GROUP BY mp.match_id, mp.team, pc.clan_id
+    ),
+    best AS (
+        SELECT v.match_id, v.team, v.clan_id
+          FROM votes v
+          JOIN side s ON s.match_id = v.match_id AND s.team = v.team
+         WHERE 2 * v.n >= s.humans
+           AND NOT EXISTS (SELECT 1 FROM votes o
+                            WHERE o.match_id = v.match_id AND o.team = v.team
+                              AND o.clan_id <> v.clan_id AND o.n >= v.n)
+    ),
+    r AS (
+        SELECT m.id, m.winner, m.end_reason, b0.clan_id AS d0, b1.clan_id AS d1,
+               coalesce(o.clan0_id, b0.clan_id) AS c0, coalesce(o.clan1_id, b1.clan_id) AS c1,
+               coalesce(o.excluded, false) AS ex,
+               (o.clan0_id IS NOT NULL OR o.clan1_id IS NOT NULL OR coalesce(o.excluded, false)) AS ov,
+               coalesce(o.phase_id,
+                        (SELECT ph.id FROM ph WHERE ph.since <= m.started_at
+                          ORDER BY ph.since DESC, ph.sort_order DESC, ph.id DESC LIMIT 1)) AS pid,
+               o.phase_id IS NOT NULL AS pm,
+               coalesce(o.round, '') AS rd
+          FROM matches m
+          LEFT JOIN best b0 ON b0.match_id = m.id AND b0.team = 0
+          LEFT JOIN best b1 ON b1.match_id = m.id AND b1.team = 1
+          LEFT JOIN tournament_match_sides o ON o.match_id = m.id
+         WHERE m.event = p_event
+    )
+    SELECT r.id, r.d0, r.d1, r.c0, r.c1, r.ex, r.ov,
+           coalesce(NOT r.ex AND r.c0 IS NOT NULL AND r.c1 IS NOT NULL AND r.c0 <> r.c1
+                    AND r.winner IN (-1, 0, 1) AND r.end_reason IS DISTINCT FROM 'aborted',
+                    false),
+           r.pid, r.pm, r.rd
+      FROM r;
+$$;
+
+-- Cruces de un torneo (D19, D20): partidas que cuentan entre el mismo par de clanes, en
+-- la misma fase y la misma ronda. clan_a = el id menor del par. winner_id NULL = empate.
+-- by_frags: el ganador salio por frags porque empataron en mapas.
+CREATE FUNCTION tournament_series(p_event text)
+RETURNS TABLE (phase_id integer, round text, clan_a integer, clan_b integer, matches bigint,
+               maps_a bigint, maps_b bigint, map_draws bigint,
+               frags_a bigint, frags_b bigint, winner_id integer, by_frags boolean,
+               first_match timestamptz, last_match timestamptz)
+LANGUAGE sql STABLE AS $$
+    WITH c AS (
+        SELECT s.phase_id AS pid, s.round AS rd, m.started_at,
+               least(s.clan0_id, s.clan1_id) AS a, greatest(s.clan0_id, s.clan1_id) AS b,
+               CASE WHEN m.winner = -1 THEN NULL
+                    WHEN m.winner = 0 THEN s.clan0_id ELSE s.clan1_id END AS won_by,
+               CASE WHEN s.clan0_id < s.clan1_id THEN coalesce(m.team0_kills, 0)
+                    ELSE coalesce(m.team1_kills, 0) END AS fa,
+               CASE WHEN s.clan0_id < s.clan1_id THEN coalesce(m.team1_kills, 0)
+                    ELSE coalesce(m.team0_kills, 0) END AS fb
+          FROM tournament_sides(p_event) s
+          JOIN matches m ON m.id = s.match_id
+         WHERE s.counted
+    ),
+    g AS (
+        SELECT pid, rd, a, b, count(*) AS n,
+               count(*) FILTER (WHERE won_by = a) AS ma,
+               count(*) FILTER (WHERE won_by = b) AS mb,
+               count(*) FILTER (WHERE won_by IS NULL) AS md,
+               sum(fa)::bigint AS fa, sum(fb)::bigint AS fb,
+               min(started_at) AS f, max(started_at) AS l
+          FROM c
+         GROUP BY pid, rd, a, b
+    )
+    SELECT pid, rd, a, b, n, ma, mb, md, fa, fb,
+           CASE WHEN ma > mb THEN a WHEN mb > ma THEN b
+                WHEN fa > fb THEN a WHEN fb > fa THEN b END,
+           (ma = mb AND fa <> fb),
+           f, l
+      FROM g;
+$$;
+
+-- Tabla de posiciones por fase (D21). Se calcula para todas las fases de la ficha; la app
+-- solo la muestra en las de liga. En la PRIMERA fase incluye a los inscritos que aun no
+-- juegan y sus grupos; en las demas, solo a los clanes que jugaron (sin grupo).
+-- points_per = 'match': una fila por mapa; 'series': una fila por cruce.
+CREATE FUNCTION tournament_standings(p_event text)
+RETURNS TABLE (phase_id integer, group_name text, clan_id integer, played bigint,
+               wins bigint, draws bigint, losses bigint, frags_for bigint,
+               frags_against bigint, points bigint)
+LANGUAGE sql STABLE AS $$
+    WITH t AS (SELECT * FROM tournaments WHERE event = p_event),
+    ph AS (
+        SELECT p.*, row_number() OVER (ORDER BY p.sort_order, p.id) = 1 AS is_first
+          FROM tournament_phases p JOIN t ON t.id = p.tournament_id
+    ),
+    c AS (
+        SELECT s.phase_id AS pid, s.clan0_id, s.clan1_id, m.winner,
+               coalesce(m.team0_kills, 0) AS k0, coalesce(m.team1_kills, 0) AS k1
+          FROM tournament_sides(p_event) s
+          JOIN matches m ON m.id = s.match_id
+          JOIN ph ON ph.id = s.phase_id AND ph.points_per = 'match'
+         WHERE s.counted
+    ),
+    sr AS (
+        SELECT x.* FROM tournament_series(p_event) x
+          JOIN ph ON ph.id = x.phase_id AND ph.points_per = 'series'
+    ),
+    per AS (
+        SELECT pid, clan0_id AS clan_id,
+               CASE winner WHEN 0 THEN 'W' WHEN 1 THEN 'L' ELSE 'D' END AS r, k0 AS ff, k1 AS fa
+          FROM c
+        UNION ALL
+        SELECT pid, clan1_id, CASE winner WHEN 1 THEN 'W' WHEN 0 THEN 'L' ELSE 'D' END, k1, k0
+          FROM c
+        UNION ALL
+        SELECT sr.phase_id, clan_a,
+               CASE WHEN winner_id IS NULL THEN 'D' WHEN winner_id = clan_a THEN 'W' ELSE 'L' END,
+               frags_a, frags_b
+          FROM sr
+        UNION ALL
+        SELECT sr.phase_id, clan_b,
+               CASE WHEN winner_id IS NULL THEN 'D' WHEN winner_id = clan_b THEN 'W' ELSE 'L' END,
+               frags_b, frags_a
+          FROM sr
+    ),
+    teams AS (
+        SELECT ph.id AS pid, tt.clan_id, tt.group_name
+          FROM ph JOIN tournament_teams tt ON tt.tournament_id = ph.tournament_id
+         WHERE ph.is_first
+        UNION
+        SELECT DISTINCT per.pid, per.clan_id, coalesce(g.group_name, '')
+          FROM per
+          JOIN ph ON ph.id = per.pid
+          LEFT JOIN tournament_teams g
+                 ON ph.is_first AND g.tournament_id = ph.tournament_id AND g.clan_id = per.clan_id
+    )
+    SELECT tm.pid, tm.group_name, tm.clan_id,
+           count(per.r),
+           count(*) FILTER (WHERE per.r = 'W'),
+           count(*) FILTER (WHERE per.r = 'D'),
+           count(*) FILTER (WHERE per.r = 'L'),
+           coalesce(sum(per.ff), 0)::bigint,
+           coalesce(sum(per.fa), 0)::bigint,
+           (count(*) FILTER (WHERE per.r = 'W') * ph.points_win
+            + count(*) FILTER (WHERE per.r = 'D') * ph.points_draw
+            + count(*) FILTER (WHERE per.r = 'L') * ph.points_loss)::bigint
+      FROM teams tm
+      JOIN ph ON ph.id = tm.pid
+      LEFT JOIN per ON per.pid = tm.pid AND per.clan_id = tm.clan_id
+     GROUP BY tm.pid, tm.group_name, tm.clan_id, ph.points_win, ph.points_draw, ph.points_loss;
+$$;
+
+-- Escritura de torneos: unica via para el rol dday_clans (SECURITY DEFINER), mismo
+-- patron que clan_save / clan_delete. p_id NULL crea la ficha. p_phases: arreglo en orden
+-- (1 a 10); un elemento con id actualiza esa fase, sin id (null) crea una nueva, y las
+-- fases que no vienen se borran. La primera fase siempre queda con starts_at NULL.
+-- p_teams: [{clan_id, group}]. Clave repetida: 23505. Clan inexistente: 23503.
+CREATE OR REPLACE FUNCTION tournament_save(p_id integer, p_data jsonb, p_phases jsonb,
+                                           p_teams jsonb, p_admin text)
+RETURNS integer
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+    v_id    integer;
+    v_old   text;
+    v_new   text := p_data->>'event';
+    v_keep  integer[];
+    v_ph    record;
+BEGIN
+    IF p_phases IS NULL OR jsonb_typeof(p_phases) <> 'array'
+       OR jsonb_array_length(p_phases) NOT BETWEEN 1 AND 10 THEN
+        RAISE EXCEPTION 'el torneo necesita de 1 a 10 fases' USING ERRCODE = '22023';
+    END IF;
+    IF p_id IS NULL THEN
+        INSERT INTO tournaments (event, name, status, starts_on, ends_on, format, description,
+                                 rules_url, logo_url, champion_id, runner_up_id, visible,
+                                 updated_by)
+        VALUES (v_new, coalesce(p_data->>'name', ''),
+                coalesce(p_data->>'status', 'upcoming'),
+                nullif(p_data->>'starts_on', '')::date, nullif(p_data->>'ends_on', '')::date,
+                coalesce(p_data->>'format', ''), coalesce(p_data->>'description', ''),
+                coalesce(p_data->>'rules_url', ''), coalesce(p_data->>'logo_url', ''),
+                nullif(p_data->>'champion_id', '')::integer,
+                nullif(p_data->>'runner_up_id', '')::integer,
+                coalesce((p_data->>'visible')::boolean, true), p_admin)
+        RETURNING id INTO v_id;
+    ELSE
+        SELECT event INTO v_old FROM tournaments WHERE id = p_id;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'el torneo % no existe', p_id USING ERRCODE = 'no_data_found';
+        END IF;
+        IF v_new IS DISTINCT FROM v_old AND (
+               EXISTS (SELECT 1 FROM matches WHERE event = v_old)
+            OR EXISTS (SELECT 1 FROM match_event_changes c
+                        WHERE c.applied_at IS NULL AND c.new_event = v_old)) THEN
+            RAISE EXCEPTION 'el torneo ya tiene partidas' USING ERRCODE = '55006';
+        END IF;
+        UPDATE tournaments SET
+            event = v_new, name = coalesce(p_data->>'name', ''),
+            status = coalesce(p_data->>'status', 'upcoming'),
+            starts_on = nullif(p_data->>'starts_on', '')::date,
+            ends_on = nullif(p_data->>'ends_on', '')::date,
+            format = coalesce(p_data->>'format', ''),
+            description = coalesce(p_data->>'description', ''),
+            rules_url = coalesce(p_data->>'rules_url', ''),
+            logo_url = coalesce(p_data->>'logo_url', ''),
+            champion_id = nullif(p_data->>'champion_id', '')::integer,
+            runner_up_id = nullif(p_data->>'runner_up_id', '')::integer,
+            visible = coalesce((p_data->>'visible')::boolean, true),
+            updated_at = now(), updated_by = p_admin
+         WHERE id = p_id
+        RETURNING id INTO v_id;
+        IF v_id IS NULL THEN
+            RAISE EXCEPTION 'el torneo % no existe', p_id USING ERRCODE = 'no_data_found';
+        END IF;
+    END IF;
+
+    -- Fases: todo id que venga debe ser de este torneo.
+    SELECT coalesce(array_agg(nullif(x->>'id', '')::integer)
+                    FILTER (WHERE nullif(x->>'id', '') IS NOT NULL), '{}')
+      INTO v_keep FROM jsonb_array_elements(p_phases) x;
+    IF EXISTS (SELECT 1 FROM unnest(v_keep) k
+                WHERE NOT EXISTS (SELECT 1 FROM tournament_phases f
+                                   WHERE f.id = k AND f.tournament_id = v_id)) THEN
+        RAISE EXCEPTION 'una fase no pertenece a este torneo' USING ERRCODE = '22023';
+    END IF;
+    DELETE FROM tournament_phases f
+     WHERE f.tournament_id = v_id AND f.id <> ALL (v_keep);
+    FOR v_ph IN
+        SELECT x, ord FROM jsonb_array_elements(p_phases) WITH ORDINALITY AS t(x, ord)
+    LOOP
+        IF nullif(v_ph.x->>'id', '') IS NOT NULL THEN
+            UPDATE tournament_phases SET
+                name = coalesce(v_ph.x->>'name', ''),
+                scoring = coalesce(v_ph.x->>'scoring', 'league'),
+                points_per = coalesce(v_ph.x->>'points_per', 'match'),
+                points_win = coalesce((v_ph.x->>'points_win')::integer, 3),
+                points_draw = coalesce((v_ph.x->>'points_draw')::integer, 1),
+                points_loss = coalesce((v_ph.x->>'points_loss')::integer, 0),
+                starts_at = CASE WHEN v_ph.ord = 1 THEN NULL
+                                 ELSE nullif(v_ph.x->>'starts_at', '')::timestamptz END,
+                sort_order = v_ph.ord
+             WHERE id = (v_ph.x->>'id')::integer AND tournament_id = v_id;
+        ELSE
+            INSERT INTO tournament_phases (tournament_id, name, scoring, points_per,
+                                           points_win, points_draw, points_loss,
+                                           starts_at, sort_order)
+            VALUES (v_id, coalesce(v_ph.x->>'name', ''),
+                    coalesce(v_ph.x->>'scoring', 'league'),
+                    coalesce(v_ph.x->>'points_per', 'match'),
+                    coalesce((v_ph.x->>'points_win')::integer, 3),
+                    coalesce((v_ph.x->>'points_draw')::integer, 1),
+                    coalesce((v_ph.x->>'points_loss')::integer, 0),
+                    CASE WHEN v_ph.ord = 1 THEN NULL
+                         ELSE nullif(v_ph.x->>'starts_at', '')::timestamptz END,
+                    v_ph.ord);
+        END IF;
+    END LOOP;
+
+    DELETE FROM tournament_teams WHERE tournament_id = v_id;
+    INSERT INTO tournament_teams (tournament_id, clan_id, group_name)
+    SELECT v_id, (x->>'clan_id')::integer, coalesce(x->>'group', '')
+      FROM jsonb_array_elements(coalesce(p_teams, '[]')) x;
+    RETURN v_id;
+END $$;
+
+-- Borra una ficha (fases e inscritos se van en cascada) y los datos manuales de sus
+-- partidas. No borra partidas. true si existia.
+CREATE OR REPLACE FUNCTION tournament_delete(p_id integer) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+    v_event text;
+BEGIN
+    SELECT event INTO v_event FROM tournaments WHERE id = p_id;
+    IF NOT FOUND THEN
+        RETURN false;
+    END IF;
+    DELETE FROM tournament_match_sides
+     WHERE match_id IN (SELECT id FROM matches WHERE event = v_event);
+    DELETE FROM tournaments WHERE id = p_id;
+    RETURN FOUND;
+END $$;
+
+-- Borra las filas de tournament_match_sides que quedaron vacias. Solo la llaman las
+-- otras funciones de torneos (sin GRANT a nadie). Devuelve cuantas borro.
+CREATE OR REPLACE FUNCTION tournament_side_prune(p_match_ids text[]) RETURNS integer
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_n integer;
+BEGIN
+    DELETE FROM tournament_match_sides
+     WHERE match_id = ANY (p_match_ids)
+       AND clan0_id IS NULL AND clan1_id IS NULL AND NOT excluded
+       AND phase_id IS NULL AND round = '';
+    GET DIAGNOSTICS v_n = ROW_COUNT;
+    RETURN v_n;
+END $$;
+
+-- Fija el clan de cada lado de una partida de torneo y/o la marca "no cuenta". NULL en un
+-- clan = automatico. No toca la fase ni la ronda.
+CREATE OR REPLACE FUNCTION tournament_side_save(p_match_id text, p_clan0 integer,
+                                                p_clan1 integer, p_excluded boolean,
+                                                p_admin text)
+RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM matches WHERE id = p_match_id AND event <> '') THEN
+        RAISE EXCEPTION 'la partida % no existe o no es de un torneo', p_match_id
+            USING ERRCODE = 'no_data_found';
+    END IF;
+    INSERT INTO tournament_match_sides (match_id, clan0_id, clan1_id, excluded, updated_by)
+    VALUES (p_match_id, p_clan0, p_clan1, coalesce(p_excluded, false), p_admin)
+    ON CONFLICT (match_id) DO UPDATE SET
+        clan0_id = EXCLUDED.clan0_id, clan1_id = EXCLUDED.clan1_id,
+        excluded = EXCLUDED.excluded, updated_at = now(), updated_by = EXCLUDED.updated_by;
+    RETURN true;
+END $$;
+
+-- Vuelve a lo automatico los clanes y el "no cuenta" de una partida, sin perder su fase ni
+-- su ronda. true si habia fila.
+CREATE OR REPLACE FUNCTION tournament_side_clear(p_match_id text) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+    v_found boolean;
+BEGIN
+    UPDATE tournament_match_sides
+       SET clan0_id = NULL, clan1_id = NULL, excluded = false, updated_at = now()
+     WHERE match_id = p_match_id;
+    v_found := FOUND;
+    PERFORM tournament_side_prune(ARRAY[p_match_id]);
+    RETURN v_found;
+END $$;
+
+-- Pone fase (NULL = automatica por fecha) y ronda ('' = sin ronda) a varias partidas (las
+-- de un cruce). Todas deben existir y ser del mismo torneo. No toca clanes ni "no cuenta".
+-- Devuelve cuantas partidas actualizo.
+CREATE OR REPLACE FUNCTION tournament_assign_save(p_match_ids text[], p_phase_id integer,
+                                                  p_round text, p_admin text)
+RETURNS integer
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+    v_ids    text[];
+    v_event  text;
+    v_events integer;
+    v_found  integer;
+    v_round  text := trim(coalesce(p_round, ''));
+    v_n      integer;
+BEGIN
+    SELECT coalesce(array_agg(DISTINCT i), '{}') INTO v_ids FROM unnest(p_match_ids) i;
+    IF cardinality(v_ids) = 0 THEN
+        RAISE EXCEPTION 'faltan partidas' USING ERRCODE = 'no_data_found';
+    END IF;
+    SELECT count(*), count(DISTINCT m.event), min(m.event)
+      INTO v_found, v_events, v_event
+      FROM matches m WHERE m.id = ANY (v_ids);
+    IF v_found <> cardinality(v_ids) OR v_events <> 1 OR v_event = '' THEN
+        RAISE EXCEPTION 'las partidas deben existir y ser del mismo torneo'
+            USING ERRCODE = 'no_data_found';
+    END IF;
+    IF p_phase_id IS NOT NULL AND NOT EXISTS (
+           SELECT 1 FROM tournament_phases f JOIN tournaments t ON t.id = f.tournament_id
+            WHERE f.id = p_phase_id AND t.event = v_event) THEN
+        RAISE EXCEPTION 'la fase no es de este torneo' USING ERRCODE = '22023';
+    END IF;
+    INSERT INTO tournament_match_sides (match_id, phase_id, round, updated_by)
+    SELECT i, p_phase_id, v_round, p_admin FROM unnest(v_ids) i
+    ON CONFLICT (match_id) DO UPDATE SET
+        phase_id = EXCLUDED.phase_id, round = EXCLUDED.round,
+        updated_at = now(), updated_by = EXCLUDED.updated_by;
+    GET DIAGNOSTICS v_n = ROW_COUNT;
+    PERFORM tournament_side_prune(v_ids);
+    RETURN v_n;
+END $$;
+
+-- Pedido de cambio de torneo (D23) para 1 a 100 partidas: p_event '' = sacar del torneo, o
+-- el event de una ficha existente. No cambia matches: lo aplica el ingestor
+-- (apply_event_changes). Devuelve cuantos pedidos creo; las partidas que ya son de p_event
+-- no crean pedido (y cancelan uno pendiente que hubiera).
+CREATE OR REPLACE FUNCTION tournament_event_request(p_match_ids text[], p_event text,
+                                                    p_admin text)
+RETURNS integer
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+    v_event text := trim(coalesce(p_event, ''));
+    v_ids   text[];
+    v_n     integer;
+BEGIN
+    IF v_event <> '' AND NOT EXISTS (SELECT 1 FROM tournaments WHERE event = v_event) THEN
+        RAISE EXCEPTION 'el torneo no tiene ficha' USING ERRCODE = '22023';
+    END IF;
+    SELECT coalesce(array_agg(DISTINCT i), '{}') INTO v_ids FROM unnest(p_match_ids) i;
+    IF cardinality(v_ids) NOT BETWEEN 1 AND 100 THEN
+        RAISE EXCEPTION 'se piden de 1 a 100 partidas' USING ERRCODE = '22023';
+    END IF;
+    IF (SELECT count(*) FROM matches WHERE id = ANY (v_ids)) <> cardinality(v_ids) THEN
+        RAISE EXCEPTION 'alguna partida no existe' USING ERRCODE = 'no_data_found';
+    END IF;
+    DELETE FROM match_event_changes c
+     WHERE c.applied_at IS NULL AND c.match_id = ANY (v_ids);
+    INSERT INTO match_event_changes (match_id, new_event, requested_by)
+    SELECT m.id, v_event, p_admin FROM matches m
+     WHERE m.id = ANY (v_ids) AND m.event <> v_event;
+    GET DIAGNOSTICS v_n = ROW_COUNT;
+    RETURN v_n;
+END $$;
+
+-- Aplica los pedidos pendientes de cambio de torneo (el mas reciente de cada partida):
+-- cambia matches.event, borra los datos manuales de las partidas que cambiaron y marca los
+-- pedidos como aplicados. Devuelve cuantas partidas cambiaron. Sin SECURITY DEFINER y sin
+-- GRANT: la ejecuta el ingestor (dueno), que despues recalcula resumenes y Elo.
+CREATE OR REPLACE FUNCTION apply_event_changes() RETURNS integer
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_n integer;
+BEGIN
+    WITH pend AS (
+        SELECT DISTINCT ON (match_id) match_id, new_event
+          FROM match_event_changes
+         WHERE applied_at IS NULL
+         ORDER BY match_id, requested_at DESC, id DESC
+    ), chg AS (
+        UPDATE matches m SET event = p.new_event
+          FROM pend p
+         WHERE m.id = p.match_id AND m.event <> p.new_event
+        RETURNING m.id
+    ), del AS (
+        DELETE FROM tournament_match_sides WHERE match_id IN (SELECT id FROM chg)
+    ), mark AS (
+        UPDATE match_event_changes SET applied_at = now()
+         WHERE applied_at IS NULL AND match_id IN (SELECT match_id FROM pend)
+    )
+    SELECT count(*) INTO v_n FROM chg;
+    RETURN v_n;
+END $$;
+
+-- Permisos: igual que clanes. tournament_side_prune y apply_event_changes no se dan a nadie.
+REVOKE ALL ON FUNCTION tournament_save(integer, jsonb, jsonb, jsonb, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION tournament_delete(integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION tournament_side_save(text, integer, integer, boolean, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION tournament_side_clear(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION tournament_assign_save(text[], integer, text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION tournament_side_prune(text[]) FROM PUBLIC;
+REVOKE ALL ON FUNCTION tournament_event_request(text[], text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION apply_event_changes() FROM PUBLIC;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'dday_clans') THEN
+        GRANT EXECUTE ON FUNCTION tournament_save(integer, jsonb, jsonb, jsonb, text) TO dday_clans;
+        GRANT EXECUTE ON FUNCTION tournament_delete(integer) TO dday_clans;
+        GRANT EXECUTE ON FUNCTION tournament_side_save(text, integer, integer, boolean, text) TO dday_clans;
+        GRANT EXECUTE ON FUNCTION tournament_side_clear(text) TO dday_clans;
+        GRANT EXECUTE ON FUNCTION tournament_assign_save(text[], integer, text, text) TO dday_clans;
+        GRANT EXECUTE ON FUNCTION tournament_event_request(text[], text, text) TO dday_clans;
+    END IF;
+END $$;
+
 ------------------------------------------------------------------------------
 -- Comentarios del esquema (se ven en psql con \d+ y en clientes como
 -- Beekeeper/DBeaver/pgAdmin). Idempotente: se pueden reaplicar.
@@ -1724,5 +2321,71 @@ COMMENT ON FUNCTION clan_duels(text, text, integer) IS 'Duelos de clanes: partid
 COMMENT ON FUNCTION clan_preview(integer, text[]) IS 'Vista previa del mantenedor: nicks humanos que quedarian en un clan (o en uno nuevo si el id es NULL) con los tags indicados, y el clan del que vendrian.';
 COMMENT ON FUNCTION clan_save(integer, text[], jsonb, text) IS 'Crea (id NULL) o edita un clan y reemplaza sus tags (el primero es el principal). SECURITY DEFINER: es la unica via de escritura para dday_clans. Un tag repetido da el error 23505.';
 COMMENT ON FUNCTION clan_delete(integer) IS 'Borra un clan y sus tags; true si existia. SECURITY DEFINER.';
+
+COMMENT ON TABLE tournaments IS 'Fichas de torneo del Ladder Test (se editan desde el panel de administrador; escritura solo por tournament_save / tournament_delete). La clave es el valor de stats_event (matches.event).';
+COMMENT ON COLUMN tournaments.id IS 'Clave interna de la ficha.';
+COMMENT ON COLUMN tournaments.event IS 'Clave del torneo = cvar stats_event = matches.event (unica, 1 a 64 caracteres).';
+COMMENT ON COLUMN tournaments.name IS 'Nombre para mostrar (vacio = se usa la clave).';
+COMMENT ON COLUMN tournaments.status IS 'Estado puesto por el administrador: upcoming, live o finished.';
+COMMENT ON COLUMN tournaments.starts_on IS 'Fecha de inicio (opcional).';
+COMMENT ON COLUMN tournaments.ends_on IS 'Fecha de fin (opcional; no anterior al inicio).';
+COMMENT ON COLUMN tournaments.format IS 'Formato en texto libre corto, p. ej. Liga ida y vuelta.';
+COMMENT ON COLUMN tournaments.description IS 'Descripcion del torneo.';
+COMMENT ON COLUMN tournaments.rules_url IS 'URL https de las bases.';
+COMMENT ON COLUMN tournaments.logo_url IS 'URL https del logo (puede ser un enlace de Drive); vacio = sin logo.';
+COMMENT ON COLUMN tournaments.champion_id IS 'Clan campeon (opcional; NULL si el clan se borra).';
+COMMENT ON COLUMN tournaments.runner_up_id IS 'Clan subcampeon (opcional; NULL si el clan se borra).';
+COMMENT ON COLUMN tournaments.visible IS 'false = oculto en la app publica.';
+COMMENT ON COLUMN tournaments.created_at IS 'Cuando se creo la ficha.';
+COMMENT ON COLUMN tournaments.updated_at IS 'Ultima edicion.';
+COMMENT ON COLUMN tournaments.updated_by IS 'Quien hizo la ultima edicion (administrador).';
+
+COMMENT ON TABLE tournament_phases IS 'Fases de un torneo (1 a 10, en orden), cada una con su modalidad. Una partida cae en la fase con el starts_at mas reciente que no sea posterior a ella; la primera fase siempre empieza desde el inicio.';
+COMMENT ON COLUMN tournament_phases.id IS 'Clave interna de la fase.';
+COMMENT ON COLUMN tournament_phases.tournament_id IS 'Torneo al que pertenece (se borra en cascada con la ficha).';
+COMMENT ON COLUMN tournament_phases.name IS 'Nombre de la fase (1 a 40 caracteres).';
+COMMENT ON COLUMN tournament_phases.scoring IS 'Modalidad: league (tabla con puntos y cruces), knockout (eliminacion: cruces por ronda) o results (solo resultados).';
+COMMENT ON COLUMN tournament_phases.points_per IS 'Puntos de la liga por mapa (match) o por cruce (series).';
+COMMENT ON COLUMN tournament_phases.points_win IS 'Puntos por victoria (0 a 100).';
+COMMENT ON COLUMN tournament_phases.points_draw IS 'Puntos por empate (0 a 100).';
+COMMENT ON COLUMN tournament_phases.points_loss IS 'Puntos por derrota (0 a 100).';
+COMMENT ON COLUMN tournament_phases.starts_at IS 'Desde cuando rige la fase; NULL en la primera (desde el inicio).';
+COMMENT ON COLUMN tournament_phases.sort_order IS 'Posicion de la fase dentro del torneo (1 = primera).';
+
+COMMENT ON TABLE tournament_teams IS 'Clanes inscritos en un torneo, con su grupo. Los grupos y los inscritos sin partidas solo se usan en la primera fase.';
+COMMENT ON COLUMN tournament_teams.tournament_id IS 'Torneo (se borra en cascada con la ficha).';
+COMMENT ON COLUMN tournament_teams.clan_id IS 'Clan inscrito (se borra en cascada con el clan).';
+COMMENT ON COLUMN tournament_teams.group_name IS 'Grupo del clan (hasta 24 caracteres); vacio = sin grupo.';
+
+COMMENT ON TABLE tournament_match_sides IS 'Datos manuales de una partida de torneo: clan de cada lado, "no cuenta", fase y ronda. Se escribe con tournament_side_save / tournament_assign_save.';
+COMMENT ON COLUMN tournament_match_sides.match_id IS 'Partida (se borra en cascada con ella).';
+COMMENT ON COLUMN tournament_match_sides.clan0_id IS 'Clan fijado a mano para el equipo 0; NULL = automatico.';
+COMMENT ON COLUMN tournament_match_sides.clan1_id IS 'Clan fijado a mano para el equipo 1; NULL = automatico.';
+COMMENT ON COLUMN tournament_match_sides.excluded IS 'true = "no cuenta": sigue en el torneo (estadisticas) pero no suma a cruces ni tabla.';
+COMMENT ON COLUMN tournament_match_sides.phase_id IS 'Fase fijada a mano; NULL = automatica por fecha.';
+COMMENT ON COLUMN tournament_match_sides.round IS 'Ronda (etiqueta libre de hasta 32 caracteres, p. ej. Semifinal); vacio = sin ronda.';
+COMMENT ON COLUMN tournament_match_sides.updated_at IS 'Ultima edicion.';
+COMMENT ON COLUMN tournament_match_sides.updated_by IS 'Quien hizo la ultima edicion (administrador).';
+
+COMMENT ON TABLE match_event_changes IS 'Pedidos de cambio de torneo de una partida, creados por el panel admin (tournament_event_request) y aplicados por el ingestor (apply_event_changes).';
+COMMENT ON COLUMN match_event_changes.id IS 'Clave interna del pedido.';
+COMMENT ON COLUMN match_event_changes.match_id IS 'Partida (se borra en cascada con ella).';
+COMMENT ON COLUMN match_event_changes.new_event IS 'Torneo al que pasa la partida; vacio = sacarla del torneo (partida normal).';
+COMMENT ON COLUMN match_event_changes.requested_by IS 'Administrador que lo pidio.';
+COMMENT ON COLUMN match_event_changes.requested_at IS 'Cuando se pidio.';
+COMMENT ON COLUMN match_event_changes.applied_at IS 'Cuando lo aplico el ingestor; NULL = pendiente.';
+
+COMMENT ON VIEW v_tournaments IS 'Torneos: las fichas mas las claves usadas en partidas sin ficha (registered = false, estado deducido: live si la ultima partida fue hace 7 dias o menos).';
+COMMENT ON FUNCTION tournament_sides(text) IS 'Clan, fase y ronda de cada partida de un torneo: clan automatico por mayoria de humanos del lado (al menos la mitad, sin empate, entre los inscritos o los clanes activos), correcciones manuales y fase por fecha. counted es la unica definicion de "la partida cuenta" para cruces y tabla.';
+COMMENT ON FUNCTION tournament_series(text) IS 'Cruces de un torneo: partidas que cuentan entre el mismo par de clanes en la misma fase y ronda. Ganador por mapas, luego por frags (by_frags); winner_id NULL = empate.';
+COMMENT ON FUNCTION tournament_standings(text) IS 'Tabla de posiciones por fase y grupo (PJ, G, E, P, frags, puntos), por mapa o por cruce segun la fase. La app solo la muestra en las fases de liga.';
+COMMENT ON FUNCTION tournament_save(integer, jsonb, jsonb, jsonb, text) IS 'Crea (id NULL) o edita una ficha de torneo con sus fases y su lista de inscritos. SECURITY DEFINER: unica via de escritura para dday_clans. Clave repetida 23505; cambiar la clave con partidas 55006; fases invalidas 22023.';
+COMMENT ON FUNCTION tournament_delete(integer) IS 'Borra una ficha (fases e inscritos en cascada) y los datos manuales de sus partidas; no borra partidas. true si existia. SECURITY DEFINER.';
+COMMENT ON FUNCTION tournament_side_save(text, integer, integer, boolean, text) IS 'Fija el clan de cada lado de una partida de torneo y/o la marca "no cuenta" (no toca fase ni ronda). SECURITY DEFINER.';
+COMMENT ON FUNCTION tournament_side_clear(text) IS 'Vuelve a automatico los clanes y el "no cuenta" de una partida, sin perder fase ni ronda. SECURITY DEFINER.';
+COMMENT ON FUNCTION tournament_side_prune(text[]) IS 'Auxiliar: borra las filas vacias de tournament_match_sides. Sin permisos para nadie mas que el dueno.';
+COMMENT ON FUNCTION tournament_assign_save(text[], integer, text, text) IS 'Pone fase y ronda a varias partidas del mismo torneo (las de un cruce). SECURITY DEFINER.';
+COMMENT ON FUNCTION tournament_event_request(text[], text, text) IS 'Pide agregar partidas a un torneo (event de una ficha) o sacarlas (event vacio); lo aplica el ingestor. Devuelve cuantos pedidos creo. SECURITY DEFINER.';
+COMMENT ON FUNCTION apply_event_changes() IS 'Aplica los pedidos pendientes de match_event_changes (cambia matches.event y borra los datos manuales). Solo el dueno (ingestor); despues hay que recalcular resumenes y Elo.';
 
 COMMIT;
