@@ -1748,6 +1748,9 @@ struct gclient_s
 	float       sleep_next_z;			// level.time of the next "Z" over the sleeper
 	float       sleep_next_snore;		// level.time of his next snore
 	float       sleep_head;				// how far ahead of his origin his head lies (behind if < 0), with his yaw
+	float       sleep_head_z;			// the height of his face, from his origin
+	float       sleep_center;			// how far ahead of his origin the middle of his body lies (he wakes up there)
+	vec3_t      sleep_mins, sleep_maxs;	// his box while he sleeps: around his body, which lies away from his origin
 
 	qboolean    tank_hit;//faf
 
@@ -2135,12 +2138,9 @@ extern int jpn_index;
 #define SLEEP_Z_INTERVAL		0.7		// seconds between two Zs
 #define SLEEP_Z_FRAME_TIME		0.4		// seconds of every frame of a Z (it lives 3 frames)
 #define SLEEP_Z_RISE			18		// units a second that a Z goes up
-// where the head lies at the end of each death animation, measured in the player models (the same in all factions):
-// units ahead of the origin (with the yaw of the body; behind if < 0), and the height of the face
-#define SLEEP_HEAD_DEATH1		-72
-#define SLEEP_HEAD_DEATH2		41
-#define SLEEP_HEAD_DEATH3		-98
-#define SLEEP_HEAD_Z			-21
+#define SLEEP_BODY_HALF_WIDTH	14		// half the width of the box of a sleeper's body (without the arms)
+#define SLEEP_BODY_TOP			-10		// the top of that box, from his origin (24 over the floor)
+#define SLEEP_HEAD_RADIUS		12		// a hit this close to the head of a sleeper is a head wound
 #define SLEEP_SNORE_SOUND		"misc/snore.wav"	// 2.5 seconds
 #define SLEEP_SNORE_DELAY		0.4		// seconds after he falls asleep before the first snore
 #define SLEEP_SNORE_INTERVAL	2.7		// seconds between two snores

@@ -157,7 +157,13 @@ y cuando se recarga llega el mensaje `Sleep dart ready.`. Al reaparecer está li
 proyectil (la jeringa con brillo azul, más rápida y con menos caída): se puede esquivar.
 
 El **enemigo** que toca se cae de espaldas al piso (cuerpo a tierra, con una animación de
-muerte) y queda dormido `sleepdart_time` segundos:
+muerte) y queda dormido `sleepdart_time` segundos. La animación deja el cuerpo lejos de donde
+estaba parado (hasta 100 unidades), así que antes de caer el server prueba hacia dónde entra sin
+atravesar paredes ni a otros jugadores ni quedar colgando de un borde: hacia donde miraba, a los
+costados o hacia atrás (en ángulo recto). Si no entra para ningún lado, duerme boca abajo en el
+lugar. La caja que recibe los disparos va **donde está el cuerpo**; un tiro cerca de la cabeza
+es headshot y el resto cuenta como torso (igual que cuerpo a tierra). Al despertarse queda
+cuerpo a tierra donde estaba el cuerpo. Mientras duerme:
 
 - no se mueve, no salta ni dispara, y la vista le queda fija mirando hacia arriba;
 - no puede cambiar de arma, recargar, tirar cosas, cambiar de postura, pedir airstrike ni

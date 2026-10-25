@@ -483,6 +483,19 @@ int Damage_Loc(edict_t *targ, vec3_t point, edict_t *attacker)
 		targ->s.frame <= 294 )
 		return STOMACH_WOUND;
 
+	// asleep (sleep dart): he lies along the yaw of his view; near his head it is a head wound, as prone the rest
+	if (targ->client && targ->client->sleeping)
+	{
+		vec3_t	yaw, forward, head;
+
+		VectorSet (yaw, 0, targ->client->sleep_angles[YAW], 0);
+		AngleVectors (yaw, forward, NULL, NULL);
+		VectorMA (targ->s.origin, targ->client->sleep_head, forward, head);
+		VectorSubtract (point, head, head);
+		head[2] = 0;
+		return (VectorLength (head) < SLEEP_HEAD_RADIUS) ? HEAD_WOUND : STOMACH_WOUND;
+	}
+
 	
 	
 	switch (targ->stanceflags)

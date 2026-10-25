@@ -2639,10 +2639,96 @@ static qboolean SleepDart_CanSleep (edict_t *dart, edict_t *other)
 	return true;
 }
 
-// puts the victim to sleep: on the ground on his back, his view looking up; another dart makes it last longer
+// the poses of a sleeper, measured in the player models (the same in all factions), in model space (+x ahead of
+// his origin): the body lies between x0 and x1, the head at head and its face at head_z
+typedef struct
+{
+	int		first, last;	// frames
+	float	x0, x1, head, head_z;
+} sleep_pose_t;
+
+static const sleep_pose_t sleep_poses[] =
+{
+	{ FRAME_crawlidle01, FRAME_crawlidle01, -36, 21, 10, -16 },	// face down, prone: when no fall fits
+	{ FRAME_death101, FRAME_death106, -76, -26, -72, -21 },		// sleepdart_anim 1: on his back, far behind
+	{ FRAME_death201, FRAME_death206, -8, 44, 41, -21 },		// sleepdart_anim 2: ahead
+	{ FRAME_death301, FRAME_death308, -102, -52, -98, -21 },	// sleepdart_anim 3: a turn, far behind
+};
+
+// the body of pose p, lying along yaw, does not go through a wall, a door or a player, and does not hang over a
+// drop. A slope of the ground is fine: corpses also sink a little into it
+static qboolean Sleep_PoseFits (edict_t *ent, const sleep_pose_t *p, float yaw)
+{
+	vec3_t	angles, forward, right, start, end, down;
+	vec3_t	mins = {-4, -4, -4}, maxs = {4, 4, 4};
+	float	far = (fabs (p->x0) > fabs (p->x1)) ? p->x0 : p->x1;	// the end of the body farthest from him
+	trace_t	tr;
+	int		side;
+
+	VectorSet (angles, 0, yaw, 0);
+	AngleVectors (angles, forward, right, NULL);
+
+	// three lines 12 units over the floor, from him to the middle and to both sides of that end of the body
+	VectorCopy (ent->s.origin, start);
+	start[2] -= 12;
+	for (side = -1; side <= 1; side++)
+	{
+		VectorMA (start, far, forward, end);
+		VectorMA (end, side * SLEEP_BODY_HALF_WIDTH, right, end);
+		tr = gi.trace (start, mins, maxs, end, ent, MASK_SOLID);
+		if (tr.startsolid || (tr.fraction < 1.0 && ((tr.ent && tr.ent->client) || tr.plane.normal[2] < 0.7)))
+			return false;
+	}
+
+	// some ground under that end
+	VectorMA (start, far, forward, end);
+	VectorCopy (end, down);
+	down[2] -= 40;
+	tr = gi.trace (end, NULL, NULL, down, ent, MASK_SOLID);
+	return (tr.fraction < 1.0);
+}
+
+// his box while he sleeps: around the body of pose p lying along yaw
+static void Sleep_SetBox (gclient_t *client, const sleep_pose_t *p, float yaw)
+{
+	vec3_t	angles, forward, right, corner;
+	float	xs[2], ys[2];
+	int		i, j, k;
+
+	VectorSet (angles, 0, yaw, 0);
+	AngleVectors (angles, forward, right, NULL);
+	xs[0] = p->x0;
+	xs[1] = p->x1;
+	ys[0] = -SLEEP_BODY_HALF_WIDTH;
+	ys[1] = SLEEP_BODY_HALF_WIDTH;
+
+	VectorSet (client->sleep_mins, 9999, 9999, -24);
+	VectorSet (client->sleep_maxs, -9999, -9999, SLEEP_BODY_TOP);
+	for (i = 0; i < 2; i++)
+		for (j = 0; j < 2; j++)
+		{
+			VectorScale (forward, xs[i], corner);
+			VectorMA (corner, ys[j], right, corner);
+			for (k = 0; k < 2; k++)
+			{
+				if (corner[k] < client->sleep_mins[k])
+					client->sleep_mins[k] = corner[k];
+				if (corner[k] > client->sleep_maxs[k])
+					client->sleep_maxs[k] = corner[k];
+			}
+		}
+}
+
+// puts the victim to sleep: on the ground on his back, his view looking up; another dart makes it last longer.
+// The death animation leaves his body far from his origin, so he falls toward the first side where it fits
+// (ahead, the sides, behind; at right angles, so that his box fits his body); if none fits, he sleeps face down
 static void Sleep_Start (edict_t *victim)
 {
 	gclient_t	*client = victim->client;
+	static const float	turns[] = { 0, 90, -90, 180 };
+	const sleep_pose_t	*pose;
+	float		base, yaw;
+	int			anim, i;
 
 	if (client->sleeping)
 	{
@@ -2666,30 +2752,37 @@ static void Sleep_Start (edict_t *victim)
 	client->sleep_until = level.time + sleepdart_time->value;
 	client->sleep_next_z = level.time + 0.2;
 	client->sleep_next_snore = level.time + SLEEP_SNORE_DELAY;
-	VectorSet (client->sleep_angles, SLEEP_VIEW_PITCH, client->v_angle[YAW], 0);
 	client->ps.gunindex = 0;
 	client->ps.pmove.pm_flags |= PMF_NO_PREDICTION;	// the server holds his view
 
-	// a death animation that ends on his back; G_SetClientFrame leaves it on its last frame while he sleeps
+	// the fall: a death animation (sleepdart_anim) toward the first side where his body fits
+	anim = (int)sleepdart_anim->value;
+	if (anim < 1 || anim > 3)
+		anim = 1;
+	base = 90 * floor (client->v_angle[YAW] / 90 + 0.5);
+	pose = &sleep_poses[0];
+	yaw = base;
+	for (i = 0; i < 4; i++)
+		if (Sleep_PoseFits (victim, &sleep_poses[anim], base + turns[i]))
+		{
+			pose = &sleep_poses[anim];
+			yaw = base + turns[i];
+			break;
+		}
+
+	VectorSet (client->sleep_angles, SLEEP_VIEW_PITCH, yaw, 0);	// the model takes the yaw of his view
+	client->sleep_head = pose->head;
+	client->sleep_head_z = pose->head_z;
+	client->sleep_center = (pose->x0 + pose->x1) / 2;
+	Sleep_SetBox (client, pose, yaw);
+	VectorCopy (client->sleep_mins, victim->mins);
+	VectorCopy (client->sleep_maxs, victim->maxs);
+	gi.linkentity (victim);
+
+	// G_SetClientFrame plays it and leaves it on its last frame while he sleeps
 	client->anim_priority = ANIM_DEATH;
-	switch ((int)sleepdart_anim->value)
-	{
-	case 2:
-		victim->s.frame = FRAME_death201 - 1;
-		client->anim_end = FRAME_death206;
-		client->sleep_head = SLEEP_HEAD_DEATH2;
-		break;
-	case 3:
-		victim->s.frame = FRAME_death301 - 1;
-		client->anim_end = FRAME_death308;
-		client->sleep_head = SLEEP_HEAD_DEATH3;
-		break;
-	default:
-		victim->s.frame = FRAME_death101 - 1;
-		client->anim_end = FRAME_death106;
-		client->sleep_head = SLEEP_HEAD_DEATH1;
-		break;
-	}
+	victim->s.frame = (pose->first == pose->last) ? pose->first : pose->first - 1;
+	client->anim_end = pose->last;
 }
 
 // ends the sleep; woke is false when he died or left the game, and then nothing else is touched
@@ -2708,6 +2801,23 @@ void Sleep_End (edict_t *ent, qboolean woke)
 
 	if (!woke)
 		return;
+
+	// he gets up prone where his body lay, not where he stood
+	{
+		vec3_t	yaw, forward, end;
+		vec3_t	mins = {-16, -16, -24}, maxs = {16, 16, -15};	// prone (Set_Stance_Max)
+		trace_t	tr;
+
+		VectorSet (yaw, 0, client->sleep_angles[YAW], 0);
+		AngleVectors (yaw, forward, NULL, NULL);
+		VectorMA (ent->s.origin, client->sleep_center, forward, end);
+		tr = gi.trace (ent->s.origin, mins, maxs, end, ent, MASK_PLAYERSOLID);
+		if (!tr.startsolid && !tr.allsolid)
+			VectorCopy (tr.endpos, ent->s.origin);
+		VectorCopy (mins, ent->mins);
+		VectorCopy (maxs, ent->maxs);
+		gi.linkentity (ent);
+	}
 
 	// he looks ahead again; the mouse moved while he slept, so the view is set from his last command
 	VectorSet (angles, 0, client->sleep_angles[YAW], 0);
@@ -2872,7 +2982,7 @@ static void Sleep_SpawnZ (edict_t *ent)
 	VectorMA (ent->s.origin, ent->client->sleep_head, forward, z->s.origin);
 	z->s.origin[0] += crandom () * 3;
 	z->s.origin[1] += crandom () * 3;
-	z->s.origin[2] += SLEEP_HEAD_Z + 8;	// just over his face
+	z->s.origin[2] += ent->client->sleep_head_z + 8;	// just over his face
 	VectorSet (z->velocity, crandom () * 6, crandom () * 6, SLEEP_Z_RISE);
 
 	z->think = sleep_z_think;
