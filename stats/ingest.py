@@ -587,10 +587,14 @@ def apply_event_changes(conn, cfg):
         "SELECT EXISTS (SELECT 1 FROM match_event_changes WHERE applied_at IS NULL)").fetchone()[0]
     if not pending:
         return 0
-    changed = conn.execute("SELECT apply_event_changes()").fetchone()[0]
+    # todo en una transaccion: si el recalculo falla, los pedidos siguen pendientes
+    # y se reintentan en la proxima vuelta (nunca quedan aplicados a medias)
+    with conn.transaction():
+        changed = conn.execute("SELECT apply_event_changes()").fetchone()[0]
+        if changed:
+            conn.execute("SELECT rebuild_rollups()")
+            rebuild_ratings(conn, cfg)
     if changed:
-        conn.execute("SELECT rebuild_rollups()")
-        rebuild_ratings(conn, cfg)
         log.info("cambios de torneo aplicados: %d partidas; resumenes y Elo recalculados", changed)
     return changed
 
