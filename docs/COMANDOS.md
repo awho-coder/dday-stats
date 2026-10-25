@@ -90,7 +90,9 @@ Apagado por defecto: con `medic_new 0` el Medic es el clásico (la pistola de su
 solo la jeringa). Con `medic_new 1` el Medic de todas las facciones lleva:
 
 - la **Browning Hi-Power** en lugar de la pistola de su facción;
-- **2 botiquines lanzables** por vida (`use special` y fuego);
+- **2 botiquines lanzables** por vida (`use special` y fuego): curan 25, el sangrado y la cojera al
+  compañero que los toca; quedan **3 minutos** en el piso, también si el Medic muere (se borran si se
+  desconecta), y cada Medic tiene a lo sumo 6 en el piso (uno nuevo borra el más viejo);
 - **jeringas lanzables** (abajo);
 - el **dardo de sueño** (ver "Servidor: dardo de sueño del Medic");
 - **regeneración**: como ya no se cura con aim + fuego mientras tenga jeringas para lanzar,
@@ -160,7 +162,9 @@ centro de la pantalla para apuntar (D-Day deja vacías las miras del cliente, `c
 hay **uno cada `sleepdart_cooldown` segundos**: mientras espera, el HUD muestra los segundos que
 faltan junto al ícono "NEXT DART" (como el contador del airstrike del Officer); si lo aprieta
 antes avisa cuántos segundos faltan, y cuando se recarga llega el mensaje `Sleep dart ready.`. Al reaparecer está listo. Es un
-proyectil (la jeringa con brillo azul, más rápida y con menos caída): se puede esquivar.
+proyectil (la jeringa con el líquido **violeta**, más rápida y con menos caída, que deja una
+**estela lavanda** chica): se puede esquivar. Quake 2 no tiene violeta en su paleta: quien baja la
+textura del server (`.pcx`) y la estela lo ven lavanda; con el `.png` se ve violeta.
 
 El **enemigo** que toca se cae de espaldas al piso (cuerpo a tierra, con una animación de
 muerte) y queda dormido `sleepdart_time` segundos. La animación deja el cuerpo lejos de donde
@@ -189,7 +193,8 @@ latched, se prende y se apaga en el **próximo mapa**; los `sleepdart_*` rigen a
 
 **Archivos nuevos** (hay que subirlos al server; los jugadores los bajan solos con
 `allow_download 1`): `sprites/zzz.sp2`, `sprites/zzz_0.pcx`, `sprites/zzz_0.png`,
-`sound/misc/snore.wav`, `pics/i_nextdart.pcx` y `pics/dartcross.pcx`. Están en el repo y los genera `tools/assets/gen_sleep_assets.py`.
+`sound/misc/snore.wav`, `pics/i_nextdart.pcx`, `pics/dartcross.pcx` y
+`models/weapons/g_sleepdart/` (`tris.md2`, `skin.pcx` y `skin.png`). Están en el repo y los genera `tools/assets/gen_sleep_assets.py`.
 El server los precachea solo con `medic_new 1`, al empezar el mapa.
 Desde el bot: `medic on|off` (`dardo on|off` y "admin activa el dardo" hacen lo mismo).
 Constantes `SLEEPDART_*` y `SLEEP_*` en `src/g_local.h`.

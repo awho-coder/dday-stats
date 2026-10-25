@@ -2108,7 +2108,8 @@ extern int jpn_index;
 #define MEDIC_NEW_HEALTHPACKS	2		// healthpacks of the Medic per life with medic_new 1
 #define HEALTHPACK_HEAL			25		// health that a teammate recovers
 #define HEALTHPACK_DELAY		3		// seconds between two throws
-#define HEALTHPACK_LIFE			60		// seconds a pack stays on the ground
+#define HEALTHPACK_LIFE			180		// seconds a pack stays on the ground (also after its Medic dies)
+#define HEALTHPACK_MAX_PER_MEDIC	6		// packs of one Medic on the ground at once: a new one removes his oldest
 #define HEALTHPACK_FX_TIME		5		// seconds it throws green sparks after it is thrown, then it is just the crate
 #define HEALTHPACK_EDICT_MARGIN	64		// free entities that must be left to throw a pack
 
@@ -2131,7 +2132,8 @@ extern int jpn_index;
 // Medic sleep dart (with medic_new): the command "dardo" throws a dart that puts an enemy to sleep on the ground
 #define SLEEPDART_SPEED			1400	// speed of the dart (a thrown syringe flies at KNIFE_THROW_SPEED, 950)
 #define SLEEPDART_GRAVITY		0.3		// gravity of the dart (1 = a thrown syringe)
-#define SLEEPDART_COLOR			0x74	// palette color of its sparks (blue, as the railgun trail)
+#define SLEEPDART_MODEL			"models/weapons/g_sleepdart/tris.md2"	// the thrown syringe with a violet liquid
+#define SLEEPDART_COLOR			0xb0	// palette color of its trail and sparks: lavender (Quake 2 has no violet)
 #define SLEEP_VIEW_PITCH		-60		// the sleeper looks up, as he lies on his back
 #define SLEEP_FADE_TIME			0.5		// seconds before waking when the dark screen starts to clear
 #define SLEEP_Z_MODEL			"sprites/zzz.sp2"	// the "Z" that rises over a sleeper: 3 frames, small to big

@@ -1972,6 +1972,7 @@ void SP_worldspawn (edict_t *ent)
 	if (medic_new->value)	// the files of the sleep dart: the players download them when the map starts
 	{
 		gi.modelindex (SLEEP_Z_MODEL);
+		gi.modelindex (SLEEPDART_MODEL);
 		gi.soundindex (SLEEP_SNORE_SOUND);
 		gi.imageindex (SLEEPDART_ICON);
 		gi.imageindex (SLEEPDART_CROSSHAIR);

@@ -9,9 +9,14 @@
   pics/dartcross.pcx    mira del Medic con la jeringa: 320x240 como las miras de francotirador (el HUD no tiene
                         otro lugar), transparente, con la cruz de pics/crosshair.pcx (la de Quake) en el centro
 
+  models/weapons/g_sleepdart/  el dardo en vuelo: el tris.md2 de la jeringa lanzada (models/weapons/g_syringe) con
+                        su propia textura, el liquido verde pintado de violeta (skin.png) o del lavanda mas
+                        parecido de la paleta de Quake 2, que no tiene violetas (skin.pcx, el que se baja)
+
 Uso: gen_sleep_assets.py <paleta> <carpeta de salida> [<i_nextarty.pcx> [<crosshair.pcx>]]
   <paleta> es la de pics/colormap.pcx (sus ultimos 768 bytes) o un .bin de 768 bytes.
   Sin <i_nextarty.pcx> no se hace el icono; sin <crosshair.pcx> (esta en pak0.pak del juego) no se hace la mira.
+  El dardo se hace si encuentra models/weapons/g_syringe/ (del repo) desde la carpeta actual.
 Solo usa la biblioteca estandar de Python y ffmpeg.
 """
 import os
@@ -250,6 +255,44 @@ def write_dartcross(src, path, pal):
     open(path, "wb").write(pcx_bytes(w, h, rows, pal))
 
 
+DART_LIQUID_PNG = (150, 70, 215)   # violeta
+DART_LIQUID_PCX = 0xb0              # (119, 123, 207): lo mas parecido en la paleta de Quake 2
+
+
+def write_sleepdart(src_dir, out_dir, pal):
+    """El tris.md2 de la jeringa con el nombre de su textura cambiado, y la textura con el liquido (el cuadro verde)
+    de otro color."""
+    os.makedirs(out_dir, exist_ok=True)
+    d = bytearray(open(os.path.join(src_dir, "tris.md2"), "rb").read())
+    hdr = struct.unpack("<4s16i", bytes(d[:68]))
+    nskins, oskins = hdr[5], hdr[11]
+    name = b"models/weapons/g_sleepdart/skin.pcx"
+    for i in range(nskins):
+        d[oskins + i * 64:oskins + (i + 1) * 64] = name + bytes(64 - len(name))
+    open(os.path.join(out_dir, "tris.md2"), "wb").write(bytes(d))
+
+    # el .pcx: el indice del verde pasa a ser el lavanda
+    w, h, rows, _ = read_pcx(os.path.join(src_dir, "skin.pcx"))
+    green = max(set(v for r in rows for v in r), key=lambda v: pal[v * 3 + 1] - (pal[v * 3] + pal[v * 3 + 2]) / 2)
+    rows = [[DART_LIQUID_PCX if v == green else v for v in r] for r in rows]
+    open(os.path.join(out_dir, "skin.pcx"), "wb").write(pcx_bytes(w, h, rows, pal))
+
+    # el .png: el mismo cuadro, violeta (los pixeles que en el .pcx eran el verde)
+    _, _, src_rows, _ = read_pcx(os.path.join(src_dir, "skin.pcx"))
+    raw = bytearray()
+    for r in src_rows:
+        raw.append(0)
+        for v in r:
+            raw += bytes(DART_LIQUID_PNG if v == green else tuple(pal[v * 3:v * 3 + 3]))
+
+    def chunk(tag, data):
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xffffffff)
+
+    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+    png += chunk(b"IDAT", zlib.compress(bytes(raw), 9)) + chunk(b"IEND", b"")
+    open(os.path.join(out_dir, "skin.png"), "wb").write(png)
+
+
 def main():
     if len(sys.argv) not in (3, 4, 5):
         sys.exit(__doc__)
@@ -267,6 +310,9 @@ def main():
         write_nextdart(sys.argv[3], os.path.join(out, "pics", "i_nextdart.pcx"))
     if len(sys.argv) == 5:
         write_dartcross(sys.argv[4], os.path.join(out, "pics", "dartcross.pcx"), pal)
+    if os.path.isdir(os.path.join("models", "weapons", "g_syringe")):
+        write_sleepdart(os.path.join("models", "weapons", "g_syringe"),
+                        os.path.join(out, "models", "weapons", "g_sleepdart"), pal)
 
 
 if __name__ == "__main__":
