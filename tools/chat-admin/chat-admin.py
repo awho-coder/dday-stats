@@ -136,7 +136,7 @@ HELP = ("[ADMIN] comandos: estado, kick <quien>, kickban <quien>, ban <ip>, unba
         "mapa <nombre>, duelo <mapa>, publico, cuenta, reset, resetscore, tiempo, mapas, bans, "
         "bots on|off, kickbots, screenshot, stuff <cmd>, autostuff <cmd>, autostuffoff, "
         "control <mapa>, ffa <mapa>, dm <mapa>, kamikaze on|off, medic on|off, medic bazooka on|off, dardo on|off, officer bonus on|off, tab nuevo on|off, "
-        "lock, unlock, say <texto>, ayuda")
+        "grabar on|off|ahora, lock, unlock, say <texto>, ayuda")
 
 def run_cmd(text, by):
     """Ejecuta un comando de chat. SIEMPRE vía whitelist. Devuelve respuesta para say()."""
@@ -270,6 +270,29 @@ def run_cmd(text, by):
         m = re.search(r'is\s+"(\d+)"', rcon("kamikaze_arty"))
         estado = "?" if not m else ("ON" if m.group(1) != "0" else "OFF")
         return "[ADMIN] arty kamikaze: %s (uso: kamikaze on|off)" % estado, True
+    if verb in ("grabar", "graba", "grabacion", "grabacin", "mvd"):
+        # MVD de la partida con nombre = id de la partida, para bajarlo desde la web.
+        # mvd_partidas es cvar de la DLL (no latched); un reinicio del server lo apaga
+        a = norm(arg)
+        if a in ("on", "1", "si", "siempre", "todas", "activar", "activa", "prender", "prende", "encender", "enciende"):
+            rcon("set mvd_partidas 1")
+            return ("[ADMIN] grabacion ON: se graba un MVD de cada partida, desde esta "
+                    "(se baja desde la web, en la partida)"), True
+        if a in ("off", "0", "no", "desactivar", "desactiva", "apagar", "apaga", "parar", "para"):
+            rcon("set mvd_partidas 0")
+            return "[ADMIN] grabacion OFF: no se graban las proximas partidas (la actual se termina de grabar)", True
+        if a in ("ahora", "esta", "partida", "actual", "ya"):
+            out = rcon("sv mvd_partida")
+            if "grabando" in out and "ya se" not in out:
+                return "[ADMIN] grabando esta partida (solo esta; se baja desde la web al terminar)", True
+            if "ya se esta grabando" in out:
+                return "[ADMIN] esta partida ya se esta grabando", True
+            if "stats_log" in out:
+                return "[ADMIN] no se puede grabar: las stats estan apagadas (stats_log 0)", True
+            return "[ADMIN] no se pudo grabar: no hay partida en curso", True
+        m = re.search(r'is\s+"(\d+)"', rcon("mvd_partidas"))
+        estado = "?" if not m else ("ON" if m.group(1) != "0" else "OFF")
+        return "[ADMIN] grabar todas las partidas: %s (uso: grabar on|off|ahora)" % estado, True
     if verb in ("officer", "oficial", "officers", "oficiales"):
         # cvar de la DLL (no latched): rige al instante; un reinicio del server lo apaga
         a = norm(arg)
@@ -699,7 +722,7 @@ def looks_command(text):
     return v in {"ayuda","help","estado","status","jugadores","players","kick","kickea","echar",
                  "kickban","ban","unban","delban","desban","lock","unlock","bloquear","abrir",
                  "mapa","map","cambiamapa","duelo","duel","publico","publica","cuenta","startcount",
-                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","dm","kamikaze","kamikase","kamicase","medic","medico","mdico","dardo","sleepdart","officer","oficial","officers","oficiales","tab","scoreboard","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
+                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","dm","kamikaze","kamikase","kamicase","grabar","graba","grabacion","grabacin","mvd","medic","medico","mdico","dardo","sleepdart","officer","oficial","officers","oficiales","tab","scoreboard","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
                  "restart","reload"}
 
 def handle_line(line, dry=False):
