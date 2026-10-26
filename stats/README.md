@@ -436,6 +436,38 @@ SELECT * FROM tournament_series('copa-verano');
 SELECT * FROM tournament_standings('copa-verano');
 ```
 
+### Importar partidas de otro servidor (MVD)
+
+Un servidor sin `stats_log` (otro dueño, otra máquina) no deja `.jsonl`, pero
+si grabó un **MVD2 de Q2PRO** (`mvdrecord` o GTV) se puede convertir y cargar
+como cualquier partida:
+
+```sh
+python3 stats/mvd2jsonl.py duelo1.mvd2.gz --server dday.cl-duelos1 --kind duel \
+    --event "Torneo Clanes sin Gloria" --end "2026-10-26 00:41-03" --out /tmp/ev
+cp /tmp/ev/*.jsonl /home/pi/dday-events/      # el ingestor lo carga en su próxima vuelta
+```
+
+- Salen: mapa, jugadores con equipo y clase (por el modelo `usa/class_lmg`),
+  tiempo en cada equipo y clase, cada muerte (del obituario que el mod manda a
+  todos: víctima, frase, asesino, arma, `** HEADSHOT **`) con la posición de los
+  dos y la distancia, el arma exacta en las armas en mano (el modelo que tiene el
+  que mata, `stats/mvd_weapons.json`, sacado de `src/*/*_item.c`), el casco y el
+  pie salvados, y en duelos el inicio («Que comience el juego!») y el ganador
+  («Team X is victorious»). El total por equipo sigue la regla del juego (kills a
+  enemigos más suicidios del rival).
+- No salen: puntería (tiros acertados/fallados), objetivos ni puntaje del mod
+  (quedan en 0). Los bots no aparecen en un MVD (solo graba clientes reales).
+- No hay hora real en un MVD: `--end` da la hora de fin (por defecto, la fecha
+  del archivo). El id de la partida es `<fecha>-<servidor>-<hash del archivo>`:
+  convertir dos veces el mismo MVD **con el mismo `--end`** da el mismo id y el
+  ingestor no la duplica (con otra hora sería otra partida: borrar la anterior).
+- Solo MVD versión 2009/2010 (los de límites extendidos de Q2PRO no se soportan:
+  el conversor avisa). Probado contra una partida propia: las kills, tiempos,
+  armas y headshots coinciden con las de `stats_log`.
+- Para poder ver la partida en la web, copiar el MVD a la carpeta de demos del
+  backend con el id como nombre: `/home/pi/dday/data/demos/<id>.mvd2.gz`.
+
 ## Rendimiento
 
 Las vistas del ladder leen **tablas de resumen** (`player_stats`,
