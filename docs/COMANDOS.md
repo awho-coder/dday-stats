@@ -110,7 +110,9 @@ apuntado (aim) la **lanza** al apretar fuego, igual que el cuchillo lanzado (mis
 y cadencia, `SYRINGE_THROW_DELAY` en `src/g_local.h`). Al **compañero** que toca lo cura
 `syringe_heal` (no cura sangrado ni cojera). Al **enemigo** lo envenena: `syringe_poison` de
 daño repartido en `syringe_poison_time` segundos; los venenos de varias jeringas se acumulan, pueden matar y la
-muerte cuenta como kill del Medic (`was poisoned by`, `syringe` en el log de stats). Contra
+muerte cuenta como kill del Medic (`was poisoned by`, `syringe` en el log de stats). Un
+**Medic de su equipo le quita todo el veneno de una vez**, con una jeringa lanzada o
+inyectándolo de cerca (el daño ya hecho no se devuelve). Contra
 una pared, un objetivo o un cadáver la jeringa se rompe. Lleva `syringe_count` jeringas
 lanzables por vida (el HUD muestra cuántas le quedan), además de la de la mano, que es
 infinita y sigue sirviendo para inyectar de cerca. El Medic se puede mover mientras lanza

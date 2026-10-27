@@ -2401,6 +2401,21 @@ static void Syringe_Poison (edict_t *victim, edict_t *medic, int damage)
 	poison->nextthink = level.time + FRAMETIME;
 }
 
+// a Medic heals the victim: all the poisons on him go away at once (the damage already done stays). Returns how many
+static int Syringe_CurePoison (edict_t *victim)
+{
+	edict_t	*e;
+	int		n = 0;
+
+	for (e = g_edicts + game.maxclients + 1; e < &g_edicts[globals.num_edicts]; e++)
+		if (e->inuse && e->classnameb == SYRINGE_POISON && e->enemy == victim)
+		{
+			G_FreeEdict (e);
+			n++;
+		}
+	return n;
+}
+
 // a burst of sparks of the palette color where the syringe hits a player
 static void Syringe_Sparks (vec3_t pos, vec3_t dir, int count, int color)
 {
@@ -2454,7 +2469,13 @@ static void syringe_touch (edict_t *self, edict_t *other, cplane_t *plane, csurf
 
 		if (!G_IsFFA() && other->client->resp.team_on->index == self->obj_owner)
 		{
-			// a teammate: health only, the wounds stay as they are
+			// a teammate: it cures his poison, and gives health; the wounds stay as they are
+			if (Syringe_CurePoison (other) && owner && owner->inuse && owner->client)
+			{
+				safe_cprintf (other, PRINT_HIGH, "%s cured your poison.\n", owner->client->pers.netname);
+				safe_cprintf (owner, PRINT_HIGH, "You cured the poison of %s.\n", other->client->pers.netname);
+			}
+
 			if (other->health < HEALTH_MAX)
 			{
 				int before = other->health;
@@ -3212,6 +3233,20 @@ void Weapon_Morphine_Use(edict_t *ent)
 
 	if (target->waterlevel == 3) // they are under water
 		return;
+
+	// the syringe of the hand cures every poison at once, as the wounds
+	if (target->client && Syringe_CurePoison (target))
+	{
+		if (target == ent)
+			safe_cprintf (ent, PRINT_HIGH, "You cured your poison.\n");
+		else
+		{
+			safe_cprintf (target, PRINT_HIGH, "%s cured your poison.\n", ent->client->pers.netname);
+			safe_cprintf (ent, PRINT_HIGH, "You cured the poison of %s.\n", target->client->pers.netname);
+		}
+		if (target->health >= HEALTH_MAX)	// no heal follows: its sound
+			gi.sound (target, CHAN_WEAPON, gi.soundindex ("items/morphine1.wav"), 1.0, ATTN_NORM, 0);
+	}
 
 	target->wound_location	= 0;
 	target->die_time		= 0;
