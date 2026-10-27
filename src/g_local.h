@@ -2113,6 +2113,7 @@ extern int jpn_index;
 #define HEALTHPACK_LIFE			180		// seconds a pack stays on the ground (also after its Medic dies)
 #define HEALTHPACK_MAX_PER_MEDIC	6		// packs of one Medic on the ground at once: a new one removes his oldest
 #define HEALTHPACK_FX_TIME		5		// seconds it throws green sparks after it is thrown, then it is just the crate
+#define HEALTHPACK_OWNER_DELAY	1		// seconds before the Medic who threw a pack can take it himself
 #define HEALTHPACK_EDICT_MARGIN	64		// free entities that must be left to throw a pack
 
 // Medic syringe: with the syringe in hand, aim + fire throws it (see medic_new)

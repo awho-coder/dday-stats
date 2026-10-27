@@ -90,8 +90,8 @@ Apagado por defecto: con `medic_new 0` el Medic es el clásico (la pistola de su
 solo la jeringa). Con `medic_new 1` el Medic de todas las facciones lleva:
 
 - la **Browning Hi-Power** en lugar de la pistola de su facción;
-- **2 botiquines lanzables** por vida (`use special` y fuego): curan 25, el sangrado y la cojera al
-  compañero que los toca; quedan **3 minutos** en el piso, también si el Medic muere (se borran si se
+- **2 botiquines lanzables** por vida (`use special` y fuego): curan 25, el sangrado, la cojera y el
+  veneno al compañero que los toca, y también al mismo Medic (pasado 1 segundo desde que lo lanza); quedan **3 minutos** en el piso, también si el Medic muere (se borran si se
   desconecta), y cada Medic tiene a lo sumo 6 en el piso (uno nuevo borra el más viejo);
 - **jeringas lanzables** (abajo);
 - el **dardo de sueño** (ver "Servidor: dardo de sueño del Medic");

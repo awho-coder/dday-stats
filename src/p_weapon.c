@@ -2401,6 +2401,17 @@ static void Syringe_Poison (edict_t *victim, edict_t *medic, int damage)
 	poison->nextthink = level.time + FRAMETIME;
 }
 
+// the victim has some poison on him
+static qboolean Syringe_Poisoned (edict_t *victim)
+{
+	edict_t	*e;
+
+	for (e = g_edicts + game.maxclients + 1; e < &g_edicts[globals.num_edicts]; e++)
+		if (e->inuse && e->classnameb == SYRINGE_POISON && e->enemy == victim)
+			return true;
+	return false;
+}
+
 // a Medic heals the victim: all the poisons on him go away at once (the damage already done stays). Returns how many
 static int Syringe_CurePoison (edict_t *victim)
 {
@@ -3505,8 +3516,9 @@ void Weapon_Bandage(edict_t *ent)
 
 HEALTHPACK
 
-The Medic selects it (use special) and throws it with fire. A teammate that touches the pack
-recovers HEALTHPACK_HEAL health and is cured of bleeding and leg wounds, as with the syringe.
+The Medic selects it (use special) and throws it with fire. A teammate that touches the pack, or the Medic himself
+after HEALTHPACK_OWNER_DELAY seconds, recovers HEALTHPACK_HEAL health and is cured of bleeding, leg wounds and
+poison, as with the syringe.
 Packs belong to the Medic that threw them: they stay HEALTHPACK_LIFE seconds, also after he dies, and are removed
 when he leaves (RemoveHealthpacks). He has at most HEALTHPACK_MAX_PER_MEDIC on the ground: a new one removes his oldest.
 
@@ -3530,9 +3542,13 @@ qboolean Healthpack_EdictsLeft (void)
 
 static void healthpack_touch (edict_t *ent, edict_t *other, cplane_t *plane, csurface_t *surf)
 {
-	int		before;
+	int		before, cured;
 
-	if (!other->client || other == ent->owner)
+	if (!other->client)
+		return;
+
+	// the Medic can take his own packs too, but not as they leave his hand
+	if (other == ent->owner && level.time < ent->timestamp + HEALTHPACK_OWNER_DELAY)
 		return;
 
 	if (other->health < 1 || other->deadflag || other->flyingnun)
@@ -3542,12 +3558,13 @@ static void healthpack_touch (edict_t *ent, edict_t *other, cplane_t *plane, csu
 	if (!other->client->resp.team_on || other->client->resp.team_on->index != ent->obj_owner)
 		return;
 
-	// whoever has full health and no wounds leaves it for somebody else (HEALTH_MAX as the syringe does,
+	// whoever has full health, no wounds and no poison leaves it for somebody else (HEALTH_MAX as the syringe does,
 	// not max_health, which is not reliable for every client)
-	if (other->health >= HEALTH_MAX && !other->wound_location && !other->die_time)
+	if (other->health >= HEALTH_MAX && !other->wound_location && !other->die_time && !Syringe_Poisoned (other))
 		return;
 
-	// it also cures the bleeding and the limp, as the syringe does
+	// it also cures the bleeding, the limp and every poison, as the syringe does
+	cured = Syringe_CurePoison (other);
 	other->wound_location = 0;
 	other->die_time = 0;
 
@@ -3564,8 +3581,9 @@ static void healthpack_touch (edict_t *ent, edict_t *other, cplane_t *plane, csu
 	if (other->ai)
 		other->ai->med_heal_time = level.time;
 
-	safe_cprintf (other, PRINT_HIGH, "You recovered health with a healthpack.\n");
-	if (ent->owner && ent->owner->inuse && ent->owner->client)
+	safe_cprintf (other, PRINT_HIGH, cured ? "You recovered health and were cured of the poison with a healthpack.\n" :
+		"You recovered health with a healthpack.\n");
+	if (ent->owner && ent->owner->inuse && ent->owner->client && ent->owner != other)
 		safe_cprintf (ent->owner, PRINT_HIGH, "%s recovered health with your healthpack.\n", other->client->pers.netname);
 	gi.sound (other, CHAN_ITEM, gi.soundindex ("items/pkup.wav"), 1, ATTN_NORM, 0);
 
