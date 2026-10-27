@@ -462,6 +462,9 @@ cp /tmp/ev/*.jsonl /home/pi/dday-events/      # el ingestor lo carga en su próx
   del archivo). El id de la partida es `<fecha>-<servidor>-<hash del archivo>`:
   convertir dos veces el mismo MVD **con el mismo `--end`** da el mismo id y el
   ingestor no la duplica (con otra hora sería otra partida: borrar la anterior).
+- Pausas del torneo (`sv freeze`): la cuenta regresiva que sigue a «Starting
+  countdown for remaining time» reanuda la partida (no la reinicia) y el tiempo
+  congelado no cuenta en la duración ni en el tiempo de cada jugador.
 - Solo MVD versión 2009/2010 (los de límites extendidos de Q2PRO no se soportan:
   el conversor avisa). Probado contra una partida propia: las kills, tiempos,
   armas y headshots coinciden con las de `stats_log`.
