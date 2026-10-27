@@ -417,12 +417,31 @@ def convert(path, server, kind, event, end_ts, weapons):
     tl = Timeline(cs, cs_changes)
     lines = lines_per_frame(prints)
 
-    # inicio (duelo: la última cuenta regresiva) y fin
+    # inicio (duelo: la última cuenta regresiva que no sea una reanudación) y fin.
+    # Pausa del torneo (sv freeze): "Remaining time: ..." al congelar y
+    # "Starting countdown for remaining time: ..." + otra cuenta regresiva al seguir;
+    # esa cuenta reanuda la partida, no la reinicia, y el tiempo congelado no cuenta.
     live_frame = None
     end_frame, winner, end_kills = None, None, None
+    pauses = []            # [(frame de pausa, frame de reanudación)]
+    pause_at = None        # pausa abierta (frame del "Remaining time")
+    resuming = False       # vino "Starting countdown for remaining time"
     for frame, k, text in lines:
+        if k == "print" and live_frame is not None and text.startswith("Remaining time:"):
+            if pause_at is None:
+                pause_at = frame
+            continue
+        if k == "print" and text.startswith("Starting countdown for remaining time:"):
+            resuming = live_frame is not None
+            if pause_at is None:
+                pause_at = frame
+            continue
         if k == "center" and "comience el juego" in text.lower():
-            live_frame = frame
+            if resuming:
+                pauses.append((pause_at, frame))
+            else:
+                live_frame, pauses = frame, []
+            pause_at, resuming = None, False
         m = re.match(r"Team (Allies|Axis) is victorious(?: \((\d+) / (\d+) kills\))?", text)
         if k == "print" and m:
             end_frame, winner = frame, (0 if m.group(1) == "Allies" else 1)
@@ -433,7 +452,13 @@ def convert(path, server, kind, event, end_ts, weapons):
     reason = "normal" if end_frame is not None else "aborted"
     if end_frame is None:
         end_frame = len(frames)
-    dur = round((end_frame - start_frame) * FRAME_S, 1)
+    pauses = [(a, min(b, end_frame)) for a, b in pauses if a < end_frame]
+    paused = sum(b - a for a, b in pauses)
+    wall = round((end_frame - start_frame) * FRAME_S, 1)   # con las pausas (hora real)
+    dur = round((end_frame - start_frame - paused) * FRAME_S, 1)
+
+    def in_pause(f):
+        return any(a <= f < b for a, b in pauses)
 
     # tiempo por jugador, equipo y clase (desde el inicio hasta el fin)
     stats = {}
@@ -453,7 +478,7 @@ def convert(path, server, kind, event, end_ts, weapons):
             if last_team.get(name, "x") != team:
                 last_team[name] = team
                 team_changes.append((f, name, team))
-            if team is None or not (start_frame <= f < end_frame):
+            if team is None or not (start_frame <= f < end_frame) or in_pause(f):
                 continue
             s = stats.setdefault(name, {"time": [0, 0], "classes": {}})
             s["time"][team] += 1
@@ -549,7 +574,7 @@ def convert(path, server, kind, event, end_ts, weapons):
             s["helmet_saves" if typ == "helmet" else "foot_saves"] += 1
 
     # eventos en el formato de la DLL (version 2)
-    base_ts = end_ts - dur
+    base_ts = end_ts - wall
     def ts_of(frame):
         return int(round(base_ts + (frame - start_frame) * FRAME_S))
 
@@ -613,7 +638,8 @@ def convert(path, server, kind, event, end_ts, weapons):
                 "winner": winner, "reason": reason,
                 "teams": [{"idx": 0, "score": 0, "kills": team_kills[0], "losses": team_kills[1]},
                           {"idx": 1, "score": 0, "kills": team_kills[1], "losses": team_kills[0]}]})
-    report = {"match": match_id, "map": mapname, "dur": dur, "winner": winner,
+    report = {"match": match_id, "map": mapname, "dur": dur, "paused": round(paused * FRAME_S, 1),
+              "winner": winner,
               "reason": reason, "end_kills_msg": end_kills, "team_kills": team_kills,
               "kills": sum(1 for f, _ in kills if start_frame <= f <= end_frame),
               "players": len([e for e in out if e["ev"] == "player"]),
