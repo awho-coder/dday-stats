@@ -4271,9 +4271,10 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 	VectorCopy (pm.mins, ent->mins);
 	VectorCopy (pm.maxs, ent->maxs);
 
-	if (client->sleeping)
+	if (client->sleeping && !client->sleep_falling)
 	{
 		// asleep (sleep dart): his box is around his body, which the death animation leaves away from his origin
+		// (asleep in the air, he keeps this box until he lands)
 		VectorCopy (client->sleep_mins, ent->mins);
 		VectorCopy (client->sleep_maxs, ent->maxs);
 	}
@@ -4391,7 +4392,7 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 	gi.linkentity (ent);
 
 	if (ent->movetype != MOVETYPE_NOCLIP &&
-		!client->sleeping)	// his long box (sleep dart) must not reach triggers that he is not in
+		(!client->sleeping || client->sleep_falling))	// his long box (sleep dart) must not reach triggers that he is not in
 		G_TouchTriggers (ent);
 
 	// touch other objects

@@ -2683,9 +2683,9 @@ static const sleep_pose_t sleep_poses[] =
 	{ FRAME_death301, FRAME_death308, -102, -52, -98, -21 },	// sleepdart_anim 3: a turn, far behind
 };
 
-// the body of pose p, lying along yaw, does not go through a wall, a door or a player, and does not hang over a
-// drop. A slope of the ground is fine: corpses also sink a little into it
-static qboolean Sleep_PoseFits (edict_t *ent, const sleep_pose_t *p, float yaw)
+// the body of pose p, lying along yaw, does not go through a wall, a door or a player, and (ground true) does not
+// hang over a drop. A slope of the ground is fine: corpses also sink a little into it
+static qboolean Sleep_PoseFits (edict_t *ent, const sleep_pose_t *p, float yaw, qboolean ground)
 {
 	vec3_t	angles, forward, right, start, end, down;
 	vec3_t	mins = {-4, -4, -4}, maxs = {4, 4, 4};
@@ -2707,6 +2707,9 @@ static qboolean Sleep_PoseFits (edict_t *ent, const sleep_pose_t *p, float yaw)
 		if (tr.startsolid || (tr.fraction < 1.0 && ((tr.ent && tr.ent->client) || tr.plane.normal[2] < 0.7)))
 			return false;
 	}
+
+	if (!ground)
+		return true;
 
 	// some ground under that end
 	VectorMA (start, far, forward, end);
@@ -2747,6 +2750,34 @@ static void Sleep_SetBox (gclient_t *client, const sleep_pose_t *p, float yaw)
 		}
 }
 
+// the sleeper lies in pose p (sleep_poses) along yaw: his view, his head, his box and his frames. animate plays the
+// fall (G_SetClientFrame leaves it on its last frame while he sleeps); if not, he goes straight to that last frame
+static void Sleep_SetPose (edict_t *ent, int p, float yaw, qboolean animate)
+{
+	gclient_t			*client = ent->client;
+	const sleep_pose_t	*pose = &sleep_poses[p];
+
+	client->sleep_pose = p;
+	VectorSet (client->sleep_angles, SLEEP_VIEW_PITCH, yaw, 0);	// the model takes the yaw of his view
+	client->sleep_head = pose->head;
+	client->sleep_head_z = pose->head_z;
+	client->sleep_center = (pose->x0 + pose->x1) / 2;
+	Sleep_SetBox (client, pose, yaw);
+	if (!client->sleep_falling)	// in the air he keeps the box of pmove, until he lands (Sleep_Land)
+	{
+		VectorCopy (client->sleep_mins, ent->mins);
+		VectorCopy (client->sleep_maxs, ent->maxs);
+		gi.linkentity (ent);
+	}
+
+	client->anim_priority = ANIM_DEATH;
+	if (animate && pose->first != pose->last)
+		ent->s.frame = pose->first - 1;
+	else
+		ent->s.frame = pose->last;
+	client->anim_end = pose->last;
+}
+
 // puts the victim to sleep: on the ground on his back, his view looking up; another dart makes it last longer.
 // The death animation leaves his body far from his origin, so he falls toward the first side where it fits
 // (ahead, the sides, behind; at right angles, so that his box fits his body); if none fits, he sleeps face down
@@ -2754,9 +2785,8 @@ static void Sleep_Start (edict_t *victim)
 {
 	gclient_t	*client = victim->client;
 	static const float	turns[] = { 0, 90, -90, 180 };
-	const sleep_pose_t	*pose;
 	float		base, yaw;
-	int			anim, i;
+	int			anim, pose, i;
 
 	if (client->sleeping)
 	{
@@ -2783,34 +2813,55 @@ static void Sleep_Start (edict_t *victim)
 	client->ps.gunindex = 0;
 	client->ps.pmove.pm_flags |= PMF_NO_PREDICTION;	// the server holds his view
 
+	// in the air (a jump, a fall): he falls with his speed and the animation plays meanwhile; where his body fits
+	// is seen again when he lands (Sleep_Land)
+	client->sleep_falling = (!victim->groundentity && victim->waterlevel < 2);
+
 	// the fall: a death animation (sleepdart_anim) toward the first side where his body fits
 	anim = (int)sleepdart_anim->value;
 	if (anim < 1 || anim > 3)
 		anim = 1;
 	base = 90 * floor (client->v_angle[YAW] / 90 + 0.5);
-	pose = &sleep_poses[0];
+	pose = 0;
 	yaw = base;
 	for (i = 0; i < 4; i++)
-		if (Sleep_PoseFits (victim, &sleep_poses[anim], base + turns[i]))
+		if (Sleep_PoseFits (victim, &sleep_poses[anim], base + turns[i], !client->sleep_falling))
 		{
-			pose = &sleep_poses[anim];
+			pose = anim;
 			yaw = base + turns[i];
 			break;
 		}
 
-	VectorSet (client->sleep_angles, SLEEP_VIEW_PITCH, yaw, 0);	// the model takes the yaw of his view
-	client->sleep_head = pose->head;
-	client->sleep_head_z = pose->head_z;
-	client->sleep_center = (pose->x0 + pose->x1) / 2;
-	Sleep_SetBox (client, pose, yaw);
-	VectorCopy (client->sleep_mins, victim->mins);
-	VectorCopy (client->sleep_maxs, victim->maxs);
-	gi.linkentity (victim);
+	Sleep_SetPose (victim, pose, yaw, true);
+}
 
-	// G_SetClientFrame plays it and leaves it on its last frame while he sleeps
-	client->anim_priority = ANIM_DEATH;
-	victim->s.frame = (pose->first == pose->last) ? pose->first : pose->first - 1;
-	client->anim_end = pose->last;
+// a sleeper who fell asleep in the air lands: his body stays as it fell if it fits there; if not, it turns toward
+// the first side where it fits, or he sleeps face down
+static void Sleep_Land (edict_t *ent)
+{
+	gclient_t	*client = ent->client;
+	static const float	turns[] = { 0, 90, -90, 180 };
+	int			i;
+
+	client->sleep_falling = false;
+	if (level.time + SLEEP_Z_FIRST > client->sleep_next_z)
+		client->sleep_next_z = level.time + SLEEP_Z_FIRST;	// the Zs start once he lies on the ground
+
+	if (client->sleep_pose != 0)
+	{
+		for (i = 0; i < 4; i++)
+			if (Sleep_PoseFits (ent, &sleep_poses[client->sleep_pose], client->sleep_angles[YAW] + turns[i], true))
+				break;
+		if (i == 4)
+			Sleep_SetPose (ent, 0, client->sleep_angles[YAW], false);
+		else if (i > 0)
+			Sleep_SetPose (ent, client->sleep_pose, client->sleep_angles[YAW] + turns[i], false);
+	}
+
+	// now his box goes around his body
+	VectorCopy (client->sleep_mins, ent->mins);
+	VectorCopy (client->sleep_maxs, ent->maxs);
+	gi.linkentity (ent);
 }
 
 // moves a sleeper to the middle of his body (the death animation leaves it away from his origin), with the box of a
@@ -2844,6 +2895,7 @@ void Sleep_End (edict_t *ent, qboolean woke)
 		return;
 
 	client->sleeping = false;
+	client->sleep_falling = false;
 	client->sleep_until = 0;
 	client->ps.pmove.pm_flags &= ~PMF_NO_PREDICTION;
 
@@ -3080,20 +3132,24 @@ void SleepDart_ClientThink (edict_t *ent, usercmd_t *ucmd)
 		return;
 	}
 
-	if (level.time >= client->sleep_until)
+	// asleep in the air: he lands, or falls into the water
+	if (client->sleep_falling && (ent->groundentity || ent->waterlevel >= 2))
+		Sleep_Land (ent);
+
+	if (level.time >= client->sleep_until && !client->sleep_falling)	// he does not wake up in the air
 	{
 		Sleep_End (ent, true);
 		return;
 	}
 
-	// no moving, no jumping, no shooting
+	// no moving, no jumping, no shooting; in the air he keeps his speed (pmove has no friction there)
 	ucmd->forwardmove = ucmd->sidemove = ucmd->upmove = 0;
 	ucmd->buttons = 0;
 	client->ps.gunindex = 0;
 	client->ps.pmove.pm_flags |= PMF_NO_PREDICTION;
 
 	// Zs that rise over him, so everybody sees that he sleeps, and his snore (heard only near him)
-	if (level.time >= client->sleep_next_z)
+	if (level.time >= client->sleep_next_z && !client->sleep_falling)
 	{
 		Sleep_SpawnZ (ent);
 		client->sleep_next_z = level.time + SLEEP_Z_INTERVAL;

@@ -1792,6 +1792,18 @@ void BOT_DMclass_RunFrame( edict_t *self )
 	usercmd_t	ucmd;
 	memset( &ucmd, 0, sizeof(ucmd) );
 
+	// asleep (sleep dart): no aim and no move. In the air the moves set his speed by hand (falling off a ledge),
+	// and he must fall with the speed he had
+	if (self->client->sleeping)
+	{
+		ucmd.angles[PITCH] = ANGLE2SHORT(self->s.angles[PITCH]);
+		ucmd.angles[YAW] = ANGLE2SHORT(self->s.angles[YAW]);
+		ucmd.angles[ROLL] = ANGLE2SHORT(self->s.angles[ROLL]);
+		ucmd.msec = 75 + floor (random () * 25) + 1;
+		ClientThink( self, &ucmd );
+		self->nextthink = level.time + FRAMETIME;
+		return;
+	}
 
 		BOT_DMclass_FindEnemy(self);
 		

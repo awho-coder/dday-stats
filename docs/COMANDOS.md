@@ -171,7 +171,10 @@ muerte) y queda dormido `sleepdart_time` segundos. La animación deja el cuerpo 
 estaba parado (hasta 100 unidades), así que antes de caer el server prueba hacia dónde entra sin
 atravesar paredes ni a otros jugadores ni quedar colgando de un borde: hacia donde miraba, a los
 costados o hacia atrás (en ángulo recto). Si no entra para ningún lado, duerme boca abajo en el
-lugar. La caja que recibe los disparos va **donde está el cuerpo**; un tiro cerca de la cabeza
+lugar. Si el dardo le pega **en el aire** (saltando o cayendo), la animación parte ahí mismo y
+sigue cayendo con la velocidad que traía; al tocar el piso se revisa si el cuerpo entra donde
+cayó (si no, gira hacia otro lado o queda boca abajo), y no se despierta antes de aterrizar.
+La caja que recibe los disparos va **donde está el cuerpo**; un tiro cerca de la cabeza
 es headshot y el resto cuenta como torso (igual que cuerpo a tierra). Al despertarse queda
 cuerpo a tierra donde estaba el cuerpo. Mientras duerme:
 

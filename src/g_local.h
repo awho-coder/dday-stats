@@ -1752,6 +1752,8 @@ struct gclient_s
 	float       sleep_head_z;			// the height of his face, from his origin
 	float       sleep_center;			// how far ahead of his origin the middle of his body lies (he wakes up there)
 	vec3_t      sleep_mins, sleep_maxs;	// his box while he sleeps: around his body, which lies away from his origin
+	qboolean    sleep_falling;			// put to sleep in the air: he falls with his speed until he lands
+	int         sleep_pose;				// the pose he sleeps in (sleep_poses in p_weapon.c)
 
 	qboolean    tank_hit;//faf
 
