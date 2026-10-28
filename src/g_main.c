@@ -51,6 +51,7 @@ cvar_t	*control_lock;
 cvar_t	*control_captime;
 cvar_t	*control_holdtime;
 cvar_t	*control_emptyrate;
+cvar_t	*control_border;
 cvar_t	*control_grenades;
 cvar_t	*control_engineer;
 cvar_t	*control_engineer_at;
