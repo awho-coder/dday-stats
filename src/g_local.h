@@ -500,6 +500,9 @@ typedef struct
 	int			control_introsent[MAX_CLIENTS];	// veces que se mostro la explicacion del modo a cada jugador
 	float		control_intronext[MAX_CLIENTS];	// cuando repetirla, para que dure en pantalla
 	qboolean	control_engunlock[MAX_TEAMS];	// ingeniero desbloqueado para ese equipo (el rival llego a control_engineer_at)
+#define CONTROL_MAX_BEAMS	64
+	edict_t		*control_beams[CONTROL_MAX_BEAMS];	// laseres del borde de la zona (control_border)
+	int			control_numbeams;
 
 } level_locals_t;
 
@@ -722,6 +725,7 @@ extern	cvar_t	*control_engineer;	// 0 = clase ingeniero deshabilitada en este mo
 extern	cvar_t	*control_engineer_at;	// % de control del rival que desbloquea el ingeniero (0 = nunca)
 extern	cvar_t	*control_engineer_rockets;	// cohetes en total del ingeniero desbloqueado (cargado + repuesto)
 extern	cvar_t	*control_engineer_grenades;	// granadas del ingeniero desbloqueado
+extern	cvar_t	*control_border;	// borde de la zona: 0 = chispas, 1 = laseres en el piso
 extern	cvar_t	*control_grenades;	// maximo de granadas por jugador en este modo (0 = sin granadas, -1 = sin limite)
 extern	cvar_t	*ffa; // Free For All mode (0 disabled, 1 enabled)
 extern	qboolean	ffa_statusbar_active; // Free For All statusbar built (g_spawn.c)

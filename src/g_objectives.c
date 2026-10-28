@@ -1264,12 +1264,12 @@ static void Control_Capture (edict_t *zone, int team)
 	Control_UpdateHud ();
 }
 
-static void Control_Spark (edict_t *zone, float x, float y, int color)
+// piso bajo (x, y), buscado desde arriba del rango de altura de la zona
+static qboolean Control_FloorPoint (edict_t *zone, float x, float y, vec3_t out)
 {
-	vec3_t	start, end, up = {0, 0, 1};
+	vec3_t	start, end;
 	trace_t	tr;
 
-	// se busca el piso desde arriba del rango de altura de la zona
 	start[0] = end[0] = x;
 	start[1] = end[1] = y;
 	start[2] = zone->s.origin[2] + zone->count;
@@ -1277,17 +1277,177 @@ static void Control_Spark (edict_t *zone, float x, float y, int color)
 
 	tr = gi.trace (start, NULL, NULL, end, zone, MASK_SOLID);
 	if (tr.startsolid || tr.fraction == 1.0)
+		return false;
+
+	VectorCopy (tr.endpos, out);
+	return true;
+}
+
+static void Control_Spark (edict_t *zone, float x, float y, int color)
+{
+	vec3_t	pos, up = {0, 0, 1};
+
+	if (!Control_FloorPoint (zone, x, y, pos))
 		return;
 
-	tr.endpos[2] += 4;
+	pos[2] += 4;
 
 	gi.WriteByte (svc_temp_entity);
 	gi.WriteByte (TE_LASER_SPARKS);
 	gi.WriteByte (4);
-	gi.WritePosition (tr.endpos);
+	gi.WritePosition (pos);
 	gi.WriteDir (up);
 	gi.WriteByte (color);
-	gi.multicast (tr.endpos, MULTICAST_PVS);
+	gi.multicast (pos, MULTICAST_PVS);
+}
+
+/*
+Borde con laseres (control_border 1): una linea pegada al piso que sigue el
+borde en tramos cortos (para acompanar desniveles). Son entidades fijas como
+target_laser, asi que se ven siempre y no solo cuando salta una chispa.
+*/
+#define CONTROL_BEAM_STEP	160	// largo maximo de cada tramo de la linea
+#define CONTROL_BEAM_LIFT	8	// altura de la linea sobre el piso
+#define CONTROL_BEAM_WIDTH	6
+
+static int Control_BeamColor (void)
+{
+	if (level.control_owner == 1)
+		return 0xf3f3f1f1;	// azul
+	if (level.control_owner == 2)
+		return 0xf2f2f0f0;	// rojo
+	return 0xdcdddedf;		// amarillo: neutral
+}
+
+// G_RunFrame pisa old_origin con origin en cada frame: se repone el final
+// del laser cada vez, como target_laser
+static void Control_BeamThink (edict_t *beam)
+{
+	VectorCopy (beam->move_origin, beam->s.old_origin);
+	beam->nextthink = level.time + FRAMETIME;
+}
+
+static void Control_AddBeam (vec3_t start, vec3_t end, int width)
+{
+	edict_t	*beam;
+
+	if (level.control_numbeams >= CONTROL_MAX_BEAMS)
+		return;
+
+	beam = G_Spawn ();
+	beam->classname = "control_beam";
+	beam->movetype = MOVETYPE_NONE;
+	beam->solid = SOLID_NOT;
+	beam->s.renderfx = RF_BEAM|RF_TRANSLUCENT;
+	beam->s.modelindex = 1;		// tiene que ser distinto de 0 para que se mande
+	beam->s.frame = width;
+	beam->s.skinnum = Control_BeamColor ();
+	VectorCopy (start, beam->s.origin);
+	VectorCopy (end, beam->s.old_origin);
+	VectorCopy (end, beam->move_origin);
+	beam->think = Control_BeamThink;
+	beam->nextthink = level.time + FRAMETIME;
+	VectorSet (beam->mins, -8, -8, -8);
+	VectorSet (beam->maxs, 8, 8, 8);
+	gi.linkentity (beam);
+
+	level.control_beams[level.control_numbeams++] = beam;
+}
+
+// linea de a[] a b[] por el piso, en tramos de CONTROL_BEAM_STEP como mucho
+static void Control_AddEdge (edict_t *zone, float *a, float *b)
+{
+	vec3_t	p0 = {0, 0, 0}, p1 = {0, 0, 0};
+	float	len;
+	int		j, steps;
+	qboolean	have0;
+
+	len = sqrt((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1]));
+	steps = (int)ceil(len / CONTROL_BEAM_STEP);
+	if (steps < 1)
+		steps = 1;
+
+	have0 = Control_FloorPoint (zone, a[0], a[1], p0);
+	for (j = 1; j <= steps; j++)
+	{
+		qboolean have1 = Control_FloorPoint (zone, a[0] + (b[0] - a[0]) * j / steps,
+			a[1] + (b[1] - a[1]) * j / steps, p1);
+
+		if (have0 && have1)
+		{
+			p0[2] += CONTROL_BEAM_LIFT;
+			p1[2] += CONTROL_BEAM_LIFT;
+			Control_AddBeam (p0, p1, CONTROL_BEAM_WIDTH);
+			p1[2] -= CONTROL_BEAM_LIFT;
+		}
+
+		VectorCopy (p1, p0);
+		have0 = have1;
+	}
+}
+
+static void Control_BuildBeams (edict_t *zone)
+{
+	float	pts[CONTROL_MAX_POINTS][2], angle;
+	int		i, n;
+
+	if (level.control_numpoints)
+	{
+		n = level.control_numpoints;
+		memcpy (pts, level.control_poly, sizeof(pts[0]) * n);
+	}
+	else
+	{
+		// circulo: 16 lados alcanzan para que se vea redondo
+		n = 16;
+		for (i = 0; i < n; i++)
+		{
+			angle = (2 * M_PI * i) / n;
+			pts[i][0] = zone->s.origin[0] + cos(angle) * zone->obj_area;
+			pts[i][1] = zone->s.origin[1] + sin(angle) * zone->obj_area;
+		}
+	}
+
+	for (i = 0; i < n; i++)
+		Control_AddEdge (zone, pts[i], pts[(i + 1) % n]);
+
+	if (level.control_numbeams >= CONTROL_MAX_BEAMS)
+		gi.dprintf ("objective_control: el borde llego al maximo de %i laseres\n", CONTROL_MAX_BEAMS);
+	else
+		gi.dprintf ("objective_control: borde de %i laseres\n", level.control_numbeams);
+}
+
+static void Control_FreeBeams (void)
+{
+	int i;
+
+	for (i = 0; i < level.control_numbeams; i++)
+	{
+		if (level.control_beams[i] && level.control_beams[i]->inuse)
+			G_FreeEdict (level.control_beams[i]);
+		level.control_beams[i] = NULL;
+	}
+	level.control_numbeams = 0;
+}
+
+// laseres del borde: se crean o se sacan si cambia control_border, y toman el color del dueno
+static void Control_UpdateBeams (edict_t *zone)
+{
+	int i, color;
+
+	if (!control_border || control_border->value <= 0)
+	{
+		if (level.control_numbeams)
+			Control_FreeBeams ();
+		return;
+	}
+
+	if (!level.control_numbeams)
+		Control_BuildBeams (zone);
+
+	color = Control_BeamColor ();
+	for (i = 0; i < level.control_numbeams; i++)
+		level.control_beams[i]->s.skinnum = color;
 }
 
 // borde de chispas de la zona, con el color del dueno
@@ -1441,7 +1601,8 @@ void objective_control_think (edict_t *self)
 	Control_CountPlayers (self);
 	Control_Intro (self);
 
-	if (level.framenum % 10 == 0)
+	Control_UpdateBeams (self);
+	if (level.framenum % 10 == 0 && !level.control_numbeams)
 		Control_DrawRing (self);
 
 	unlock_time = level.control_start + Control_Cvar (control_lock, 0.1);
