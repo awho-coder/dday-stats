@@ -725,7 +725,7 @@ extern	cvar_t	*control_engineer;	// 0 = clase ingeniero deshabilitada en este mo
 extern	cvar_t	*control_engineer_at;	// % de control del rival que desbloquea el ingeniero (0 = nunca)
 extern	cvar_t	*control_engineer_rockets;	// cohetes en total del ingeniero desbloqueado (cargado + repuesto)
 extern	cvar_t	*control_engineer_grenades;	// granadas del ingeniero desbloqueado
-extern	cvar_t	*control_border;	// borde de la zona: 0 = chispas, 1 = laseres en el piso
+extern	cvar_t	*control_border;	// borde de la zona: 0 = chispas, 1 = laseres en el piso (por defecto)
 extern	cvar_t	*control_grenades;	// maximo de granadas por jugador en este modo (0 = sin granadas, -1 = sin limite)
 extern	cvar_t	*ffa; // Free For All mode (0 disabled, 1 enabled)
 extern	qboolean	ffa_statusbar_active; // Free For All statusbar built (g_spawn.c)
