@@ -462,6 +462,7 @@ void FFA_GunGameKill (edict_t *killer, int mod)
 
 	client->resp.ffa_level++;
 	client->resp.ffa_streak = 0;
+	StatsLog_GunGame (killer, "kill");
 
 	if (client->resp.ffa_level >= ffa_ladder_len - 1)
 		safe_bprintf (PRINT_HIGH, "%s is on the knife level!\n", client->pers.netname);
@@ -534,6 +535,7 @@ void FFA_GunGameDeath (edict_t *victim, qboolean suicide, int mod)
 		if (client->resp.ffa_level > 0)
 		{
 			client->resp.ffa_level--;
+			StatsLog_GunGame (victim, suicide ? "suicide" : knifed ? "knifed" : "streak");
 			safe_cprintf (victim, PRINT_HIGH, "You go down to level %i of %i\n", client->resp.ffa_level + 1, ffa_ladder_len);
 			FFA_GunGameSound (victim, ffa_gg_snd_down->string);
 		}

@@ -858,6 +858,21 @@ void StatsLog_MatchBegin (void)
 	{
 		StatsLog_WriteKey ("variant");
 		StatsLog_WriteString ("gungame");
+		// la escalera del mapa (cambia de largo segun el espacio de modelos: 19 a 30 escalones, el cuchillo al final)
+		fprintf (sl.file, ",\"gg_steps\":%d,\"gg_ladder\":[", ffa_ladder_len);
+		for (i = 0; i < ffa_ladder_len; i++)
+		{
+			if (i)
+				fputc (',', sl.file);
+			StatsLog_WriteString (ffa_ladder[i] ? ffa_ladder[i]->pickup_name : NULL);
+		}
+		fputc (']', sl.file);
+	}
+	// FFA con ruleta: el arma sorteada para todos
+	else if (G_IsFFA () && ffa_weapon_name)
+	{
+		StatsLog_WriteKey ("ffa_weapon");
+		StatsLog_WriteString (ffa_weapon_name);
 	}
 	StatsLog_WriteKey ("kind");
 	StatsLog_WriteString (sl.duel ? "duel" : "public");
@@ -1264,6 +1279,38 @@ void StatsLog_Objective (const char *type, const char *name, int team, edict_t *
 	fprintf (sl.file, ",\"team\":%d", (team >= 0 && team < MAX_TEAMS) ? team : -1);
 	StatsLog_WriteKey ("player");
 	StatsLog_WriteString (p ? p->name : NULL);
+	StatsLog_EndEvent ();
+}
+
+// FFA Gun Game: un cambio de escalon (nivel 1 = el primero) con el arma del escalon nuevo
+void StatsLog_GunGame (edict_t *ent, const char *why)
+{
+	stats_player_t	*p;
+	int				step;
+
+	if (!sl.open || level.intermissiontime || !ffa_gg_on || !ent || !ent->client || !StatsLog_Counting ())
+		return;
+
+	p = StatsLog_GetPlayer (ent);
+	if (!p)
+		return;
+
+	step = ent->client->resp.ffa_level;
+	if (step < 0)
+		step = 0;
+	if (step >= ffa_ladder_len)
+		step = ffa_ladder_len - 1;
+
+	StatsLog_BeginEvent ("gg");
+	StatsLog_WriteKey ("player");
+	fputs ("{\"name\":", sl.file);
+	StatsLog_WriteString (p->name);
+	fprintf (sl.file, ",\"bot\":%d}", p->bot ? 1 : 0);
+	fprintf (sl.file, ",\"level\":%d", step + 1);
+	StatsLog_WriteKey ("weapon");
+	StatsLog_WriteString (ffa_ladder_len > 0 && ffa_ladder[step] ? ffa_ladder[step]->pickup_name : NULL);
+	StatsLog_WriteKey ("why");
+	StatsLog_WriteString (why);
 	StatsLog_EndEvent ();
 }
 
