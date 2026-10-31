@@ -76,6 +76,7 @@ loginctl enable-linger $USER                       # sobrevive al logout
 
 ## Comandos (primer palabra; no requieren "admin")
 
+- **Admins**: `alias <nick>` (respuesta privada), `votacion on|off|cancelar`
 - **Info**: `estado` `ayuda` `bans` `tiempo` `mapas` `infomapa` `marcador` `zona`
   `versiones` `lag` `tiempos`
 - **Juego**: `mapa <x>` `duelo <mapa>` `publico` `control <mapa>` `ffa <mapa>` `dm <mapa>`
@@ -108,19 +109,35 @@ loginctl enable-linger $USER                       # sobrevive al logout
 - **Bloqueados para siempre**: `exec` `set` `restart` `rcon_password`
   archivos/BD/servicios (whitelist dura en código, no en prompt)
 
-## Votación de mapa por chat (para todos los jugadores)
+## Votación por chat (para todos los jugadores)
 
-Sirve para probar antes de la votación de la DLL (`vote map <mapa>`, cvar `vote_enable`).
+Sirve para probar antes de la votación de la DLL (`vote map`, `vote kick`, cvar `vote_enable`).
 Está apagada por defecto; el admin la prende con `votacion on` (queda guardado en
 `/home/ubuntu/dday/chat-admin.vote`, sobrevive a reinicios del bot) y la apaga con `votacion off`.
 `votacion cancelar` corta la que está en curso.
 
-- `!votemap <mapa>` (o `!votar`): abre la votación; el que propone vota sí.
-- `!si` / `!no`: vota. `!voto`: muestra cómo va.
-- Se aprueba cuando los sí superan el 50 % de los jugadores de `status`; dura 30 s; tras un
-  rechazo hay que esperar 60 s. Aprobada → `map <mapa>` por rcon.
-- Mapas: los de `MAPS` y los de `sv_maplist`. No se vota en torneo (`tournament 1`) ni en duelo.
-- Un voto por slot de `status`: cambiarse el nick no da otro voto.
+- `!votemap <mapa>` (o `!votar`): cualquier mapa de D-Day del server (`dday/maps/*.bsp`, sin
+  distinguir mayúsculas). Si no está, avisa y sugiere parecidos; avisa si no es de D-Day o el
+  archivo está dañado. Aprobada (sí > 50 % de los jugadores de `status`) → `map <mapa>`.
+- `!votekick <nick o número>`: sí > 75 % sin contar al acusado, mínimo 3 jugadores; el acusado no
+  vota; no se puede echar a un admin; sin ban. Si el acusado se va, se cancela. Un kick rechazado
+  hace esperar 2 min al que lo propuso, y a un mismo jugador no se le vota más de una vez cada 2 min.
+- `!si` / `!no`: vota. `!voto`: muestra cómo va. Dura 30 s; tras un rechazo, 60 s de espera.
+- No se vota en torneo (`tournament 1`) ni en duelo. Un voto por slot de `status`.
+
+## Alias (otros nicks del mismo jugador)
+
+El bot mira `status` cada 20 s y guarda `(ip, nick)` en `/home/ubuntu/dday/aliases.db` (SQLite,
+solo en Oracle; se borra lo de más de 180 días). `alias <nick>` (solo admins) muestra los otros
+nicks usados desde las mismas IPs exactas; la respuesta va **solo a la consola del admin**
+(`stuff <id> echo`), nunca al chat. Junta datos desde que se despliega.
+
+## Nicks protegidos
+
+Los protege la DLL con `dday/nicks.txt` (ver `nicks.txt.example` en la raíz del repo): sin la
+clave nadie puede mostrar el nick de un admin, así que el bot puede confiar en el nick del chat.
+Al arrancar, el bot avisa en el journal si algún admin de `ALLOW_RAW`/`ALLOW_SUB` no está en ese
+archivo.
 
 ## Seguridad (capas)
 
