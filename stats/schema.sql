@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS matches (
     id           text PRIMARY KEY,           -- <fecha>-<servidor>-<random>
     server       text        NOT NULL,
     map          text        NOT NULL,
-    mode         text        NOT NULL,       -- dm, ctb, campaign, control, ffa
+    mode         text        NOT NULL,       -- dm, ctb, campaign, control, ffa, gungame
     kind         text        NOT NULL DEFAULT 'public',  -- public o duel (cvar stats_mode)
     event        text        NOT NULL DEFAULT '',        -- torneo (cvar stats_event); '' = casual
     season_id    integer     REFERENCES seasons (id),
@@ -47,7 +47,10 @@ CREATE TABLE IF NOT EXISTS matches (
     team1_kills  integer,
     humans       integer     NOT NULL DEFAULT 0,
     ranked       boolean     NOT NULL DEFAULT false,
-    ingested_at  timestamptz NOT NULL DEFAULT now()
+    ingested_at  timestamptz NOT NULL DEFAULT now(),
+    gg_steps     smallint,                   -- Gun Game: escalones de la escalera (el cuchillo es el ultimo)
+    gg_ladder    jsonb,                      -- Gun Game: armas de la escalera en orden
+    ffa_weapon   text                        -- FFA con ruleta: el arma sorteada para todos
 );
 CREATE INDEX IF NOT EXISTS matches_started_idx ON matches (started_at);
 CREATE INDEX IF NOT EXISTS matches_map_idx ON matches (map);
@@ -90,6 +93,7 @@ CREATE TABLE IF NOT EXISTS match_players (
     zone_seconds integer NOT NULL DEFAULT 0, -- modo control: segundos dentro de la zona
     zone_kills   integer NOT NULL DEFAULT 0, -- modo control: kills con el que mata o el que muere en la zona
     place        smallint,                   -- FFA: puesto al terminar (NULL en otros modos o si se fue antes)
+    gg_level     smallint,                   -- Gun Game: escalon al terminar (1 = el primero)
     PRIMARY KEY (match_id, player_id)
 );
 CREATE INDEX IF NOT EXISTS match_players_player_idx ON match_players (player_id);
@@ -132,6 +136,17 @@ CREATE TABLE IF NOT EXISTS objectives (
 CREATE INDEX IF NOT EXISTS objectives_match_idx ON objectives (match_id);
 CREATE INDEX IF NOT EXISTS objectives_player_idx ON objectives (player_id);
 
+-- Gun Game: cada cambio de escalon de un jugador (para la carrera de niveles)
+CREATE TABLE IF NOT EXISTS gg_levels (
+    match_id   text     NOT NULL REFERENCES matches (id) ON DELETE CASCADE,
+    t          real     NOT NULL,            -- segundos desde el inicio
+    player_id  integer  NOT NULL REFERENCES players (id),
+    level      smallint NOT NULL,            -- escalon nuevo (1 = el primero)
+    weapon     text,                         -- arma de ese escalon
+    why        text     NOT NULL             -- kill (subio), suicide / knifed / streak (bajo), join (entro tarde)
+);
+CREATE INDEX IF NOT EXISTS gg_levels_match_idx ON gg_levels (match_id);
+
 ------------------------------------------------------------------------------
 -- Migraciones de bases creadas con versiones anteriores del esquema
 -- (van despues de crear todas las tablas; en una base nueva no hacen nada)
@@ -144,6 +159,10 @@ UPDATE matches m SET season_id = (SELECT s.id FROM seasons s WHERE s.starts_at <
                                   ORDER BY s.starts_at DESC LIMIT 1)
 WHERE m.season_id IS NULL;
 CREATE INDEX IF NOT EXISTS matches_season_idx ON matches (season_id);
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS gg_steps smallint;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS gg_ladder jsonb;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS ffa_weapon text;
+ALTER TABLE match_players ADD COLUMN IF NOT EXISTS gg_level smallint;
 ALTER TABLE match_players ADD COLUMN IF NOT EXISTS human_kills  integer NOT NULL DEFAULT 0;
 ALTER TABLE match_players ADD COLUMN IF NOT EXISTS human_deaths integer NOT NULL DEFAULT 0;
 ALTER TABLE match_players ADD COLUMN IF NOT EXISTS best_streak  integer NOT NULL DEFAULT 0;
@@ -300,6 +319,9 @@ CREATE TABLE IF NOT EXISTS player_stats (
     ffa_podiums   integer NOT NULL DEFAULT 0,  -- FFA: veces en el top 3
     ffa_placed    integer NOT NULL DEFAULT 0,  -- FFA: partidas terminadas con puesto
     ffa_place_sum integer NOT NULL DEFAULT 0,  -- FFA: suma de puestos (puesto promedio = suma / ffa_placed)
+    gg_progress_sum integer NOT NULL DEFAULT 0, -- Gun Game: suma del % de la escalera alcanzado (promedio = suma / ffa_placed)
+    gg_knife      integer NOT NULL DEFAULT 0,  -- Gun Game: partidas en que llego al cuchillo (ultimo escalon)
+    gg_downs      integer NOT NULL DEFAULT 0,  -- Gun Game: veces que bajo de escalon
     PRIMARY KEY (player_id, season_id, kind, mode, event)
 );
 
@@ -382,6 +404,17 @@ BEGIN
     END IF;
 END $$;
 
+-- columnas del Gun Game: igual, si faltaban se recalculan los resumenes
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'player_stats')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                       WHERE table_name = 'player_stats' AND column_name = 'gg_knife')
+       AND to_regclass('pg_temp.streak_backfill_needed') IS NULL THEN
+        CREATE TEMP TABLE streak_backfill_needed () ON COMMIT DROP;
+    END IF;
+END $$;
+
 ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS helmet_saves integer NOT NULL DEFAULT 0;
 ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS foot_saves   integer NOT NULL DEFAULT 0;
 ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS deflected    integer NOT NULL DEFAULT 0;
@@ -397,6 +430,9 @@ ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS zone_kills    integer NOT NULL
 ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS ffa_podiums   integer NOT NULL DEFAULT 0;
 ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS ffa_placed    integer NOT NULL DEFAULT 0;
 ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS ffa_place_sum integer NOT NULL DEFAULT 0;
+ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS gg_progress_sum integer NOT NULL DEFAULT 0;
+ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS gg_knife      integer NOT NULL DEFAULT 0;
+ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS gg_downs      integer NOT NULL DEFAULT 0;
 
 -- actividad por dia (hora de Chile)
 CREATE TABLE IF NOT EXISTS daily_stats (
@@ -615,7 +651,8 @@ BEGIN
         objectives, seconds, best_streak, max_kills, longest_kill, last_match,
         helmet_saves, foot_saves, deflected,
         sprees, rampages, dominatings, unstoppables, godlikes, streaks_ended,
-        zone_seconds, zone_captures, zone_kills, ffa_podiums, ffa_placed, ffa_place_sum)
+        zone_seconds, zone_captures, zone_kills, ffa_podiums, ffa_placed, ffa_place_sum,
+        gg_progress_sum, gg_knife, gg_downs)
     SELECT mp.player_id, m.season_id, match_category(m.kind, m.event), m.mode, m.event, count(*),
            count(*) FILTER (WHERE mp.result = 'W'), count(*) FILTER (WHERE mp.result = 'L'),
            count(*) FILTER (WHERE mp.result = 'D'),
@@ -627,10 +664,16 @@ BEGIN
            sum(mp.sprees), sum(mp.rampages), sum(mp.dominatings), sum(mp.unstoppables),
            sum(mp.godlikes), sum(mp.streaks_ended),
            sum(mp.zone_seconds), coalesce(sum(zc.n), 0), sum(mp.zone_kills),
-           -- puestos del FFA (solo m.mode = 'ffa'; quien se fue antes no tiene puesto)
-           count(*) FILTER (WHERE m.mode = 'ffa' AND mp.place <= 3),
-           count(*) FILTER (WHERE m.mode = 'ffa' AND mp.place IS NOT NULL),
-           coalesce(sum(mp.place) FILTER (WHERE m.mode = 'ffa'), 0)
+           -- puestos del FFA y del Gun Game (quien se fue antes no tiene puesto)
+           count(*) FILTER (WHERE m.mode IN ('ffa', 'gungame') AND mp.place <= 3),
+           count(*) FILTER (WHERE m.mode IN ('ffa', 'gungame') AND mp.place IS NOT NULL),
+           coalesce(sum(mp.place) FILTER (WHERE m.mode IN ('ffa', 'gungame')), 0),
+           -- Gun Game: % de la escalera alcanzado (solo quien termino), llegadas al cuchillo y bajadas
+           coalesce(sum(round(100.0 * least(mp.gg_level, m.gg_steps) / m.gg_steps))
+                    FILTER (WHERE m.mode = 'gungame' AND mp.place IS NOT NULL AND m.gg_steps > 0
+                            AND mp.gg_level IS NOT NULL), 0),
+           count(*) FILTER (WHERE m.mode = 'gungame' AND m.gg_steps > 0 AND mp.gg_level >= m.gg_steps),
+           coalesce(sum(gd.n) FILTER (WHERE m.mode = 'gungame'), 0)
     FROM match_players mp
     JOIN matches m ON m.id = mp.match_id
     JOIN players p ON p.id = mp.player_id
@@ -644,6 +687,11 @@ BEGIN
                WHERE o.match_id = ANY (ids) AND o.type = 'zone_capture' AND o.player_id IS NOT NULL
                GROUP BY o.match_id, o.player_id) zc
            ON zc.match_id = mp.match_id AND zc.player_id = mp.player_id
+    LEFT JOIN (SELECT g.match_id, g.player_id, count(*) AS n
+               FROM gg_levels g
+               WHERE g.match_id = ANY (ids) AND g.why IN ('suicide', 'knifed', 'streak')
+               GROUP BY g.match_id, g.player_id) gd
+           ON gd.match_id = mp.match_id AND gd.player_id = mp.player_id
     WHERE mp.match_id = ANY (ids) AND NOT p.is_bot
     GROUP BY mp.player_id, m.season_id, match_category(m.kind, m.event), m.mode, m.event
     ON CONFLICT (player_id, season_id, kind, mode, event) DO UPDATE SET
@@ -673,7 +721,10 @@ BEGIN
         zone_kills = s.zone_kills + EXCLUDED.zone_kills,
         ffa_podiums = s.ffa_podiums + EXCLUDED.ffa_podiums,
         ffa_placed = s.ffa_placed + EXCLUDED.ffa_placed,
-        ffa_place_sum = s.ffa_place_sum + EXCLUDED.ffa_place_sum;
+        ffa_place_sum = s.ffa_place_sum + EXCLUDED.ffa_place_sum,
+        gg_progress_sum = s.gg_progress_sum + EXCLUDED.gg_progress_sum,
+        gg_knife = s.gg_knife + EXCLUDED.gg_knife,
+        gg_downs = s.gg_downs + EXCLUDED.gg_downs;
 
     INSERT INTO player_map_stats AS s (player_id, map, kind, matches, wins, kills, deaths, seconds, best_streak)
     SELECT mp.player_id, m.map, m.kind, count(*), count(*) FILTER (WHERE mp.result = 'W'),
@@ -873,6 +924,7 @@ DROP FUNCTION IF EXISTS ladder_unlucky(integer, text, text, text);
 DROP FUNCTION IF EXISTS ladder_streak_tiers(integer, text, text, text);
 DROP FUNCTION IF EXISTS ladder_zone(integer, text, text);
 DROP FUNCTION IF EXISTS ladder_ffa(integer, text, text);
+DROP FUNCTION IF EXISTS ladder_gungame(integer, text, text);
 
 -- Totales por jugador para una temporada, categoria y torneo:
 --   season: 'current' (la vigente), 'all' (historico) o el nombre de una temporada
@@ -1090,6 +1142,62 @@ LANGUAGE sql STABLE AS $$
            s.kills, s.deaths, round(s.kills::numeric / greatest(s.deaths, 1), 2), s.best_streak
     FROM s
     JOIN players p ON p.id = s.player_id
+    WHERE s.placed >= min_matches
+    ORDER BY 1, p.name;
+$$;
+
+-- Ladder del Gun Game (modo gungame): solo partidas rankeadas (final normal con ganador, 2 minutos y
+-- 3 humanos que terminaron; ver is_ranked en ingest.py). Victorias (mato con el cuchillo en el ultimo
+-- escalon), podios, puesto promedio, progreso promedio en la escalera (%, porque su largo cambia por
+-- mapa), veces que llego al cuchillo, bajadas, K/D y mejor racha. Se calcula desde match_players (no
+-- desde player_stats, que suma todas las partidas). No usa el Elo.
+CREATE FUNCTION ladder_gungame(min_matches integer DEFAULT 3, match_kind text DEFAULT 'all',
+                               season text DEFAULT 'current')
+RETURNS TABLE (pos bigint, name text, matches bigint, wins bigint, win_pct numeric,
+               podiums bigint, avg_place numeric, avg_progress numeric, knife bigint,
+               downs bigint, kills bigint, deaths bigint, kd numeric, best_streak integer)
+LANGUAGE sql STABLE AS $$
+    WITH sid AS (SELECT season_lookup(season) AS id),
+    mm AS (
+        SELECT m.id, m.gg_steps
+        FROM matches m, sid
+        WHERE m.mode = 'gungame' AND m.ranked
+          AND (season = 'all' OR m.season_id = sid.id)
+          AND (match_kind = 'all' OR match_category(m.kind, m.event) = match_kind)
+    ),
+    s AS (
+        SELECT mp.player_id,
+               count(*) FILTER (WHERE mp.place IS NOT NULL) AS placed,
+               count(*) FILTER (WHERE mp.result = 'W') AS wins,
+               count(*) FILTER (WHERE mp.place <= 3) AS podiums,
+               coalesce(sum(mp.place), 0) AS place_sum,
+               coalesce(sum(100.0 * least(mp.gg_level, mm.gg_steps) / mm.gg_steps)
+                        FILTER (WHERE mp.place IS NOT NULL AND mm.gg_steps > 0), 0) AS progress_sum,
+               count(*) FILTER (WHERE mm.gg_steps > 0 AND mp.gg_level >= mm.gg_steps) AS knife,
+               sum(mp.kills) AS kills, sum(mp.deaths) AS deaths, max(mp.best_streak) AS best_streak
+        FROM match_players mp
+        JOIN mm ON mm.id = mp.match_id
+        JOIN players p ON p.id = mp.player_id
+        WHERE NOT p.is_bot
+        GROUP BY mp.player_id
+    ),
+    d AS (
+        SELECT g.player_id, count(*) AS downs
+        FROM gg_levels g JOIN mm ON mm.id = g.match_id
+        WHERE g.why IN ('suicide', 'knifed', 'streak')
+        GROUP BY g.player_id
+    )
+    SELECT rank() OVER (ORDER BY s.wins DESC, s.podiums DESC,
+                        s.progress_sum / greatest(s.placed, 1) DESC),
+           p.name, s.placed, s.wins,
+           round(100.0 * s.wins / greatest(s.placed, 1), 1), s.podiums,
+           CASE WHEN s.placed > 0 THEN round(s.place_sum::numeric / s.placed, 2) END,
+           CASE WHEN s.placed > 0 THEN round(s.progress_sum / s.placed, 1) END,
+           s.knife, coalesce(d.downs, 0),
+           s.kills, s.deaths, round(s.kills::numeric / greatest(s.deaths, 1), 2), s.best_streak
+    FROM s
+    JOIN players p ON p.id = s.player_id
+    LEFT JOIN d ON d.player_id = s.player_id
     WHERE s.placed >= min_matches
     ORDER BY 1, p.name;
 $$;
@@ -1381,7 +1489,7 @@ LANGUAGE sql STABLE AS $$
           JOIN matches m ON m.id = mp.match_id
          WHERE (season = 'all' OR m.season_id = season_lookup(season))
            AND (match_kind = 'all' OR match_category(m.kind, m.event) = match_kind)
-           AND m.mode <> 'ffa' AND mp.team IN (0, 1)
+           AND m.mode NOT IN ('ffa', 'gungame') AND mp.team IN (0, 1)
          GROUP BY mp.match_id, mp.team
     ),
     pure AS (SELECT * FROM team_comp
@@ -2043,7 +2151,7 @@ COMMENT ON TABLE matches IS 'Una partida (un mapa jugado en un servidor).';
 COMMENT ON COLUMN matches.id IS 'Id de partida: <fecha>-<servidor>-<random>. Clave primaria.';
 COMMENT ON COLUMN matches.server IS 'Id del servidor (cvar stats_server).';
 COMMENT ON COLUMN matches.map IS 'Mapa jugado.';
-COMMENT ON COLUMN matches.mode IS 'Modo del juego: dm, ctb, campaign, control, ffa (o el que mande la DLL).';
+COMMENT ON COLUMN matches.mode IS 'Modo del juego: dm, ctb, campaign, control, ffa, gungame (la DLL manda ffa + variant gungame; el ingestor lo traduce) o el que mande la DLL.';
 COMMENT ON COLUMN matches.kind IS 'Tipo de partida: public o duel (cvar stats_mode).';
 COMMENT ON COLUMN matches.event IS 'Torneo (cvar stats_event); cadena vacia = casual.';
 COMMENT ON COLUMN matches.season_id IS 'Temporada a la que pertenece la partida.';
@@ -2060,8 +2168,13 @@ COMMENT ON COLUMN matches.team1_score IS 'Puntaje final del equipo 1.';
 COMMENT ON COLUMN matches.team0_kills IS 'Kills del equipo 0.';
 COMMENT ON COLUMN matches.team1_kills IS 'Kills del equipo 1.';
 COMMENT ON COLUMN matches.humans IS 'Cantidad de jugadores humanos en la partida.';
-COMMENT ON COLUMN matches.ranked IS 'true si la partida es rankeada. Modos por equipos: cuenta para el Elo. FFA: solo marca la partida para ladder_ffa (final normal, 5 minutos y 3 humanos que terminaron); el FFA no mueve el Elo.';
+COMMENT ON COLUMN matches.ranked IS 'true si la partida es rankeada. Modos por equipos: cuenta para el Elo. FFA: solo marca la partida para ladder_ffa (final normal, 5 minutos y 3 humanos que terminaron). Gun Game: marca la partida para ladder_gungame (final normal con ganador, 2 minutos y 3 humanos que terminaron). FFA y Gun Game no mueven el Elo.';
 COMMENT ON COLUMN matches.ingested_at IS 'Cuando se cargo en la base.';
+COMMENT ON COLUMN matches.gg_steps IS 'Gun Game: escalones de la escalera (el ultimo es el cuchillo; cambia por mapa). NULL en otros modos.';
+COMMENT ON COLUMN matches.gg_ladder IS 'Gun Game: armas de la escalera en orden (jsonb, lista de nombres).';
+COMMENT ON COLUMN matches.ffa_weapon IS 'FFA con ruleta (ffa_roulette 1): el arma sorteada para todos. NULL en el FFA clasico.';
+COMMENT ON COLUMN match_players.gg_level IS 'Gun Game: escalon al terminar o al irse (1 = el primero).';
+COMMENT ON TABLE gg_levels IS 'Gun Game: cada cambio de escalon (subida por kill, bajada por suicidio, cuchillo o racha de muertes, entrada tarde).';
 
 COMMENT ON TABLE match_players IS 'Resumen de un jugador en una partida (suma de sus tramos/reconexiones).';
 COMMENT ON COLUMN match_players.match_id IS 'Partida.';
@@ -2191,6 +2304,9 @@ COMMENT ON COLUMN player_stats.zone_kills IS 'Modo control: kills en la zona (el
 COMMENT ON COLUMN player_stats.ffa_podiums IS 'FFA: veces que termino en el top 3.';
 COMMENT ON COLUMN player_stats.ffa_placed IS 'FFA: partidas que termino con puesto (no se fue antes).';
 COMMENT ON COLUMN player_stats.ffa_place_sum IS 'FFA: suma de los puestos; el puesto promedio es ffa_place_sum / ffa_placed.';
+COMMENT ON COLUMN player_stats.gg_progress_sum IS 'Gun Game: suma del % de la escalera alcanzado en cada partida terminada; el promedio es gg_progress_sum / ffa_placed.';
+COMMENT ON COLUMN player_stats.gg_knife IS 'Gun Game: partidas en que llego al ultimo escalon (el cuchillo).';
+COMMENT ON COLUMN player_stats.gg_downs IS 'Gun Game: veces que bajo de escalon (suicidio, muerto con cuchillo o racha de muertes).';
 
 COMMENT ON TABLE player_map_stats IS 'Resumen por jugador y mapa (todas las temporadas).';
 COMMENT ON COLUMN player_map_stats.player_id IS 'Jugador.';
@@ -2288,6 +2404,7 @@ COMMENT ON FUNCTION ladder_luck(integer, text, text, text) IS 'Los mas suertudos
 COMMENT ON FUNCTION ladder_unlucky(integer, text, text, text) IS 'Los tiradores mas desafortunados (tiros desviados por cascos).';
 COMMENT ON FUNCTION ladder_streak_tiers(integer, text, text, text) IS 'Rachas por nivel: quien mas llego a GODLIKE, UNSTOPPABLE, etc.';
 COMMENT ON FUNCTION ladder_zone(integer, text, text) IS 'Modo control: capturas, minutos y kills en la zona por jugador.';
+COMMENT ON FUNCTION ladder_gungame(integer, text, text) IS 'Gun Game: victorias, podios, puesto y progreso promedio (% de la escalera), llegadas al cuchillo, bajadas, K/D y mejor racha (sin Elo). Solo partidas rankeadas; Partidas cuenta las terminadas (con puesto).';
 COMMENT ON FUNCTION ladder_ffa(integer, text, text) IS 'Free For All: victorias, podios, puesto promedio, K/D y mejor racha por jugador (sin Elo). Partidas y % de victorias cuentan solo las FFA terminadas (con puesto); K/D y racha, todas.';
 
 COMMENT ON TABLE clans IS 'Clanes del Ladder Test (se editan desde el panel de administrador; escritura solo por clan_save / clan_delete).';

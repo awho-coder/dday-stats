@@ -11,6 +11,7 @@ Uso:
     ingest.py ... --rebuild-ratings  # recalcular todo el Elo desde cero
     ingest.py ... --init-schema      # crear / actualizar tablas y vistas
     ingest.py ... --skip-bot-only    # no cargar partidas sin ningun humano
+    ingest.py ... --reingest A.jsonl # volver a cargar partidas ya cargadas (borra y recarga)
 
 Cada archivo se procesa en una transaccion. Si la partida ya existe en la
 base, el archivo se considera procesado (idempotente). Los archivos
@@ -41,6 +42,9 @@ ELO_K_NEW = 40.0       # primeras partidas
 ELO_K = 24.0
 ELO_NEW_GAMES = 10
 
+# modos sin equipos: tienen puestos (place) y su propio ladder; no mueven el Elo
+FFA_MODES = ("ffa", "gungame")
+
 
 @dataclass
 class Config:
@@ -51,6 +55,7 @@ class Config:
     min_participation: float = 0.2  # fraccion minima del tiempo para contar en el Elo
     bots_as_humans: bool = False    # solo para pruebas: los bots cuentan como humanos
     ffa_min_humans: int = 3         # FFA: humanos minimos que terminaron la partida para rankear
+    gg_min_duration: float = 120.0  # Gun Game: segundos minimos para rankear (termina cuando alguien gana)
     skip_bot_only: bool = False     # no cargar partidas sin ningun humano que haya jugado
 
 
@@ -79,6 +84,7 @@ class PlayerAgg:
     zone_time: int = 0       # modo control: segundos dentro de la zona
     zone_kills: int = 0      # modo control: kills con el que mata o el que muere en la zona
     place: object = None     # FFA: puesto al terminar (None = se fue antes / otro modo)
+    gg_level: object = None  # Gun Game: escalon al terminar o al irse (1 = el primero)
 
     def add(self, ev):
         t = ev.get("time") or [0, 0]
@@ -96,6 +102,8 @@ class PlayerAgg:
         self.best_streak = max(self.best_streak, int(ev.get("best_streak") or 0))
         if ev.get("place"):
             self.place = int(ev["place"])
+        if ev.get("gg_level") is not None:
+            self.gg_level = int(ev["gg_level"])  # el ultimo tramo manda
 
     @property
     def total_time(self):
@@ -145,6 +153,7 @@ class Match:
     kills: list
     objectives: list
     event: str = ""        # torneo; '' = casual
+    gg: list = field(default_factory=list)  # Gun Game: eventos "gg" (cambios de escalon)
 
     @property
     def id(self):
@@ -152,7 +161,23 @@ class Match:
 
     @property
     def mode(self):
-        return self.start.get("mode", "dm")
+        # la DLL manda el Gun Game como "ffa" + variant "gungame" (un ingestor viejo lo carga como FFA)
+        mode = self.start.get("mode", "dm")
+        if mode == "ffa" and self.start.get("variant") == "gungame":
+            return "gungame"
+        return mode
+
+    @property
+    def gg_steps(self):
+        """Escalones de la escalera. Partidas de antes de que la DLL lo mandara: el escalon
+        del ganador (gana en el ultimo, el cuchillo)."""
+        if self.mode != "gungame":
+            return None
+        if self.start.get("gg_steps"):
+            return int(self.start["gg_steps"])
+        winner = self.end.get("ffa_winner")
+        levels = [p.gg_level for p in self.players.values() if p.gg_level and p.name == winner]
+        return max(levels) if levels else None
 
     @property
     def kind(self):
@@ -219,6 +244,7 @@ def build_match(events, path):
 
     kills = [e for e in events if e["ev"] == "kill"]
     objectives = [e for e in events if e["ev"] == "obj"]
+    gg = [e for e in events if e["ev"] == "gg" and isinstance(e.get("player"), dict)]
 
     # si el servidor se cayo no hay eventos "player": se reconstruye lo
     # posible (kills / muertes) a partir de las kills
@@ -277,7 +303,7 @@ def build_match(events, path):
             players[vkey].human_deaths += 1
         if killer and not k.get("ff") and not victim.get("bot"):
             players[(killer["name"], bool(killer.get("bot")))].human_kills += 1
-    return Match(start, end, players, kills, objectives, event.strip()[:64])
+    return Match(start, end, players, kills, objectives, event.strip()[:64], gg)
 
 
 def team_humans(match, team):
@@ -303,6 +329,13 @@ def ffa_result(match, p):
 
 
 def is_ranked(match, cfg):
+    if match.mode == "gungame":
+        # rankeada solo para el ladder Gun Game: gana quien mata con el cuchillo en el
+        # ultimo escalon, asi que una partida corta igual tiene un ganador real
+        return (match.end.get("reason") == "normal"
+                and bool(match.end.get("ffa_winner"))
+                and match.duration >= cfg.gg_min_duration
+                and ffa_finishers(match) >= cfg.ffa_min_humans)
     if match.mode == "ffa":
         # rankeada solo para el ladder FFA: no mueve el Elo
         return (match.end.get("reason") == "normal"
@@ -366,19 +399,22 @@ class Ingestor:
             cur.execute(
                 """INSERT INTO matches (id, server, map, mode, kind, event, season_id, tournament,
                        started_at, ended_at, duration_s, winner, end_reason, team0_army, team1_army,
-                       team0_score, team1_score, team0_kills, team1_kills, humans, ranked)
+                       team0_score, team1_score, team0_kills, team1_kills, humans, ranked,
+                       gg_steps, gg_ladder, ffa_weapon)
                    VALUES (%s,%s,%s,%s,%s,%s,
                            (SELECT id FROM seasons WHERE starts_at <= %s ORDER BY starts_at DESC LIMIT 1),
-                           %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                           %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                    ON CONFLICT (id) DO NOTHING""",
                 (match.id, match.start.get("server", ""), match.start.get("map", ""),
-                 match.start.get("mode", "dm"), match.kind, match.event, started,
+                 match.mode, match.kind, match.event, started,
                  bool(match.start.get("tournament")),
                  started, ended, match.duration, winner, match.end.get("reason", "other"),
                  teams_start.get(0, {}).get("army"), teams_start.get(1, {}).get("army"),
                  teams_end.get(0, {}).get("score"), teams_end.get(1, {}).get("score"),
                  teams_end.get(0, {}).get("kills"), teams_end.get(1, {}).get("kills"),
-                 humans, ranked))
+                 humans, ranked, match.gg_steps,
+                 json.dumps(match.start["gg_ladder"]) if match.mode == "gungame" and match.start.get("gg_ladder") else None,
+                 match.start.get("ffa_weapon") if match.mode == "ffa" else None))
             if cur.rowcount == 0:
                 log.info("%s: ya existe, se omite", match.id)
                 return
@@ -388,7 +424,7 @@ class Ingestor:
             for key, p in match.players.items():
                 pid = self.player_id(cur, p.name, p.bot, seen)
                 pids[key] = pid
-                if match.mode == "ffa":
+                if match.mode in FFA_MODES:
                     result = ffa_result(match, p)
                 elif winner is None or p.team is None:
                     result = None
@@ -401,14 +437,14 @@ class Ingestor:
                            kills, deaths, human_kills, human_deaths, suicides, teamkills, headshots,
                            objectives, best_streak, helmet_saves, foot_saves, deflected,
                            hits, misses, score, points, classes, main_class, result, zone_seconds,
-                           zone_kills, place)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                           zone_kills, place, gg_level)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (match.id, pid, p.team, p.time[0], p.time[1], p.kills, p.deaths,
                      p.human_kills, p.human_deaths,
                      p.suicides, p.tk, p.hs, p.objs, p.best_streak, p.helmet_saves, p.foot_saves,
                      p.deflected, p.hits, p.misses, p.score, p.points,
                      json.dumps(p.classes), p.main_class, result, p.zone_time, p.zone_kills,
-                     p.place))
+                     p.place, p.gg_level if match.mode == "gungame" else None))
 
             def actor_id(name, bot):
                 key = (name, bot)
@@ -458,15 +494,25 @@ class Ingestor:
                     "INSERT INTO objectives (match_id, t, type, name, team, player_id)"
                     " VALUES (%s,%s,%s,%s,%s,%s)", rows)
 
+            # Gun Game: cada cambio de escalon (la carrera de niveles de la partida)
+            rows = [(match.id, float(g.get("t") or 0),
+                     actor_id(g["player"]["name"], bool(g["player"].get("bot"))),
+                     int(g.get("level") or 0), g.get("weapon"), g.get("why") or "kill")
+                    for g in match.gg] if match.mode == "gungame" else []
+            if rows:
+                cur.executemany(
+                    "INSERT INTO gg_levels (match_id, t, player_id, level, weapon, why)"
+                    " VALUES (%s,%s,%s,%s,%s,%s)", rows)
+
             # tablas de resumen del ladder (en la misma transaccion)
             cur.execute("SELECT apply_rollups(%s)", ([match.id],))
 
-            # el FFA tiene su propio ladder: solo los modos por equipos mueven el Elo
-            if ranked and match.mode != "ffa":
+            # el FFA y el Gun Game tienen su propio ladder: solo los modos por equipos mueven el Elo
+            if ranked and match.mode not in FFA_MODES:
                 apply_elo(cur, match.id, self.cfg.min_participation)
 
         log.info("%s: %s (%s, %s%s), %d jugadores, %d kills%s", match.id, match.start.get("map"),
-                 match.start.get("mode", "dm"), match.kind,
+                 match.mode, match.kind,
                  f", torneo {match.event}" if match.event else "",
                  len(match.players), len(match.kills), ", rankeada" if ranked else "")
 
@@ -548,7 +594,8 @@ def rebuild_ratings(conn, cfg):
     with conn.transaction(), conn.cursor() as cur:
         cur.execute("DELETE FROM rating_history")
         cur.execute("DELETE FROM ratings")
-        cur.execute("SELECT id FROM matches WHERE ranked AND mode <> 'ffa' ORDER BY started_at, id")
+        cur.execute("SELECT id FROM matches WHERE ranked AND mode NOT IN ('ffa', 'gungame')"
+                    " ORDER BY started_at, id")
         ids = [r[0] for r in cur.fetchall()]
         for mid in ids:
             apply_elo(cur, mid, cfg.min_participation)
@@ -597,6 +644,33 @@ def apply_event_changes(conn, cfg):
     if changed:
         log.info("cambios de torneo aplicados: %d partidas; resumenes y Elo recalculados", changed)
     return changed
+
+
+def reingest(conn, cfg, paths):
+    """Vuelve a cargar partidas ya cargadas (por ejemplo, para que una version nueva del
+    ingestor las clasifique bien): borra cada partida (sus filas se borran en cascada), la
+    carga otra vez desde su archivo y despues recalcula los resumenes y, si alguna partida
+    por equipos cambio, el Elo. Todo en una transaccion. Los archivos no se mueven."""
+    ingestor = Ingestor(conn, cfg)
+    team_modes = False
+    with conn.transaction():
+        for path in paths:
+            events = read_events(path)
+            start = next((e for e in events if e["ev"] == "match_start"), None)
+            if not start or not start.get("match"):
+                raise SystemExit(f"{path}: sin match_start")
+            old = conn.execute("SELECT mode, ranked FROM matches WHERE id = %s", (start["match"],)).fetchone()
+            conn.execute("DELETE FROM matches WHERE id = %s", (start["match"],))
+            ingestor.ingest_file(path)
+            new = conn.execute("SELECT mode, ranked FROM matches WHERE id = %s", (start["match"],)).fetchone()
+            log.info("%s: %s -> %s", start["match"], old[0] if old else "(no estaba)", new[0] if new else "(omitida)")
+            for row in (old, new):
+                if row and row[0] not in FFA_MODES and row[1]:
+                    team_modes = True
+        conn.execute("SELECT rebuild_rollups()")
+        if team_modes:
+            rebuild_ratings(conn, cfg)
+    log.info("recargadas %d partidas; resumenes%s recalculados", len(paths), " y Elo" if team_modes else "")
 
 
 def pending_files(events_dir, stale_hours):
@@ -660,6 +734,10 @@ def main():
                     help="SOLO PRUEBAS: cargar a los bots como si fueran humanos")
     ap.add_argument("--ffa-min-humans", type=int, default=Config.ffa_min_humans,
                     help="FFA: humanos minimos que terminaron la partida para que sea rankeada")
+    ap.add_argument("--gg-min-duration", type=float, default=Config.gg_min_duration,
+                    help="Gun Game: segundos minimos para que la partida sea rankeada")
+    ap.add_argument("--reingest", nargs="+", type=Path, metavar="ARCHIVO",
+                    help="volver a cargar estas partidas (.jsonl ya procesados): las borra y las recarga")
     ap.add_argument("--skip-bot-only", action="store_true",
                     default=os.environ.get("DDAY_STATS_SKIP_BOT_ONLY", "").lower() in ("1", "true", "yes", "on"),
                     help="no cargar partidas sin ningun humano que haya jugado (o DDAY_STATS_SKIP_BOT_ONLY=1)")
@@ -690,10 +768,11 @@ def main():
     cfg = Config(min_humans=args.min_humans, min_duration=args.min_duration,
                  duel_min_humans=args.duel_min_humans, duel_min_duration=args.duel_min_duration,
                  min_participation=args.min_participation, bots_as_humans=args.bots_as_humans,
-                 ffa_min_humans=args.ffa_min_humans, skip_bot_only=args.skip_bot_only)
+                 ffa_min_humans=args.ffa_min_humans, gg_min_duration=args.gg_min_duration,
+                 skip_bot_only=args.skip_bot_only)
 
     maintenance = (args.init_schema or args.rebuild_ratings or args.rebuild_stats
-                   or args.new_season or args.set_event or args.apply_event_changes)
+                   or args.new_season or args.set_event or args.apply_event_changes or args.reingest)
     if args.events is None and not maintenance:
         ap.error("falta --events o DDAY_STATS_EVENTS")
     if args.events is not None and not args.events.is_dir():
@@ -706,7 +785,7 @@ def main():
                 conn.execute(SCHEMA_FILE.read_text(encoding="utf-8"))
                 log.info("esquema actualizado")
                 # ratings recreada por una migracion: se recalcula sola
-                if conn.execute("SELECT EXISTS (SELECT 1 FROM matches WHERE ranked AND mode <> 'ffa')"
+                if conn.execute("SELECT EXISTS (SELECT 1 FROM matches WHERE ranked AND mode NOT IN ('ffa', 'gungame'))"
                                 " AND NOT EXISTS (SELECT 1 FROM ratings)").fetchone()[0]:
                     rebuild_elo = True
             if args.new_season:
@@ -718,6 +797,9 @@ def main():
             if args.apply_event_changes:
                 # si hubo cambios ya recalcula resumenes y Elo por su cuenta
                 apply_event_changes(conn, cfg)
+            if args.reingest:
+                # recalcula resumenes (y Elo si hace falta) por su cuenta
+                reingest(conn, cfg, args.reingest)
             if args.rebuild_stats:
                 conn.execute("SELECT rebuild_rollups()")
                 log.info("tablas de resumen recalculadas")
