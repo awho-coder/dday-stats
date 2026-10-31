@@ -141,6 +141,23 @@ def find_player(name):
             if nw and len(nw) >= 3 and (nw in nn or nn in nw): return uid, nick
     return None, None
 
+def admin_map(arg):
+    """(nombre real, None) del mapa pedido por un admin, o (None, mensaje). Primero la lista conocida
+    (tolera 'eurovilla 3'), despues cualquier mapa de D-Day del server (sin distinguir mayusculas)."""
+    m = norm(arg)
+    known = [x for x in MAPS if norm(x) == m]
+    if known: return known[0], None
+    maps = server_maps()
+    real = maps.get(arg.strip().lower()) or next((r for k, r in maps.items() if norm(k) == m), None)
+    if not real:
+        sug = map_suggest(arg.strip(), list(maps))
+        return None, "[ADMIN] el mapa '%s' no esta en el servidor%s" % (arg[:20],
+            ". Quisiste decir: " + ", ".join(maps[x] for x in sug) + "?" if sug else "")
+    kind = map_kind(real)
+    if kind == "nodday": return None, "[ADMIN] '%s' esta en el servidor pero no es un mapa de D-Day" % real
+    if kind == "broken": return None, "[ADMIN] '%s' tiene el archivo danado" % real
+    return real, None
+
 HELP = ("[ADMIN] comandos: estado, kick <quien>, kickban <quien>, ban <ip>, unban <ip>, "
         "mapa <nombre>, duelo <mapa>, publico, cuenta, reset, resetscore, tiempo, mapas, bans, "
         "bots on|off, kickbots, screenshot, stuff <cmd>, autostuff <cmd>, autostuffoff, "
@@ -201,19 +218,15 @@ def run_cmd(text, by):
 
     # mapa / modos
     if verb in ("mapa", "map", "cambiamapa", "cambiar"):
-        m = norm(arg)
-        if m not in {norm(x) for x in MAPS}:
-            return "[ADMIN] mapa '%s' no está en la lista" % arg, True
-        real = [x for x in MAPS if norm(x) == m][0]
+        real, err = admin_map(arg)
+        if err: return err, True
         restore_rotation(); rcon("map %s" % real)
         return "[ADMIN] cambiando a %s en modo normal (petición de %s)" % (real, by), True
     if verb in ("duelo", "duel"):
         real = None
         if arg:
-            m = norm(arg)
-            if m not in {norm(x) for x in MAPS}:
-                return "[ADMIN] mapa '%s' no está en la lista" % arg, True
-            real = [x for x in MAPS if norm(x) == m][0]
+            real, err = admin_map(arg)
+            if err: return err, True
         rcon('set stats_mode duel'); rcon("set ffa 0")
         if real: rcon("map %s" % real)
         return ("[ADMIN] modo DUELO armado en %s — cuando estén listos: 'cuenta' "
@@ -241,9 +254,8 @@ def run_cmd(text, by):
         return "[ADMIN] cuenta reseteada (lo registrado se descarta)", True
     if verb in ("control",):
         if not arg: return "[ADMIN] uso: control <mapa>", True
-        m = norm(arg)
-        if m not in {norm(x) for x in MAPS}: return "[ADMIN] mapa '%s' no está en la lista" % arg, True
-        real = [x for x in MAPS if norm(x) == m][0]
+        real, err = admin_map(arg)
+        if err: return err, True
         # sin votacion durante la sesion de control: las rondas siguen en este mapa hasta
         # que se pida normal/dm/mapa (la votacion nunca debe llevar al modo control)
         rcon("set mapvoting 0"); rcon("set ffa 0"); rcon("set control_mode 1"); rcon('set sv_maplist "%s"' % real); rcon("map %s" % real)
@@ -251,9 +263,8 @@ def run_cmd(text, by):
     if verb in ("ffa", "freeforall", "todoscontratodos"):
         real = current_map() or "dday2"
         if norm(arg) not in MAPA_ACTUAL:
-            m = norm(arg)
-            if m not in {norm(x) for x in MAPS}: return "[ADMIN] mapa '%s' no está en la lista" % arg, True
-            real = [x for x in MAPS if norm(x) == m][0]
+            real, err = admin_map(arg)
+            if err: return err, True
         # ffa es latched: se aplica con el 'map'. Sin votacion para que la sesion siga en
         # este mapa hasta que se pida normal/dm/mapa (como en control)
         rcon("set mapvoting 0"); rcon("set control_mode 0"); rcon("set ffa 1"); rcon('set sv_maplist "%s"' % real); rcon("map %s" % real)
@@ -261,9 +272,8 @@ def run_cmd(text, by):
     if verb in ("dm", "deathmatch"):
         real = "dday2"
         if arg:
-            m = norm(arg)
-            if m not in {norm(x) for x in MAPS}: return "[ADMIN] mapa '%s' no está en la lista" % arg, True
-            real = [x for x in MAPS if norm(x) == m][0]
+            real, err = admin_map(arg)
+            if err: return err, True
         restore_rotation(); rcon("map %s" % real)
         return "[ADMIN] modo DM en %s" % real, True
     if verb in ("alias", "aliases"):
@@ -633,7 +643,7 @@ def ffa_phrase(text):
     if any(w in low for w in FFA_OFF):
         return None
     for tok in re.findall(r"[a-z0-9_]+", low):
-        if tok in MAPS:
+        if tok in MAPS or tok in server_maps():
             return "ffa " + tok
     return "ffa"
 
@@ -749,6 +759,17 @@ VOTE_YES   = {"si", "yes", "s", "y", "f1"}
 VOTE_NO    = {"no", "n", "f2"}
 VOTE_INFO  = {"voto", "votacion", "vote"}
 _MAPS_CACHE = {"t": 0, "maps": {}}
+
+VOTE_RATE = {}
+
+def vote_rate_ok(nick):
+    """Hasta 6 comandos de votacion cada 30 s por jugador (aparte del limite de los comandos de admin)."""
+    now = time.time()
+    q = [t for t in VOTE_RATE.get(nick, []) if now - t < 30]
+    if len(q) >= 6:
+        return False
+    q.append(now); VOTE_RATE[nick] = q
+    return True
 
 def vote_enabled():
     try: return open(VOTEFLAG).read().strip() == "1"
@@ -918,7 +939,8 @@ def vote_line(line, dry=False):
     if not vote_enabled():
         if verb in VOTE_START | VOTE_KICK: out("[VOTO] la votacion por chat esta apagada")
         return res
-    if not rate_ok(nick):
+    if not vote_rate_ok(nick):
+        out("[VOTO] calma, espera unos segundos")
         return ("rate", nick, text, None)
     pl = players()
     # el slot del que vota: un voto por slot aunque se cambie el nick
@@ -1104,7 +1126,7 @@ def tell_private(nick, text):
     """Manda texto solo a la consola de ese jugador (stuff echo). False si no esta conectado."""
     uid = next((u for u, k in players() if k == nick), None)
     if uid is None: return False
-    clean = re.sub(r'[;"$\\\n\r]', "", sin_tildes(text))
+    clean = re.sub(r'[;"$\\\n\r]', "", sin_tildes(text)).replace(":", " -")   # sin ':' no parece chat
     for i in range(0, len(clean), 180):
         rcon("stuff %d echo %s" % (uid, clean[i:i + 180]), wait=0.3)
     return True
@@ -1249,11 +1271,16 @@ def handle_line(line, dry=False):
         print("CHAT-LLM %s -> action=%s reply=%s" % (nick, action, reply[:60]))
         return ("llm", nick, text, reply or action)
 
+# q2pro anota "Rcon from ip:puerto:" y en la linea siguiente el comando (ej. el 'stuff ... echo' del
+# alias, que trae nicks de otros jugadores): si se leyera como chat, un nick armado podria dar ordenes
+RCON_FROM = re.compile(r"^(\[[^\]]+\]\s*)?Rcon from \S+:\s*$")
+
 def daemon():
     if not os.path.exists(LOG):
         print("FATAL: no existe %s" % LOG); sys.exit(1)
     f = open(LOG, encoding="utf-8", errors="replace")
     f.seek(0, 2)
+    skip_rcon = False
     print("chat-admin escuchando en %s" % LOG)
     check_admin_protection(); sys.stdout.flush()
     while True:
@@ -1263,6 +1290,10 @@ def daemon():
         except Exception as e: print("ERR alias %s" % e)
         line = f.readline()
         if not line: time.sleep(0.3); continue
+        if RCON_FROM.search(line):
+            skip_rcon = True; continue
+        if skip_rcon:
+            skip_rcon = False; continue   # el comando rcon (say/stuff del bot): nunca es chat
         try: handle_line(line.rstrip("\n"))
         except Exception as e: print("ERR %s" % e)
         sys.stdout.flush()
