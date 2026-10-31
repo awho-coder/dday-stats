@@ -3510,6 +3510,11 @@ void ClientCommand (edict_t *ent)
 		Cmd_ShowTimeLeft_f(ent);
 		return;
 	}
+	else if (Q_stricmp(cmd, "vote") == 0)
+	{
+		Cmd_Vote_f(ent);
+		return;
+	}
 
     cmdptr = FindCommand(cmd);
 	if (cmdptr && Sleep_BlocksCommand (ent, cmd))

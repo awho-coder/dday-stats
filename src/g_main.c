@@ -1660,6 +1660,8 @@ void G_RunFrame (void)
 		return;
 	}
 
+	Vote_RunFrame ();
+
 	if ((level.framenum%40 == 1 && qbots && bots->value == 0) ||
 		(bots->value == 1 && 
 		//num_clients >= playermaxforbots->value

@@ -898,6 +898,8 @@ void	ServerCommand (void)
 		Svcmd_FreezeMode_f();
 	else if (Q_stricmp(cmd, "mvd_partida") == 0)
 		StatsLog_MvdPartida_f();
+	else if (Q_stricmp(cmd, "votecancel") == 0)
+		Svcmd_VoteCancel_f();
 
 	else
 		safe_cprintf (NULL, PRINT_HIGH, "Unknown server command \"%s\"\n", cmd);

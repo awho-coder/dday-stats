@@ -3205,6 +3205,7 @@ void ClientDisconnect (edict_t *ent)
 	Kamikaze_Release (ent, false);
 
 	StatsLog_ClientDisconnect (ent);
+	Vote_ClientDisconnect (ent);
 
 	if (stats->value && !level.intermissiontime)
 		Write_Player_Stats(ent);

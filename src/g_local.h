@@ -2541,4 +2541,13 @@ qboolean Control_PlayerInZone (edict_t *ent);
 
 #include "g_statslog.h"
 
+// g_vote.c: votacion de los jugadores durante la partida (vote map / vote yes)
+void Vote_Init (void);
+void Vote_Reset (void);
+void Vote_RunFrame (void);
+void Vote_ClientDisconnect (edict_t *ent);
+void Cmd_Vote_f (edict_t *ent);
+void Svcmd_VoteCancel_f (void);
+edict_t *CreateTargetChangeLevel (char *map);
+
 #endif /* __G_LOCAL_H__ */

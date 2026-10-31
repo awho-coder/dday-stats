@@ -370,6 +370,7 @@ void InitGame (void)
 
 	stats = gi.cvar ("stats", "0", CVAR_LATCH);
 	StatsLog_Init ();
+	Vote_Init ();
 
 	// pbowens: reduce lag by manipulating userinfo on server basis
 //	crosshair	= gi.cvar ("crosshair", "0", CVAR_USERINFO); 
