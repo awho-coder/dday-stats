@@ -1375,6 +1375,7 @@ int			ffa_gg_banner = 0;
 
 #define FFA_GG_POOL		160		// Free For All Gun Game: weapons of the pool (the ones of the 8 factions, repeated ones once)
 #define FFA_GG_RESERVE	40	// models, sounds and images that are left free for what the game registers later
+#define FFA_GG_SPARE	8	// weapons loaded beyond the steps of the ladder, so the order has some choice
 
 typedef struct
 {
@@ -1382,6 +1383,7 @@ typedef struct
 	int			mags;
 	int			fac;			// faction of the class that has the weapon (g_ents.c)
 	qboolean	ins;			// item of the array of the faction: it is copied to the itemlist if the weapon is used
+	qboolean	inmap;			// weapon of one of the two factions of the map (already loaded by InitTeam)
 } ffa_gg_entry_t;
 
 // highest index of the models, sounds and images the Gun Game has registered: they are given in order, so it
@@ -1542,7 +1544,7 @@ static qboolean FFA_GunGameInit (void)
 	char			used[FFA_GG_POOL];
 	gitem_t			*item, *ammo;
 	SMos_t			*mos;
-	int				mags, steps, want, prev_type, prev_group, f, dropped = 0;
+	int				mags, steps, want, prev_type, prev_group, f;
 	char			*name, *dll;
 	unsigned int	seed;
 	edict_t			*ent;
@@ -1606,12 +1608,15 @@ static qboolean FFA_GunGameInit (void)
 				if (!item->dllname || strcmp (item->dllname, dll))
 					continue;
 
-				// the same weapon can be in several classes and in the Marines and the USA
+				// the same weapon can be in several classes and in the Marines and the USA; two factions can also
+				// carry the same weapon under the same name (the PIAT, the Mauser 98ks): it is a step only once
 				for (j = 0; j < n; j++)
 				{
 					if (!strcmp (pool[j].item->classname, item->classname) &&
 						((!pool[j].item->dllname && !item->dllname) ||
 						 (pool[j].item->dllname && item->dllname && !strcmp (pool[j].item->dllname, item->dllname))))
+						break;
+					if (pool[j].item->pickup_name && item->pickup_name && !Q_stricmp (pool[j].item->pickup_name, item->pickup_name))
 						break;
 				}
 				if (j < n || n >= FFA_GG_POOL)
@@ -1628,6 +1633,7 @@ static qboolean FFA_GunGameInit (void)
 				pool[n].mags = mags;
 				pool[n].fac = f;
 				pool[n].ins = ins;
+				pool[n].inmap = in_map;
 				n++;
 			}
 		}
@@ -1645,11 +1651,135 @@ static qboolean FFA_GunGameInit (void)
 	if (want > FFA_GG_MAX_STEPS - 1)
 		want = FFA_GG_MAX_STEPS - 1;
 
+	seed = FFA_Hash ((unsigned int)time (NULL) ^ FFA_Hash ((unsigned int)clock ()));
+
+	// models, sounds and images already in use (the files exist in the base game; nothing else registers them)
+	ffa_gg_mdl = gi.modelindex ("models/monsters/parasite/segment/tris.md2");
+	ffa_gg_snd = gi.soundindex ("boss3/bs3idle1.wav");
+	ffa_gg_img = gi.imageindex ("i_fixme");
+
+	// sounds of the cues (level up, level down, victory); the victory one is the anthem of the faction of the players
+	FFA_GGSound (ffa_gg_snd_up->string);
+	FFA_GGSound (ffa_gg_snd_down->string);
+	if (team_list[0])
+		FFA_GGSound (va ("%s/victory.wav", team_list[0]->teamid));
+
+	// banner of the lobby (stat 2 of the HUD)
+	FFA_GGImage (FFA_PIC_GG);
+	ffa_gg_banner = gi.imageindex (FFA_PIC_GG);
+
+	// banner of the end of the match (drawn by the scoreboard)
+	FFA_GGImage (FFA_PIC_GG_WIN);
+
+	// The weapons are registered before the order is drawn, so the ladder is drawn only among the ones that fit (the
+	// game also registers models, sounds and images later, and the clients cannot have more than MAX_MODELS,
+	// MAX_SOUNDS and MAX_IMAGES). The ones of the two factions of the map go first: InitTeam already loaded them, so
+	// they cost (almost) nothing. Then the ones of the other factions, in random order, while there is room and
+	// until there are some more than the steps (FFA_GG_SPARE). In a map with many models of its own (dday5) the
+	// ladder keeps all the weapons of the map and as many of the others as fit, instead of stopping at the first
+	// weapon that does not fit.
+	{
+		int			order[FFA_GG_POOL], m = 0, others, kept = 0, left_out = 0;
+		char		keep[FFA_GG_POOL];
+		qboolean	full = false;
+		ffa_gg_entry_t	*e;
+
+		for (i = 0; i < n; i++)
+		{
+			if (pool[i].inmap)
+				order[m++] = i;
+		}
+		others = m;
+		for (i = 0; i < n; i++)
+		{
+			if (!pool[i].inmap)
+				order[m++] = i;
+		}
+		for (i = n - 1; i > others; i--)
+		{
+			seed = FFA_Hash (seed + (unsigned int)i);
+			j = others + (int)(seed % (unsigned int)(i - others + 1));
+			k = order[i];
+			order[i] = order[j];
+			order[j] = k;
+		}
+
+		memset (keep, 0, sizeof (keep));
+		for (j = 0; j < n; j++)
+		{
+			e = &pool[order[j]];
+
+			if (!e->inmap)
+			{
+				if (full)
+				{
+					left_out++;
+					continue;
+				}
+				if (kept >= want + FFA_GG_SPARE)
+					break;
+				if (e->ins && game.num_items + 2 >= MAX_ITEMS - 8)
+				{
+					full = true;
+					left_out++;
+					continue;
+				}
+			}
+
+			ammo = e->ins ? FFA_FactionItem (e->fac, e->item->ammo) : NULL;
+			FFA_GGPrecacheWeapon (e->item, ammo);
+
+			// over the limit: the files of this weapon are already registered, but it is left out (and so are the
+			// rest of the other factions; the ones of the map are needed anyway)
+			if (!e->inmap && (ffa_gg_mdl > MAX_MODELS - FFA_GG_RESERVE || ffa_gg_snd > MAX_SOUNDS - FFA_GG_RESERVE ||
+				ffa_gg_img > MAX_IMAGES - FFA_GG_RESERVE))
+			{
+				full = true;
+				left_out++;
+				continue;
+			}
+
+			if (e->ins)
+			{
+				if (ammo)
+					FFA_InsertFactionItem (e->fac, ammo);
+				item = FFA_InsertFactionItem (e->fac, e->item);
+				if (!item)
+				{
+					left_out++;
+					continue;
+				}
+				e->item = item;
+			}
+
+			keep[order[j]] = 1;
+			kept++;
+		}
+
+		// only the weapons that were loaded stay in the pool
+		for (i = 0, m = 0; i < n; i++)
+		{
+			if (keep[i])
+				pool[m++] = pool[i];
+		}
+		n = m;
+
+		// only when the ladder is shorter than the steps asked for (ffa_gg_steps)
+		if (left_out && n < want)
+			gi.dprintf ("Gun Game: %i weapons of other factions left out (no room for more items, models, sounds or images: items %i/%i, models %i/%i, sounds %i/%i, images %i/%i)\n",
+						left_out, game.num_items, MAX_ITEMS, ffa_gg_mdl, MAX_MODELS, ffa_gg_snd, MAX_SOUNDS, ffa_gg_img, MAX_IMAGES);
+	}
+
+	if (!n)
+		return false;
+
+	if (want > n)
+		want = n;
+
 	// the steps are picked one by one at random. The faction is picked first (so the ones with more weapons do
 	// not take over the ladder) and then one of its weapons. The type of weapon (pistol, rifle...) never repeats
 	// from one step to the next, nor the faction when there is another option; the last weapon before the knife is
 	// not a sword either. If there is nothing left that complies, the rules are relaxed (pass 1, then 2).
-	seed = FFA_Hash ((unsigned int)time (NULL) ^ FFA_Hash ((unsigned int)clock ()));
 	memset (used, 0, sizeof (used));
 	prev_type = -1;
 	prev_group = -1;
@@ -1701,54 +1831,6 @@ static qboolean FFA_GunGameInit (void)
 		prev_group = g;
 	}
 	n = k;
-
-	// models, sounds and images already in use (the files exist in the base game; nothing else registers them)
-	ffa_gg_mdl = gi.modelindex ("models/monsters/parasite/segment/tris.md2");
-	ffa_gg_snd = gi.soundindex ("boss3/bs3idle1.wav");
-	ffa_gg_img = gi.imageindex ("i_fixme");
-
-	// sounds of the cues (level up, level down, victory); the victory one is the anthem of the faction of the players
-	FFA_GGSound (ffa_gg_snd_up->string);
-	FFA_GGSound (ffa_gg_snd_down->string);
-	if (team_list[0])
-		FFA_GGSound (va ("%s/victory.wav", team_list[0]->teamid));
-
-	// banner of the lobby (stat 2 of the HUD)
-	FFA_GGImage (FFA_PIC_GG);
-	ffa_gg_banner = gi.imageindex (FFA_PIC_GG);
-
-	// banner of the end of the match (drawn by the scoreboard)
-	FFA_GGImage (FFA_PIC_GG_WIN);
-
-	// registers the weapons in order and stops at the first that does not fit: the game also registers models,
-	// sounds and images later (and the clients cannot have more than MAX_MODELS, MAX_SOUNDS and MAX_IMAGES)
-	for (i = 0; i < n; i++)
-	{
-		ammo = lad[i].ins ? FFA_FactionItem (lad[i].fac, lad[i].item->ammo) : NULL;
-
-		if (lad[i].ins && game.num_items + 2 >= MAX_ITEMS - 8)
-			break;
-
-		FFA_GGPrecacheWeapon (lad[i].item, ammo);
-
-		if (ffa_gg_mdl > MAX_MODELS - FFA_GG_RESERVE || ffa_gg_snd > MAX_SOUNDS - FFA_GG_RESERVE ||
-			ffa_gg_img > MAX_IMAGES - FFA_GG_RESERVE)
-			break;
-
-		if (lad[i].ins)
-		{
-			if (ammo)
-				FFA_InsertFactionItem (lad[i].fac, ammo);
-			lad[i].item = FFA_InsertFactionItem (lad[i].fac, lad[i].item);
-			if (!lad[i].item)
-				break;
-		}
-	}
-	dropped = n - i;
-	n = i;
-
-	if (dropped)
-		gi.dprintf ("Gun Game: %i weapons left out (no room for more items, models, sounds or images)\n", dropped);
 
 	if (!n)
 		return false;
