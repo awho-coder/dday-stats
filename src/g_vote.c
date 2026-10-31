@@ -35,6 +35,7 @@
 
 #include "g_local.h"
 #include <ctype.h>
+#include <stdarg.h>
 
 #ifdef _WIN32
 #include <io.h>
@@ -455,6 +456,27 @@ static const char *Vote_Blocked (void)
 	return NULL;
 }
 
+// mensaje al medio de la pantalla de cada humano (como q2admin). En q2pro un centerprint borra
+// las kills de arriba, por eso solo se usa al abrir y al cerrar la votacion, no en los recordatorios
+static void Vote_Center (const char *fmt, ...)
+{
+	char	msg[256];
+	va_list	ap;
+	int		i;
+	edict_t	*ent;
+
+	va_start (ap, fmt);
+	vsnprintf (msg, sizeof(msg), fmt, ap);
+	va_end (ap);
+
+	for (i = 1; i <= game.maxclients; i++)
+	{
+		ent = g_edicts + i;
+		if (ent->inuse && ent->client && !ent->ai)
+			safe_centerprintf (ent, "%s", msg);
+	}
+}
+
 // quienes votaron si (para el log de los kicks)
 static void Vote_LogYes (void)
 {
@@ -484,12 +506,14 @@ static void Vote_End (qboolean passed, const char *why)
 	if (!passed)
 	{
 		safe_bprintf (PRINT_HIGH, "Votacion rechazada (%s): %s.\n", why, Vote_What ());
+		Vote_Center ("Votacion RECHAZADA\n\n%s\n(%s)", Vote_What (), why);
 		gi.dprintf ("vote: rechazado %s (propuso %s): %s\n", Vote_What (), vote.caller, why);
 		vote.next_allowed = level.time + vote_cooldown->value;
 		return;
 	}
 
 	safe_bprintf (PRINT_HIGH, "Votacion aprobada: %s.\n", Vote_What ());
+	Vote_Center ("Votacion APROBADA\n\n%s", Vote_What ());
 	gi.dprintf ("vote: aprobado %s (propuso %s)\n", Vote_What (), vote.caller);
 
 	if (vote.type == VTYPE_KICK)
@@ -573,6 +597,8 @@ static void Vote_Start (edict_t *ent, int type)
 	safe_bprintf (PRINT_HIGH, "%s propone %s. Escribe \"vote yes\" o \"vote no\" en la consola.\n",
 		vote.caller, Vote_What ());
 	gi.dprintf ("vote: %s propone %s\n", vote.caller, Vote_What ());
+	Vote_Center ("VOTACION\n\n%s propone\n%s\n\nvote yes  o  vote no\nen la consola (%d s)",
+		vote.caller, Vote_What (), (int)(vote.end_time - level.time + 0.5));
 
 	Vote_Check ();	// con un solo jugador se aprueba al tiro
 }
