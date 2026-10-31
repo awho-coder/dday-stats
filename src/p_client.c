@@ -2856,6 +2856,7 @@ void ClientBeginDeathmatch (edict_t *ent)
 	AI_EnemyAdded(ent);
 	//[end]
 
+	Vote_ClientBegin (ent);	// le explica como votar (la primera vez que entra)
 
 
 	// make sure all view stuff is valid

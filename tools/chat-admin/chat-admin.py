@@ -778,9 +778,19 @@ def vote_enabled():
 def vote_set(on):
     try:
         with open(VOTEFLAG, "w") as f: f.write("1\n" if on else "0\n")
-        return True
     except Exception:
         return False
+    vote_chat_sync(force=True)
+    return True
+
+_VCHAT = {"next": 0}
+
+def vote_chat_sync(force=False):
+    """Le dice a la DLL (cvar vote_chat) si la votacion por chat esta prendida, para que el aviso de
+    como votar incluya !votemap. Cada 60 s: un reinicio del server borra el cvar."""
+    if not force and time.time() < _VCHAT["next"]: return
+    _VCHAT["next"] = time.time() + 60
+    rcon("set vote_chat %d" % (1 if vote_enabled() else 0), wait=0.3)
 
 def server_maps():
     """{nombre en minusculas: nombre real} de los .bsp del server (cache de 60 s)."""
@@ -1288,6 +1298,8 @@ def daemon():
         except Exception as e: print("ERR vote %s" % e)
         try: alias_tick()
         except Exception as e: print("ERR alias %s" % e)
+        try: vote_chat_sync()
+        except Exception as e: print("ERR vote_chat %s" % e)
         line = f.readline()
         if not line: time.sleep(0.3); continue
         if RCON_FROM.search(line):
