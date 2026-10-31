@@ -108,6 +108,20 @@ loginctl enable-linger $USER                       # sobrevive al logout
 - **Bloqueados para siempre**: `exec` `set` `restart` `rcon_password`
   archivos/BD/servicios (whitelist dura en código, no en prompt)
 
+## Votación de mapa por chat (para todos los jugadores)
+
+Sirve para probar antes de la votación de la DLL (`vote map <mapa>`, cvar `vote_enable`).
+Está apagada por defecto; el admin la prende con `votacion on` (queda guardado en
+`/home/ubuntu/dday/chat-admin.vote`, sobrevive a reinicios del bot) y la apaga con `votacion off`.
+`votacion cancelar` corta la que está en curso.
+
+- `!votemap <mapa>` (o `!votar`): abre la votación; el que propone vota sí.
+- `!si` / `!no`: vota. `!voto`: muestra cómo va.
+- Se aprueba cuando los sí superan el 50 % de los jugadores de `status`; dura 30 s; tras un
+  rechazo hay que esperar 60 s. Aprobada → `map <mapa>` por rcon.
+- Mapas: los de `MAPS` y los de `sv_maplist`. No se vota en torneo (`tournament 1`) ni en duelo.
+- Un voto por slot de `status`: cambiarse el nick no da otro voto.
+
 ## Seguridad (capas)
 
 1. **Allowlist exacta** de nicks (case-sensitive; variantes tipo `[mr]+roman` se ignoran). Excepción pedida

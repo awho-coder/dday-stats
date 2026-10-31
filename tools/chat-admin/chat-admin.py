@@ -136,7 +136,7 @@ HELP = ("[ADMIN] comandos: estado, kick <quien>, kickban <quien>, ban <ip>, unba
         "mapa <nombre>, duelo <mapa>, publico, cuenta, reset, resetscore, tiempo, mapas, bans, "
         "bots on|off, kickbots, screenshot, stuff <cmd>, autostuff <cmd>, autostuffoff, "
         "control <mapa>, ffa <mapa>, dm <mapa>, kamikaze on|off, medic on|off, medic bazooka on|off, dardo on|off, officer bonus on|off, tab nuevo on|off, "
-        "grabar on|off|ahora, lock, unlock, say <texto>, ayuda")
+        "grabar on|off|ahora, votacion on|off|cancelar, lock, unlock, say <texto>, ayuda")
 
 def run_cmd(text, by):
     """Ejecuta un comando de chat. SIEMPRE vía whitelist. Devuelve respuesta para say()."""
@@ -257,6 +257,20 @@ def run_cmd(text, by):
             real = [x for x in MAPS if norm(x) == m][0]
         restore_rotation(); rcon("map %s" % real)
         return "[ADMIN] modo DM en %s" % real, True
+    if verb in ("votacion", "votaciones"):
+        # votacion de mapa por chat abierta a todos (!votemap <mapa>, !si, !no); se guarda en VOTEFLAG
+        a = norm(arg)
+        if a in ("on", "1", "si", "activar", "activa", "prender", "prende", "encender", "enciende"):
+            vote_set(True)
+            return "[ADMIN] votacion por chat ON: cualquiera puede escribir !votemap <mapa> y votar con !si / !no", True
+        if a in ("off", "0", "no", "desactivar", "desactiva", "apagar", "apaga"):
+            vote_set(False)
+            return "[ADMIN] votacion por chat OFF", True
+        if a in ("cancelar", "cancela", "parar", "para"):
+            if not VOTE["active"]: return "[ADMIN] no hay ninguna votacion en curso", True
+            VOTE["active"] = False
+            return "[ADMIN] votacion cancelada", True
+        return "[ADMIN] votacion por chat: %s (uso: votacion on|off|cancelar)" % ("ON" if vote_enabled() else "OFF"), True
     if verb in ("kamikaze", "kamikase", "kamicase"):
         # cvar de la DLL (no latched): rige desde el proximo airstrike; un reinicio del server lo apaga
         a = norm(arg)
@@ -697,6 +711,165 @@ CHAT_PATS = [
     r'^\s*([^<>\s][^:]{0,40}?):\s+(.+)$',
 ]
 
+# ── votacion por chat (para probar antes de la de la DLL) ──
+# Cualquier jugador: "!votemap <mapa>" (o "!votar"), "!si" / "!no", "!voto" (estado).
+# Se prende con el comando de admin "votacion on" (queda guardado en VOTEFLAG); apagada por defecto.
+VOTEFLAG      = "/home/ubuntu/dday/chat-admin.vote"
+VOTE_TIME     = 30      # segundos que dura
+VOTE_PERCENT  = 50      # hay que superar este % de los jugadores del server
+VOTE_COOLDOWN = 60      # espera tras una votacion rechazada
+VOTE_REMIND   = 10
+VOTE = {"active": False, "map": "", "caller": "", "end": 0, "remind": 0, "next": 0, "votes": {}}
+VOTE_START = {"votemap", "votar", "votamapa", "votemapa", "vmap"}
+VOTE_YES   = {"si", "yes", "s", "y", "f1"}
+VOTE_NO    = {"no", "n", "f2"}
+VOTE_INFO  = {"voto", "votacion", "vote"}
+
+def vote_enabled():
+    try: return open(VOTEFLAG).read().strip() == "1"
+    except Exception: return False
+
+def vote_set(on):
+    try:
+        with open(VOTEFLAG, "w") as f: f.write("1\n" if on else "0\n")
+        return True
+    except Exception:
+        return False
+
+def vote_parse_chat(line):
+    """(nick, texto) de cualquier jugador; ignora al server ('console'), los avisos del bot y el chat de equipo."""
+    for p in CHAT_PATS:
+        m = re.match(p, line)
+        if m:
+            nick, text = m.group(1).strip(), m.group(2).strip()
+            if norm(nick) == "console" or nick.startswith("(") or text.startswith("["):
+                return None
+            return nick, text
+    return None
+
+def vote_needed(total):
+    return total * VOTE_PERCENT // 100 + 1
+
+def vote_count():
+    """(si, no, total) con los jugadores conectados ahora; descarta votos de slots que ya no estan."""
+    pl = dict(players())
+    VOTE["votes"] = {uid: v for uid, v in VOTE["votes"].items() if uid in pl}
+    yes = sum(1 for v in VOTE["votes"].values() if v)
+    no = sum(1 for v in VOTE["votes"].values() if not v)
+    return yes, no, len(pl)
+
+def vote_blocked():
+    if re.search(r'is\s+"1', rcon("tournament")): return "no se puede votar durante un torneo"
+    if re.search(r'is\s+"duel', rcon("stats_mode")): return "no se puede votar durante un duelo"
+    return None
+
+def vote_allowed_maps():
+    ml = re.search(r'is\s+"([^"]*)"', rcon("sv_maplist"))
+    rot = ml.group(1).split() if ml and ml.group(1) != "txt" else []
+    return MAPS | set(rot)
+
+def vote_finish(passed, why=""):
+    VOTE["active"] = False
+    if not passed:
+        VOTE["next"] = time.time() + VOTE_COOLDOWN
+        say("[VOTO] rechazada (%s): cambiar a %s" % (why, VOTE["map"]))
+        log_action(VOTE["caller"], "votemap " + VOTE["map"], "rechazada: " + why)
+        return
+    say("[VOTO] aprobada: cambiando a %s" % VOTE["map"])
+    log_action(VOTE["caller"], "votemap " + VOTE["map"], "aprobada")
+    rcon("map %s" % VOTE["map"])
+
+def vote_check():
+    """Decide la votacion si ya alcanza (o ya no puede alcanzar). True si termino."""
+    yes, no, total = vote_count()
+    if not total:
+        vote_finish(False, "no quedan jugadores"); return True
+    need = vote_needed(total)
+    if yes >= need:
+        vote_finish(True); return True
+    if total - no < need:
+        vote_finish(False, "no alcanzan los votos"); return True
+    return False
+
+def vote_status():
+    yes, no, total = vote_count()
+    return "[VOTO] %s propone cambiar a %s: si %d, no %d, faltan %d si (%d s). Escribe !si o !no" % (
+        VOTE["caller"], VOTE["map"], yes, no, max(vote_needed(total) - yes, 0),
+        max(int(VOTE["end"] - time.time() + 0.9), 0))
+
+def vote_line(line, dry=False):
+    """Atiende los comandos de votacion de cualquier jugador. None si la linea no es de votacion."""
+    cp = vote_parse_chat(line)
+    if not cp: return None
+    nick, text = cp
+    t = text.strip()
+    if not t.startswith("!"): return None
+    words = t[1:].split()
+    if not words: return None
+    verb = norm(words[0])
+    if verb not in VOTE_START | VOTE_YES | VOTE_NO | VOTE_INFO: return None
+    out = lambda msg: (say(msg) if not dry else None, print("VOTE %s -> %s" % (nick, msg)))
+    if not vote_enabled():
+        if verb in VOTE_START: out("[VOTO] la votacion por chat esta apagada")
+        return ("vote", nick, text, None)
+    if not rate_ok(nick):
+        return ("rate", nick, text, None)
+    # el slot del que vota: un voto por slot aunque se cambie el nick
+    uid = next((u for u, n in players() if n == nick), None)
+    if uid is None:
+        print("VOTE %s no aparece en status, se ignora" % nick)
+        return ("vote", nick, text, None)
+
+    if verb in VOTE_INFO:
+        out(vote_status() if VOTE["active"] else "[VOTO] uso: !votemap <mapa>, !si, !no")
+        return ("vote", nick, text, None)
+
+    if verb in VOTE_YES | VOTE_NO:
+        if not VOTE["active"]:
+            out("[VOTO] no hay ninguna votacion en curso"); return ("vote", nick, text, None)
+        VOTE["votes"][uid] = verb in VOTE_YES
+        if not vote_check():
+            out(vote_status())
+        return ("vote", nick, text, None)
+
+    # abrir una votacion
+    if VOTE["active"]:
+        out(vote_status()); return ("vote", nick, text, None)
+    if time.time() < VOTE["next"]:
+        out("[VOTO] espera %d s para proponer otra" % int(VOTE["next"] - time.time() + 0.9))
+        return ("vote", nick, text, None)
+    if len(words) < 2:
+        out("[VOTO] uso: !votemap <mapa>"); return ("vote", nick, text, None)
+    why = vote_blocked()
+    if why:
+        out("[VOTO] " + why); return ("vote", nick, text, None)
+    want = norm(words[1])
+    real = next((m for m in sorted(vote_allowed_maps()) if norm(m) == want), None)
+    if not real:
+        out("[VOTO] el mapa '%s' no se puede votar" % words[1][:20]); return ("vote", nick, text, None)
+    VOTE.update(active=True, map=real, caller=nick, end=time.time() + VOTE_TIME,
+                remind=time.time() + VOTE_REMIND, votes={uid: True})
+    if dry:
+        print("VOTE %s abre votacion por %s" % (nick, real)); return ("vote", nick, text, None)
+    if not vote_check():
+        out(vote_status())
+    return ("vote", nick, text, None)
+
+def vote_tick():
+    """Desde el bucle del daemon: vence la votacion y recuerda cada VOTE_REMIND segundos."""
+    if not VOTE["active"]: return
+    now = time.time()
+    if not vote_enabled():
+        vote_finish(False, "votacion apagada"); return
+    if now >= VOTE["end"]:
+        if not vote_check():
+            vote_finish(False, "se acabo el tiempo")
+        return
+    if now >= VOTE["remind"]:
+        VOTE["remind"] = now + VOTE_REMIND
+        if not vote_check():
+            say(vote_status())
+
 def parse_chat(line):
     for p in CHAT_PATS:
         m = re.match(p, line)
@@ -720,12 +893,14 @@ def looks_command(text):
     if text.strip().startswith("!"): return True
     v = norm(t.split(None, 1)[0] if t else "")
     return v in {"ayuda","help","estado","status","jugadores","players","kick","kickea","echar",
-                 "kickban","ban","unban","delban","desban","lock","unlock","bloquear","abrir",
+                 "kickban","ban","votacion","votaciones","unban","delban","desban","lock","unlock","bloquear","abrir",
                  "mapa","map","cambiamapa","duelo","duel","publico","publica","cuenta","startcount",
                  "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","dm","kamikaze","kamikase","kamicase","grabar","graba","grabacion","grabacin","mvd","medic","medico","mdico","dardo","sleepdart","officer","oficial","officers","oficiales","tab","scoreboard","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
                  "restart","reload"}
 
 def handle_line(line, dry=False):
+    v = vote_line(line, dry)
+    if v: return v
     cp = parse_chat(line)
     if not cp: return None
     nick, text = cp
@@ -842,6 +1017,8 @@ def daemon():
     f.seek(0, 2)
     print("chat-admin escuchando en %s" % LOG); sys.stdout.flush()
     while True:
+        try: vote_tick()
+        except Exception as e: print("ERR vote %s" % e)
         line = f.readline()
         if not line: time.sleep(0.3); continue
         try: handle_line(line.rstrip("\n"))
