@@ -1913,6 +1913,24 @@ void FFA_RouletteInit (void)
 	if (FFA_GunGameInit ())
 		return;
 
+	// Free For All clasico (ffa_roulette 0, por defecto): todos Sniper de la faccion del primer equipo, sin sorteo
+	// ni ruleta, y en el mapa solo quedan los rifles de francotirador y el cuchillo (como antes del sorteo)
+	if (!ffa_roulette || !ffa_roulette->value)
+	{
+		for (i = game.maxclients + 1; i < globals.num_edicts; i++)
+		{
+			ent = &g_edicts[i];
+
+			// only the pickups of the map (monsters, turrets and key triggers also have an item)
+			if (!ent->inuse || !ent->item || !ent->classname || strcmp (ent->classname, ent->item->classname))
+				continue;
+
+			if ((ent->item->flags & IT_WEAPON) && ent->item->position != LOC_SNIPER && ent->item->position != LOC_KNIFE)
+				G_FreeEdict (ent);
+		}
+		return;
+	}
+
 	for (t = 0; t < 2; t++)
 	{
 		if (!team_list[t])
