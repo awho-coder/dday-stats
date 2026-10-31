@@ -35,10 +35,42 @@ Rama `free-for-all-mod` de ddaychile. Apagado por defecto; con `ffa 0` el juego 
 |---|---|---|
 | `ffa` | `0` | `1` activa el modo (latched: se aplica con el próximo `map`). Requiere `deathmatch 1` y no se mezcla con el modo control ni con CTB. |
 
-Todos entran como Sniper (rifle + cuchillo), sin equipos ni fuego amigo, con spawns al azar
-lejos de los demás, puntaje individual, marcador propio y anuncios del líder. Termina por
-`fraglimit` (30 si el server usa 0) o `timelimit`. No funciona junto con `tournament` y las
-stats persistentes (`stats 1`) no lo distinguen. Desde el bot: `ffa <mapa>`.
+Sin equipos ni fuego amigo, con spawns al azar lejos de los demás, puntaje individual,
+marcador propio y anuncios del líder. Termina por `fraglimit` (30 si el server usa 0) o
+`timelimit`. No funciona junto con `tournament` y las stats persistentes (`stats 1`) no lo
+distinguen. Desde el bot: `ffa <mapa>`.
+
+**Arma del mapa** (rama `ffa-gungame` de ddaychile, 2026-10-31): al empezar cada mapa se sortea
+una sola arma para todos entre las de Infantry, Officer, Light/Heavy Gunner, Sniper y Special de
+los dos ejércitos del mapa, más la pistola de cada uno (partida de pistolas, con 6 cargadores).
+Durante la pausa inicial (10 s) el HUD muestra una ruleta (`pics/ffa_w_*.png`). No repite el arma
+del mapa anterior. En el mapa solo quedan esa arma, su munición y el cuchillo.
+
+### Gun Game (`ffa_gungame`)
+
+Con `ffa 1` y `ffa_gungame 1`, cada kill te da la siguiente arma de una escalera; gana el
+primero que mata con el cuchillo en el último escalón (no hay fraglimit). La escalera se arma al
+azar en cada mapa con armas de las 8 facciones (sin lanzallamas ni molotov), sin repetir el tipo
+de arma ni el ejército de un escalón al siguiente. Bajas un escalón si te suicidas, si te matan
+con cuchillo o tras varias muertes seguidas sin matar. Quien entra tarde parte en el escalón
+más bajo de los que juegan. No hay armas en el piso ni se pueden tirar. El HUD muestra LEADER
+y LEVEL, el TAB una columna `Lvl` y al final el banner del ganador.
+
+| Cvar | Por defecto | Qué hace |
+|---|---|---|
+| `ffa_gungame` | `0` | `1` activa el Gun Game (latched, con `ffa 1`). |
+| `ffa_gg_steps` | `29` | Armas antes del cuchillo (30 escalones con él; `0` = todas las que haya). |
+| `ffa_gg_factions` | `1` | `1` = armas de las 8 facciones; `0` = solo las de los dos ejércitos del mapa. |
+| `ffa_gg_deaths` | `0` | Muertes seguidas sin matar para bajar un escalón (`0` = un quinto de los escalones, mínimo 2; negativo = nunca). |
+| `ffa_gg_snd_up` | `ffa/gg_up2.wav` | Sonido al subir (ruta bajo `sound/`). |
+| `ffa_gg_snd_down` | `misc/menu3.wav` | Sonido al bajar. |
+
+Si en un mapa no caben todos los modelos o sonidos (Quake 2 admite 256 de cada uno), la escalera
+queda más corta y el log del server lo dice (`Gun Game: N weapons left out`). En las stats la
+partida sigue siendo `ffa`, con `"variant":"gungame"` en `match_start`, el ganador y los puestos
+por escalón y `gg_level` en cada jugador. Desde el bot: `gungame <mapa>` (o en frase: "admin pon
+el gun game en dday2"). Archivos para los clientes: `pics/ffa_gungame.png`,
+`pics/ffa_gungame_win.png`, `pics/ffa_w_*.png` y `sound/ffa/gg_up*.wav` (se descargan del server).
 
 ## Juego: cambios de clases y armas
 
@@ -322,13 +354,14 @@ comando.
 - **Info:** `estado` `ayuda` `bans` `tiempo` `mapas` `infomapa` `marcador`
   `zona` `versiones` `lag` `tiempos`
 - **Juego** (los mapas: cualquier mapa de D-Day del server): `mapa <x>` `duelo <mapa>` `publico` `normal` `control <mapa>`
-  `ffa <mapa>` `dm <mapa>` `modo normal|control|ffa|dm|duelo [mapa]` `kamikaze on|off` `tab nuevo on|off` `dardo on|off` `grabar on|off|ahora` `evento <nombre>` `cuenta [minutos]`
+  `ffa <mapa>` `gungame <mapa>` `dm <mapa>` `modo normal|control|ffa|gungame|dm|duelo [mapa]` `kamikaze on|off` `tab nuevo on|off` `dardo on|off` `grabar on|off|ahora` `evento <nombre>` `cuenta [minutos]`
   `reset` `resetscore` `torneo on|off` `freeze` `proximamapa` `lock` `unlock`
   `say <texto>`
 - `control <mapa>` (o `modo control <mapa>`) deja solo ese mapa y **apaga la
   votación** mientras dure la sesión: las rondas se repiten en ese mapa.
 - `ffa <mapa>` (o `ffa` solo = el mapa actual; también en frase: "admin quiero probar
   el ffa en dust") arranca Free For All en ese mapa y, como `control`, apaga la votación.
+- `gungame <mapa>` igual que `ffa`, pero con el Gun Game (`ffa_gungame 1`); `ffa` lo apaga.
 - `mapa`, `dm`, `normal` y `publico` apagan el modo control y el FFA, y restauran la
   rotación (`sv_maplist`) y la votación (`mapvoting`) de `server.cfg`.
 - `kamikaze on|off` prende o apaga el airstrike kamikaze del Officer (`kamikaze_arty`);

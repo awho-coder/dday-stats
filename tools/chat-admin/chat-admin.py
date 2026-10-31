@@ -51,7 +51,7 @@ def cfg_value(name):
 
 def restore_rotation():
     """Modo normal: sin control ni FFA, con la rotacion y la votacion de server.cfg."""
-    rcon("set control_mode 0"); rcon("set ffa 0")
+    rcon("set control_mode 0"); rcon("set ffa 0"); rcon("set ffa_gungame 0")
     ml = normal_maplist()
     if ml: rcon('set sv_maplist "%s"' % ml)
     mv = cfg_value("mapvoting")
@@ -161,7 +161,7 @@ def admin_map(arg):
 HELP = ("[ADMIN] comandos: estado, kick <quien>, kickban <quien>, ban <ip>, unban <ip>, "
         "mapa <nombre>, duelo <mapa>, publico, cuenta, reset, resetscore, tiempo, mapas, bans, "
         "bots on|off, kickbots, screenshot, stuff <cmd>, autostuff <cmd>, autostuffoff, "
-        "control <mapa>, ffa <mapa>, dm <mapa>, kamikaze on|off, medic on|off, medic bazooka on|off, dardo on|off, officer bonus on|off, tab nuevo on|off, "
+        "control <mapa>, ffa <mapa>, gungame <mapa>, dm <mapa>, kamikaze on|off, medic on|off, medic bazooka on|off, dardo on|off, officer bonus on|off, tab nuevo on|off, "
         "grabar on|off|ahora, votacion on|off|cancelar, alias <nick>, lock, unlock, say <texto>, ayuda")
 
 def run_cmd(text, by):
@@ -175,9 +175,9 @@ def run_cmd(text, by):
         sub = arg.split(None, 1)
         verb = norm(sub[0]) if sub else "normal"
         arg = sub[1] if len(sub) > 1 else ""
-        if verb not in ("control", "ffa", "freeforall", "todoscontratodos", "dm", "deathmatch", "duelo", "duel",
+        if verb not in ("control", "ffa", "freeforall", "todoscontratodos", "gungame", "gg", "dm", "deathmatch", "duelo", "duel",
                         "publico", "publica", "normal", "clasico", "restaurar", "default"):
-            return "[ADMIN] uso: modo normal | modo control <mapa> | modo ffa <mapa> | modo dm <mapa> | modo duelo <mapa>", True
+            return "[ADMIN] uso: modo normal | modo control <mapa> | modo ffa <mapa> | modo gungame <mapa> | modo dm <mapa> | modo duelo <mapa>", True
 
     # lecturas
     if verb in ("ayuda", "help"): return HELP, True
@@ -260,14 +260,18 @@ def run_cmd(text, by):
         # que se pida normal/dm/mapa (la votacion nunca debe llevar al modo control)
         rcon("set mapvoting 0"); rcon("set ffa 0"); rcon("set control_mode 1"); rcon('set sv_maplist "%s"' % real); rcon("map %s" % real)
         return "[ADMIN] modo CONTROL en %s, sin votación hasta volver a normal (petición de %s)" % (real, by), True
-    if verb in ("ffa", "freeforall", "todoscontratodos"):
+    if verb in ("ffa", "freeforall", "todoscontratodos", "gungame", "gg"):
+        gg = verb in ("gungame", "gg")
         real = current_map() or "dday2"
         if norm(arg) not in MAPA_ACTUAL:
             real, err = admin_map(arg)
             if err: return err, True
-        # ffa es latched: se aplica con el 'map'. Sin votacion para que la sesion siga en
+        # ffa y ffa_gungame son latched: se aplican con el 'map'. Sin votacion para que la sesion siga en
         # este mapa hasta que se pida normal/dm/mapa (como en control)
-        rcon("set mapvoting 0"); rcon("set control_mode 0"); rcon("set ffa 1"); rcon('set sv_maplist "%s"' % real); rcon("map %s" % real)
+        rcon("set mapvoting 0"); rcon("set control_mode 0"); rcon("set ffa 1"); rcon("set ffa_gungame %d" % (1 if gg else 0))
+        rcon('set sv_maplist "%s"' % real); rcon("map %s" % real)
+        if gg:
+            return "[ADMIN] modo GUN GAME en %s: cada kill te da la siguiente arma, gana quien mata con cuchillo al final (petición de %s)" % (real, by), True
         return "[ADMIN] modo FREE FOR ALL en %s, todos contra todos, sin votación hasta volver a normal (petición de %s)" % (real, by), True
     if verb in ("dm", "deathmatch"):
         real = "dday2"
@@ -630,7 +634,7 @@ def password_phrase(text):
             return tok
     return None
 
-FFA_WORDS = ("ffa", "free for all", "freeforall", "todos contra todos", "todoscontratodos")
+FFA_WORDS = ("ffa", "free for all", "freeforall", "todos contra todos", "todoscontratodos", "gungame", "gun game")
 FFA_OFF = ("saca", "sacar", "quita", "quitar", "apaga", "apagar", "desactiva", "desactivar", "termina",
            "terminar", "para ", "parar", "basta", "volver", "vuelve", "sin ffa", "no mas", "no más")
 
@@ -642,10 +646,11 @@ def ffa_phrase(text):
         return None
     if any(w in low for w in FFA_OFF):
         return None
+    verb = "gungame" if re.search(r"\bgun ?game\b", low) else "ffa"
     for tok in re.findall(r"[a-z0-9_]+", low):
         if tok in MAPS or tok in server_maps():
-            return "ffa " + tok
-    return "ffa"
+            return verb + " " + tok
+    return verb
 
 KAMIKAZE_OFF = ("desactiva", "apaga", "saca", "quita", "deshabilita", "termina", "sin ", "off", "no mas",
                 "no más", "basta")
@@ -1166,7 +1171,7 @@ def looks_command(text):
     return v in {"ayuda","help","estado","status","jugadores","players","kick","kickea","echar",
                  "kickban","ban","votacion","votaciones","alias","aliases","unban","delban","desban","lock","unlock","bloquear","abrir",
                  "mapa","map","cambiamapa","duelo","duel","publico","publica","cuenta","startcount",
-                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","dm","kamikaze","kamikase","kamicase","grabar","graba","grabacion","grabacin","mvd","medic","medico","mdico","dardo","sleepdart","officer","oficial","officers","oficiales","tab","scoreboard","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
+                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","gungame","gg","dm","kamikaze","kamikase","kamicase","grabar","graba","grabacion","grabacin","mvd","medic","medico","mdico","dardo","sleepdart","officer","oficial","officers","oficiales","tab","scoreboard","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
                  "restart","reload"}
 
 def handle_line(line, dry=False):
