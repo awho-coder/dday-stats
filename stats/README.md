@@ -214,7 +214,9 @@ modo control y en partidas anteriores) y `zone_kills`, que muestra `ladder_zone(
 Por defecto se cargan todas las partidas, incluso las que jugaron solo bots.
 `--skip-bot-only` (o `DDAY_STATS_SKIP_BOT_ONLY=1`) deja de cargar las que no
 tuvieron ningún humano: el archivo se mueve igual a `processed/` y el registro lo
-dice. Está apagada por defecto.
+dice. Está apagada por defecto. En la Pi está activada desde el 2026-10-31
+(`DDAY_STATS_SKIP_BOT_ONLY=1` en `ingest.env`); las 111 partidas sin humanos cargadas antes
+se dejaron en la base.
 
 ### Rachas de kills
 
