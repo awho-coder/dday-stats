@@ -259,6 +259,29 @@ Q2PRO no graba nada (los bots no cuentan).
 
 Un `mvdrecord` manual con otro nombre sigue funcionando, pero esa grabación no sale en la web.
 
+## Servidor: votación de los jugadores y nicks protegidos
+
+Detalle: [`VOTACION.md`](VOTACION.md).
+
+| Cvar / comando | Por defecto | Qué hace |
+|---|---|---|
+| `vote_enable` | `0` | `1` = los jugadores pueden votar en la partida (`vote map`, `vote restart`, `vote kick`, `vote yes/no`). |
+| `vote_time` | `30` | Segundos que dura una votación. |
+| `vote_percent` | `50` | % de sí que hay que superar (mapa y restart). |
+| `vote_cooldown` | `60` | Espera tras una votación rechazada. |
+| `vote_kick` | `1` | `0` = sin votación de kick. |
+| `vote_kick_percent` | `75` | % de sí en un kick (sin contar al acusado). |
+| `vote_kick_min` | `3` | Humanos en equipo necesarios para un kick. |
+| `vote_announce` | `600` | Segundos entre avisos de cómo votar (`0` = sin avisos). |
+| `vote_chat` | `0` | Lo pone el bot: el aviso incluye `!votemap`. |
+| `sv votecancel` | — | Corta la votación en curso. |
+| `nick_protect` | `1` | Nicks y tags de `dday/nicks.txt` solo con clave (`set nickpw <clave> u`, `set tagpw <clave> u`). |
+| `sv nicks [reload]` | — | Lista las reglas (sin claves) / relee el archivo. |
+
+Comandos de los jugadores (consola): `vote map <mapa>`, `vote restart`,
+`vote kick <nombre|número>`, `vote yes`, `vote no`, `vote maps <texto>`,
+`vote players`.
+
 ## Servidor: valores por defecto cambiados
 
 | Cvar / constante | Antes | Ahora | Por qué |
@@ -298,7 +321,7 @@ comando.
 
 - **Info:** `estado` `ayuda` `bans` `tiempo` `mapas` `infomapa` `marcador`
   `zona` `versiones` `lag` `tiempos`
-- **Juego:** `mapa <x>` `duelo <mapa>` `publico` `normal` `control <mapa>`
+- **Juego** (los mapas: cualquier mapa de D-Day del server): `mapa <x>` `duelo <mapa>` `publico` `normal` `control <mapa>`
   `ffa <mapa>` `dm <mapa>` `modo normal|control|ffa|dm|duelo [mapa]` `kamikaze on|off` `tab nuevo on|off` `dardo on|off` `grabar on|off|ahora` `evento <nombre>` `cuenta [minutos]`
   `reset` `resetscore` `torneo on|off` `freeze` `proximamapa` `lock` `unlock`
   `say <texto>`
@@ -320,6 +343,9 @@ comando.
 - **q2pro:** `screenshot` `stuff <cmd>` `stuffid <id> <cmd>` `autostuff <cmd>`
   `autostuffoff` `liststuff`
 - **Password:** `pass <nueva>` `passoff`
+- **Votación y alias:** `votacion on|off|cancelar` prende la votación por chat para todos
+  (`!votemap <mapa>`, `!votekick <nick>`, `!si`, `!no`, `!voto`); `alias <nick>` muestra los
+  otros nicks de la misma IP, solo en la consola del admin. Ver [`VOTACION.md`](VOTACION.md).
 - **Con LLM:** `elo <nick>`
 
 ## Comandos del juego que ya existían y usamos

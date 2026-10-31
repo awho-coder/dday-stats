@@ -14,7 +14,7 @@ Si es tu primera vez en el repo, seguí este orden:
 
 ## Referencia rápida
 
-- [`COMANDOS.md`](COMANDOS.md) — **todos los cvars, comandos y opciones que agregó este fork** (modo control, Free For All, airstrike kamikaze, cambios de armas del Medic, estadísticas, ingestor, bot admin por chat).
+- [`COMANDOS.md`](COMANDOS.md) — **todos los cvars, comandos y opciones que agregó este fork** (modo control, Free For All, airstrike kamikaze, cambios de armas del Medic, votación y nicks protegidos, estadísticas, ingestor, bot admin por chat).
 
 ## Cómo contribuir
 
@@ -53,6 +53,7 @@ autocontenido en `knowledge/viz.html`.
 |---|---|
 | [`../README.md`](../README.md) | Qué es el repositorio (código base del juego) y compilación. |
 | [`modos/CONTROL.md`](modos/CONTROL.md) | Modo control de zona (estilo Overwatch): reglas, cvars y cómo agregar la zona a un mapa. |
+| [`VOTACION.md`](VOTACION.md) | Votación de los jugadores (`vote map`, `vote kick`), nicks y tags protegidos con clave, y alias del bot. |
 | [`../readme.linux.txt`](../readme.linux.txt) | Notas de compilación en Linux. |
 | [`../readme.amiga.txt`](../readme.amiga.txt) | Notas históricas (Amiga). |
 | [`../ChangeLog.txt`](../ChangeLog.txt) | Cambios por versión del mod. |
