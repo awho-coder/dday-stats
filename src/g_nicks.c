@@ -15,9 +15,10 @@
  *
  * Los nicks se comparan normalizados (sin colores, minusculas, solo letras y
  * numeros: "chl snako" = ">ChL<Snako"); los tags sin colores, en minusculas y
- * sin espacios. Sin la clave, el nick queda como Jugador<n> y el tag se quita
- * del nick; el jugador recibe un aviso con lo que tiene que hacer. No se echa
- * a nadie. El dueno de un nick protegido no necesita ademas la clave del tag.
+ * sin espacios. Sin la clave no se puede entrar con ese nick: la conexion se
+ * rechaza con un mensaje que dice que hacer. Si se cambia el nick ya dentro,
+ * se queda con el que tenia (o Jugador<n>) y recibe el aviso. El dueno de un
+ * nick protegido no necesita ademas la clave del tag.
  *
  * Cvar nick_protect (1 por defecto: es seguridad; sin nicks.txt no hace nada).
  * "sv nicks" lista las reglas (sin claves); "sv nicks reload" relee el archivo.
@@ -47,6 +48,10 @@ static cvar_t		*nick_protect;
 // aviso pendiente por slot: se manda unos frames despues (al conectar todavia no esta en juego)
 static char		notify_msg[MAX_CLIENTS][200];
 static int		notify_frames[MAX_CLIENTS];
+
+// ultimo nick que se valido en cada slot: las claves se borran del userinfo, y el mod vuelve
+// a pasar el userinfo guardado (SyncUserInfo) sin ellas al aparecer en el mapa
+static char		verified[MAX_CLIENTS][64];
 
 // alnum_only: nicks (solo letras y numeros); si no, tags (todo menos espacios)
 static void Nick_Norm (const char *src, char *dst, int size, qboolean alnum_only, int *map)
@@ -159,32 +164,48 @@ static qboolean Nick_MatchNick (nickrule_t *r, const char *name)
 	return r->sub ? strstr (n, r->key) != NULL : !strcmp (n, r->key);
 }
 
-// quita del nick el tag de la regla; true si lo encontro
-static qboolean Nick_StripTag (char *name, int size, nickrule_t *r)
-{
-	char	n[64], *found;
-	int		map[64], start, end, klen = strlen (r->key);
-
-	Nick_Norm (name, n, sizeof(n), false, map);
-	found = strstr (n, r->key);
-	if (!found)
-		return false;
-	start = map[found - n];
-	end = map[found - n + klen - 1];
-	memmove (name + start, name + end + 1, strlen (name + end + 1) + 1);
-	return true;
-}
-
-// nombre que no quedo con letras ni numeros
-static qboolean Nick_Empty (const char *name)
+// el nick tiene el tag de la regla
+static qboolean Nick_HasTag (const char *name, nickrule_t *r)
 {
 	char n[64];
 
-	Nick_Norm (name, n, sizeof(n), true, NULL);
-	return !n[0];
+	Nick_Norm (name, n, sizeof(n), false, NULL);
+	return strstr (n, r->key) != NULL;
 }
 
-// el nick actual es uno protegido (y como los impostores se renombran, es el dueno)
+#define NICK_OK			0
+#define NICK_BAD_NICK	1
+#define NICK_BAD_TAG	2
+
+// revisa un nick con las claves que mando el jugador; en what deja el nick o el tag que fallo
+static int Nick_Verify (const char *name, const char *nickpw, const char *tagpw, char *what, int size)
+{
+	int i;
+
+	if (!nick_protect || !nick_protect->value || !numrules)
+		return NICK_OK;
+
+	// el dueno de un nick protegido (con su clave) no necesita ademas la del tag
+	for (i = 0; i < numrules; i++)
+		if (rules[i].type == RULE_NICK && !strcmp (rules[i].pass, nickpw) && Nick_MatchNick (&rules[i], name))
+			return NICK_OK;
+
+	for (i = 0; i < numrules; i++)
+		if (rules[i].type == RULE_NICK && Nick_MatchNick (&rules[i], name))
+		{
+			Com_sprintf (what, size, "%s", name);
+			return NICK_BAD_NICK;
+		}
+	for (i = 0; i < numrules; i++)
+		if (rules[i].type == RULE_TAG && strcmp (rules[i].pass, tagpw) && Nick_HasTag (name, &rules[i]))
+		{
+			Com_sprintf (what, size, "%s", rules[i].raw);
+			return NICK_BAD_TAG;
+		}
+	return NICK_OK;
+}
+
+// el nick actual es uno protegido (y como los impostores no pueden usarlo, es el dueno)
 qboolean Nick_IsProtected (edict_t *ent)
 {
 	int i;
@@ -197,12 +218,41 @@ qboolean Nick_IsProtected (edict_t *ent)
 	return false;
 }
 
-// desde ClientUserinfoChanged, antes de copiar el nombre: corrige el name del userinfo
+// desde ClientConnect: false (y rejmsg) si entra con un nick o tag protegido sin la clave.
+// No borra las claves del userinfo: ClientUserinfoChanged las vuelve a revisar enseguida.
+qboolean Nick_AllowConnect (edict_t *ent, char *userinfo)
+{
+	char	name[64], nickpw[64], tagpw[64], what[64], msg[200];
+	int		r;
+
+	if (ent->ai)
+		return true;
+	if (ent - g_edicts - 1 >= 0 && ent - g_edicts - 1 < MAX_CLIENTS)
+		verified[ent - g_edicts - 1][0] = '\0';	// jugador nuevo en este slot
+	Com_sprintf (name, sizeof(name), "%s", Info_ValueForKey (userinfo, "name"));
+	Com_sprintf (nickpw, sizeof(nickpw), "%s", Info_ValueForKey (userinfo, "nickpw"));
+	Com_sprintf (tagpw, sizeof(tagpw), "%s", Info_ValueForKey (userinfo, "tagpw"));
+
+	r = Nick_Verify (name, nickpw, tagpw, what, sizeof(what));
+	if (r == NICK_OK)
+		return true;
+
+	// rejmsg: los valores del userinfo tienen que ser de menos de 64 caracteres
+	if (r == NICK_BAD_NICK)
+		Com_sprintf (msg, MAX_INFO_VALUE, "Nick protegido: set nickpw TU_CLAVE u y reconecta");
+	else
+		Com_sprintf (msg, MAX_INFO_VALUE, "Tag %s protegido: set tagpw CLAVE u y reconecta", what);
+	Info_SetValueForKey (userinfo, "rejmsg", msg);
+	gi.dprintf ("nicks: rechazado \"%s\" (sin la clave del %s)\n", name, r == NICK_BAD_NICK ? "nick" : "tag");
+	return false;
+}
+
+// desde ClientUserinfoChanged, antes de copiar el nombre: si se cambia a un nick o tag
+// protegido sin la clave, se queda con el nick que tenia (o Jugador<n>) y se le avisa
 void Nick_Check (edict_t *ent, char *userinfo)
 {
-	char	name[64], newname[64], nickpw[64], tagpw[64];
-	char	*msg = NULL, what[64] = "";
-	int		slot = ent - g_edicts - 1, i, pass;
+	char	name[64], newname[64], nickpw[64], tagpw[64], what[64], dummy[64];
+	int		slot = ent - g_edicts - 1, r;
 
 	Com_sprintf (nickpw, sizeof(nickpw), "%s", Info_ValueForKey (userinfo, "nickpw"));
 	Com_sprintf (tagpw, sizeof(tagpw), "%s", Info_ValueForKey (userinfo, "tagpw"));
@@ -211,53 +261,39 @@ void Nick_Check (edict_t *ent, char *userinfo)
 	if (tagpw[0])
 		Info_RemoveKey (userinfo, "tagpw");
 
-	if (!nick_protect || !nick_protect->value || !numrules || ent->ai || slot < 0 || slot >= MAX_CLIENTS)
+	if (ent->ai || slot < 0 || slot >= MAX_CLIENTS)
 		return;
 
 	Com_sprintf (name, sizeof(name), "%s", Info_ValueForKey (userinfo, "name"));
-	Com_sprintf (newname, sizeof(newname), "%s", name);
-
-	// el dueno de un nick protegido (con su clave) no necesita ademas la del tag
-	for (i = 0; i < numrules; i++)
-		if (rules[i].type == RULE_NICK && !strcmp (rules[i].pass, nickpw)
-			&& Nick_MatchNick (&rules[i], name))
-			return;
-
-	// tags primero: "[MR]+Pepe" sin la clave del clan queda "+Pepe"
-	for (pass = 0; pass < 4; pass++)	// por si repite el tag
-		for (i = 0; i < numrules; i++)
-			if (rules[i].type == RULE_TAG && strcmp (rules[i].pass, tagpw)
-				&& Nick_StripTag (newname, sizeof(newname), &rules[i]))
-			{
-				msg = "tag";
-				Com_sprintf (what, sizeof(what), "%s", rules[i].raw);
-			}
-
-	for (i = 0; i < numrules; i++)
-		if (rules[i].type == RULE_NICK && strcmp (rules[i].pass, nickpw)
-			&& Nick_MatchNick (&rules[i], newname))
-		{
-			msg = "nick";
-			Com_sprintf (what, sizeof(what), "%s", name);
-			break;
-		}
-
-	if (!msg)
+	if (verified[slot][0] && !strcmp (verified[slot], name))
+		return;		// ya validado (el mod repite el userinfo guardado, sin las claves)
+	r = Nick_Verify (name, nickpw, tagpw, what, sizeof(what));
+	if (r == NICK_OK)
+	{
+		Com_sprintf (verified[slot], sizeof(verified[slot]), "%s", name);
 		return;
-	if (!strcmp (msg, "nick") || Nick_Empty (newname))
+	}
+
+	// el nick que tenia, si sigue valiendo con estas claves
+	if (ent->client->pers.netname[0] && strcmp (ent->client->pers.netname, name)
+		&& (!strcmp (verified[slot], ent->client->pers.netname)
+			|| Nick_Verify (ent->client->pers.netname, nickpw, tagpw, dummy, sizeof(dummy)) == NICK_OK))
+		Com_sprintf (newname, sizeof(newname), "%s", ent->client->pers.netname);
+	else
 		Com_sprintf (newname, sizeof(newname), "Jugador%d", slot + 1);
 
 	Info_SetValueForKey (userinfo, "name", newname);
-	gi.dprintf ("nicks: \"%s\" sin la clave del %s, queda como \"%s\"\n", name, msg, newname);
+	gi.dprintf ("nicks: \"%s\" sin la clave del %s, sigue como \"%s\"\n", name,
+		r == NICK_BAD_NICK ? "nick" : "tag", newname);
 
-	if (!strcmp (msg, "nick"))
+	if (r == NICK_BAD_NICK)
 		Com_sprintf (notify_msg[slot], sizeof(notify_msg[slot]),
-			"El nick %s esta protegido y quedaste como %s. Si es tuyo, escribe en la consola "
-			"set nickpw <tu clave> u y vuelve a ponerte el nick.\n", what, newname);
+			"El nick %s esta protegido, sigues como %s. Si es tuyo, escribe en la consola "
+			"set nickpw TU_CLAVE u y vuelve a ponerte el nick.\n", what, newname);
 	else
 		Com_sprintf (notify_msg[slot], sizeof(notify_msg[slot]),
-			"El tag %s esta protegido y se quito de tu nick. Si eres del clan, escribe en la consola "
-			"set tagpw <clave del clan> u y vuelve a ponerte el nick.\n", what);
+			"El tag %s esta protegido, sigues como %s. Si eres del clan, escribe en la consola "
+			"set tagpw CLAVE_DEL_CLAN u y vuelve a ponerte el nick.\n", what, newname);
 	notify_frames[slot] = 20;	// 2 s
 }
 
@@ -285,7 +321,10 @@ void Nick_ClientDisconnect (edict_t *ent)
 	int slot = ent - g_edicts - 1;
 
 	if (slot >= 0 && slot < MAX_CLIENTS)
+	{
 		notify_frames[slot] = 0;
+		verified[slot][0] = '\0';
+	}
 }
 
 // sv nicks [reload]

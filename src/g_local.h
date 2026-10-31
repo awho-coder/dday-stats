@@ -2553,6 +2553,7 @@ void Svcmd_VoteCancel_f (void);
 void Nick_Init (void);
 void Nick_Load (void);
 void Nick_Check (edict_t *ent, char *userinfo);
+qboolean Nick_AllowConnect (edict_t *ent, char *userinfo);
 void Nick_RunFrame (void);
 void Nick_ClientDisconnect (edict_t *ent);
 qboolean Nick_IsProtected (edict_t *ent);

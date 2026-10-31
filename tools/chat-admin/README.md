@@ -134,8 +134,7 @@ nicks usados desde las mismas IPs exactas; la respuesta va **solo a la consola d
 
 ## Nicks protegidos
 
-Los protege la DLL con `dday/nicks.txt` (ver `nicks.txt.example` en la raíz del repo): sin la
-clave nadie puede mostrar el nick de un admin, así que el bot puede confiar en el nick del chat.
+Los protege la DLL con `dday/nicks.txt` (ver `nicks.txt.example` en la raíz del repo): sin la clave no se puede entrar con ese nick ni cambiarse a él, así que el bot puede confiar en el nick del chat.
 Al arrancar, el bot avisa en el journal si algún admin de `ALLOW_RAW`/`ALLOW_SUB` no está en ese
 archivo.
 

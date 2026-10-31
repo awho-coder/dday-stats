@@ -11,7 +11,8 @@
 # Cada jugador pone una vez en su autoexec.cfg (o en la consola):
 #   set nickpw <clave> u     para su nick
 #   set tagpw <clave> u      para el tag de su clan
-# Sin la clave, el nick queda como Jugador<n> y el tag se quita, con un aviso.
+# Sin la clave no se puede entrar con ese nick (la conexion se rechaza con un mensaje);
+# si se cambia el nick ya dentro, sigue con el que tenia y recibe un aviso.
 # El dueno de un nick protegido no necesita ademas la clave del tag.
 # "sv nicks reload" relee el archivo; tambien se relee al empezar cada mapa.
 

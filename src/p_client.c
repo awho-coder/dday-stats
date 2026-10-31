@@ -3146,6 +3146,15 @@ qboolean ClientConnect (edict_t *ent, char *userinfo)
 		return false;
 	}
 
+	// nick o tag protegido sin la clave: no entra, y el rejmsg le dice que hacer
+	if (!Nick_AllowConnect (ent, userinfo))
+	{
+		ent->solid = SOLID_NOT;
+		ent->inuse = false;
+		G_FreeEdict (ent);
+		return false;
+	}
+
 
 	// check for a password
 //	value = Info_ValueForKey (userinfo, "password");
