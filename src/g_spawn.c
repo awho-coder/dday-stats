@@ -1714,11 +1714,11 @@ static qboolean FFA_GunGameInit (void)
 		FFA_GGSound (va ("%s/victory.wav", team_list[0]->teamid));
 
 	// banner of the lobby (stat 2 of the HUD)
-	FFA_GGImage ("ffa_gungame");
-	ffa_gg_banner = gi.imageindex ("ffa_gungame");
+	FFA_GGImage (FFA_PIC_GG);
+	ffa_gg_banner = gi.imageindex (FFA_PIC_GG);
 
 	// banner of the end of the match (drawn by the scoreboard)
-	FFA_GGImage ("ffa_gungame_win");
+	FFA_GGImage (FFA_PIC_GG_WIN);
 
 	// registers the weapons in order and stops at the first that does not fit: the game also registers models,
 	// sounds and images later (and the clients cannot have more than MAX_MODELS, MAX_SOUNDS and MAX_IMAGES)
@@ -1908,7 +1908,7 @@ void FFA_RouletteInit (void)
 
 	// the roulette that is shown during the lobby wait: the icons of all the weapons of the draw
 	for (i = 0; i < n; i++)
-		roll_image[i] = gi.imageindex (va ("ffa_%s", items[i]->icon));
+		roll_image[i] = gi.imageindex (va (FFA_PIC_ROLL, items[i]->icon));
 	FFA_RouletteSetup (n, roll_image, j, ffa_weapon_name);
 
 	// items of the map: the chosen weapon of its faction, its ammo and the knife

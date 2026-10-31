@@ -1029,6 +1029,9 @@ qboolean G_IsFFA(void);
 // itself (a plain name like "ffa_score" makes it ask for pics/ffa_score.pcx, which does not exist)
 #define FFA_PIC_SCORE	"/pics/ffa_score.png"
 #define FFA_PIC_WINNER	"/pics/ffa_winner.png"
+#define FFA_PIC_GG		"/pics/ffa_gungame.png"		// Gun Game: banner of the lobby
+#define FFA_PIC_GG_WIN	"/pics/ffa_gungame_win.png"	// Gun Game: banner of the winner
+#define FFA_PIC_ROLL	"/pics/ffa_%s.png"			// weapon roulette: banner of each weapon (icon of the weapon)
 void FFA_JoinPlayer(edict_t *ent);
 void FFA_HudReset(void);
 void FFA_SpawnReset(void);
