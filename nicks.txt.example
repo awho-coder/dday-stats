@@ -1,0 +1,20 @@
+# nicks.txt -- nicks y tags de clan protegidos con clave (lo lee la DLL, ver src/g_nicks.c)
+# Va en dday/nicks.txt del server. El archivo real tiene claves: NUNCA va al repo.
+#
+#   nick <nick> <clave>        nadie mas puede usar ese nick
+#   nick *<texto>* <clave>     ningun nick que contenga ese texto
+#   tag  <tag> <clave>         el tag del clan, en cualquier parte del nick
+#
+# Los nicks se comparan sin colores, sin mayusculas y solo con letras y numeros
+# (">ChL<Snako" = "chl snako"). La clave es la ultima palabra de la linea.
+#
+# Cada jugador pone una vez en su autoexec.cfg (o en la consola):
+#   set nickpw <clave> u     para su nick
+#   set tagpw <clave> u      para el tag de su clan
+# Sin la clave, el nick queda como Jugador<n> y el tag se quita, con un aviso.
+# El dueno de un nick protegido no necesita ademas la clave del tag.
+# "sv nicks reload" relee el archivo; tambien se relee al empezar cada mapa.
+
+nick >ChL<Snako    cambiar-esta-clave
+nick *peruano*     cambiar-esta-clave
+tag  [MR]          cambiar-esta-clave

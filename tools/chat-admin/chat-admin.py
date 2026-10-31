@@ -136,7 +136,7 @@ HELP = ("[ADMIN] comandos: estado, kick <quien>, kickban <quien>, ban <ip>, unba
         "mapa <nombre>, duelo <mapa>, publico, cuenta, reset, resetscore, tiempo, mapas, bans, "
         "bots on|off, kickbots, screenshot, stuff <cmd>, autostuff <cmd>, autostuffoff, "
         "control <mapa>, ffa <mapa>, dm <mapa>, kamikaze on|off, medic on|off, medic bazooka on|off, dardo on|off, officer bonus on|off, tab nuevo on|off, "
-        "grabar on|off|ahora, lock, unlock, say <texto>, ayuda")
+        "grabar on|off|ahora, votacion on|off|cancelar, alias <nick>, lock, unlock, say <texto>, ayuda")
 
 def run_cmd(text, by):
     """Ejecuta un comando de chat. SIEMPRE vía whitelist. Devuelve respuesta para say()."""
@@ -257,6 +257,27 @@ def run_cmd(text, by):
             real = [x for x in MAPS if norm(x) == m][0]
         restore_rotation(); rcon("map %s" % real)
         return "[ADMIN] modo DM en %s" % real, True
+    if verb in ("alias", "aliases"):
+        # otros nicks desde la misma IP: la respuesta va solo a la consola del admin, nunca al chat
+        txt = alias_lookup(arg)
+        if by != "hermes" and tell_private(by, txt):
+            return None, True
+        return txt, True
+    if verb in ("votacion", "votaciones"):
+        # votacion de mapa por chat abierta a todos (!votemap <mapa>, !si, !no); se guarda en VOTEFLAG
+        a = norm(arg)
+        if a in ("on", "1", "si", "activar", "activa", "prender", "prende", "encender", "enciende"):
+            vote_set(True)
+            return ("[ADMIN] votacion por chat ON: cualquiera puede escribir !votemap <mapa> o !votekick <nick> "
+                    "y votar con !si / !no"), True
+        if a in ("off", "0", "no", "desactivar", "desactiva", "apagar", "apaga"):
+            vote_set(False)
+            return "[ADMIN] votacion por chat OFF", True
+        if a in ("cancelar", "cancela", "parar", "para"):
+            if not VOTE["active"]: return "[ADMIN] no hay ninguna votacion en curso", True
+            VOTE["active"] = False
+            return "[ADMIN] votacion cancelada", True
+        return "[ADMIN] votacion por chat: %s (uso: votacion on|off|cancelar)" % ("ON" if vote_enabled() else "OFF"), True
     if verb in ("kamikaze", "kamikase", "kamicase"):
         # cvar de la DLL (no latched): rige desde el proximo airstrike; un reinicio del server lo apaga
         a = norm(arg)
@@ -697,6 +718,388 @@ CHAT_PATS = [
     r'^\s*([^<>\s][^:]{0,40}?):\s+(.+)$',
 ]
 
+# ── votacion por chat (para probar antes de la de la DLL) ──
+# Cualquier jugador: "!votemap <mapa>" (o "!votar"), "!votekick <nick>", "!si" / "!no", "!voto" (estado).
+# Se prende con el comando de admin "votacion on" (queda guardado en VOTEFLAG); apagada por defecto.
+VOTEFLAG      = "/home/ubuntu/dday/chat-admin.vote"
+GAMEDIR       = "/home/ubuntu/dday/dday"
+VOTE_TIME     = 30      # segundos que dura
+VOTE_PERCENT  = 50      # mapa: hay que superar este % de los jugadores del server
+VOTE_KICK_PERCENT = 75  # kick: % de los jugadores sin contar al acusado
+VOTE_KICK_MIN = 3       # jugadores necesarios para votar un kick
+VOTE_COOLDOWN = 60      # espera tras una votacion rechazada
+KICK_WAIT     = 120     # tras un kick rechazado (quien propuso) y entre kicks al mismo jugador
+VOTE_REMIND   = 10
+VOTE = {"active": False, "kind": "map", "map": "", "target": None, "target_nick": "", "caller": "",
+        "caller_nick": "", "end": 0, "remind": 0, "next": 0, "votes": {}}
+KICK_WAIT_CALLER = {}   # nick normalizado -> time.time() hasta el que no puede proponer kick
+KICK_WAIT_TARGET = {}   # nick normalizado -> hasta cuando no se le puede votar kick
+VOTE_START = {"votemap", "votar", "votamapa", "votemapa", "vmap"}
+VOTE_KICK  = {"votekick", "vkick", "votarkick"}
+VOTE_YES   = {"si", "yes", "s", "y", "f1"}
+VOTE_NO    = {"no", "n", "f2"}
+VOTE_INFO  = {"voto", "votacion", "vote"}
+_MAPS_CACHE = {"t": 0, "maps": {}}
+
+def vote_enabled():
+    try: return open(VOTEFLAG).read().strip() == "1"
+    except Exception: return False
+
+def vote_set(on):
+    try:
+        with open(VOTEFLAG, "w") as f: f.write("1\n" if on else "0\n")
+        return True
+    except Exception:
+        return False
+
+def server_maps():
+    """{nombre en minusculas: nombre real} de los .bsp del server (cache de 60 s)."""
+    if time.time() - _MAPS_CACHE["t"] > 60:
+        maps = {}
+        try:
+            for fn in os.listdir(os.path.join(GAMEDIR, "maps")):
+                if fn.lower().endswith(".bsp"):
+                    maps.setdefault(fn[:-4].lower(), fn[:-4])
+        except Exception:
+            pass
+        _MAPS_CACHE.update(t=time.time(), maps=maps)
+    return _MAPS_CACHE["maps"]
+
+def map_kind(real):
+    """'ok' si es de D-Day (spawns de equipo en ents/<mapa>.ent o en el .bsp), 'nodday', o 'broken'."""
+    want = (b"info_team_start", b"info_reinforcements_start")
+    try:
+        with open(os.path.join(GAMEDIR, "ents", real + ".ent"), "rb") as f:
+            e = f.read().lower()
+        if any(w in e for w in want): return "ok"
+    except Exception:
+        pass
+    try:
+        with open(os.path.join(GAMEDIR, "maps", real + ".bsp"), "rb") as f:
+            h = f.read(16)
+            if len(h) < 16 or h[:4] != b"IBSP": return "broken"
+            ofs, ln = int.from_bytes(h[8:12], "little"), int.from_bytes(h[12:16], "little")
+            if ofs <= 0 or not 0 < ln < 8 << 20: return "broken"
+            f.seek(ofs); e = f.read(ln).lower()
+        return "ok" if any(w in e for w in want) else "nodday"
+    except Exception:
+        return "broken"
+
+def map_suggest(q, names):
+    """Hasta 5 mapas parecidos: primero los que contienen el texto, despues por parecido."""
+    import difflib
+    q = q.lower()
+    out = [n for n in sorted(names) if q in n or (len(n) >= 3 and n in q)][:5]
+    for n in difflib.get_close_matches(q, sorted(names), n=5, cutoff=0.6):
+        if n not in out and len(out) < 5: out.append(n)
+    return out
+
+def vote_parse_chat(line):
+    """(nick, texto) de cualquier jugador; ignora al server ('console'), los avisos del bot y el chat de equipo."""
+    for p in CHAT_PATS:
+        m = re.match(p, line)
+        if m:
+            nick, text = m.group(1).strip(), m.group(2).strip()
+            if norm(nick) == "console" or nick.startswith("(") or text.startswith("["):
+                return None
+            return nick, text
+    return None
+
+def vote_needed(total):
+    pct = VOTE_KICK_PERCENT if VOTE["kind"] == "kick" else VOTE_PERCENT
+    return total * pct // 100 + 1
+
+def vote_count():
+    """(si, no, total) con los jugadores conectados ahora; en un kick el acusado no cuenta."""
+    pl = dict(players())
+    VOTE["votes"] = {uid: v for uid, v in VOTE["votes"].items() if uid in pl}
+    if VOTE["kind"] == "kick":
+        pl.pop(VOTE["target"], None)
+        VOTE["votes"].pop(VOTE["target"], None)
+    yes = sum(1 for v in VOTE["votes"].values() if v)
+    no = sum(1 for v in VOTE["votes"].values() if not v)
+    return yes, no, len(pl)
+
+def vote_blocked():
+    if re.search(r'is\s+"1', rcon("tournament")): return "no se puede votar durante un torneo"
+    if re.search(r'is\s+"duel', rcon("stats_mode")): return "no se puede votar durante un duelo"
+    return None
+
+def vote_what():
+    return "echar a %s" % VOTE["target_nick"] if VOTE["kind"] == "kick" else "cambiar a %s" % VOTE["map"]
+
+def vote_target_present():
+    """En un kick: el acusado sigue en su slot (mismo nick)."""
+    return dict(players()).get(VOTE["target"]) == VOTE["target_nick"]
+
+def vote_finish(passed, why=""):
+    VOTE["active"] = False
+    kick = VOTE["kind"] == "kick"
+    if kick:
+        KICK_WAIT_TARGET[norm(VOTE["target_nick"])] = time.time() + KICK_WAIT
+    if not passed:
+        VOTE["next"] = time.time() + VOTE_COOLDOWN
+        if kick:
+            KICK_WAIT_CALLER[norm(VOTE["caller_nick"])] = time.time() + KICK_WAIT
+        say("[VOTO] rechazada (%s): %s" % (why, vote_what()))
+        log_action(VOTE["caller"], "vote " + vote_what(), "rechazada: " + why)
+        return
+    say("[VOTO] aprobada: %s" % vote_what())
+    log_action(VOTE["caller"], "vote " + vote_what(), "aprobada")
+    if kick:
+        if vote_target_present():
+            rcon("kick %d" % VOTE["target"])
+    else:
+        rcon("map %s" % VOTE["map"])
+
+def vote_check():
+    """Decide la votacion si ya alcanza (o ya no puede alcanzar). True si termino."""
+    if VOTE["kind"] == "kick" and not vote_target_present():
+        VOTE["active"] = False
+        say("[VOTO] cancelada: %s se fue del servidor" % VOTE["target_nick"]); return True
+    yes, no, total = vote_count()
+    if not total:
+        vote_finish(False, "no quedan jugadores"); return True
+    need = vote_needed(total)
+    if yes >= need:
+        vote_finish(True); return True
+    if total - no < need:
+        vote_finish(False, "no alcanzan los votos"); return True
+    return False
+
+def vote_status():
+    yes, no, total = vote_count()
+    return "[VOTO] %s propone %s: si %d, no %d, faltan %d si (%d s). Escribe !si o !no" % (
+        VOTE["caller"], vote_what(), yes, no, max(vote_needed(total) - yes, 0),
+        max(int(VOTE["end"] - time.time() + 0.9), 0))
+
+def find_target(who, pl):
+    """(uid, nick) por numero de slot o nick (exacto o parte unica). (None, motivo) si no."""
+    w = who.strip().lstrip("#")
+    if w.isdigit():
+        d = dict(pl)
+        return (int(w), d[int(w)]) if int(w) in d else (None, "no hay ningun jugador con el numero %s" % w)
+    n = norm(who)
+    if not n: return None, "uso: !votekick <nick o numero>"
+    exact = [(u, k) for u, k in pl if norm(k) == n]
+    if exact: return exact[0]
+    part = [(u, k) for u, k in pl if n in norm(k)]
+    if len(part) == 1: return part[0]
+    return None, ("hay varios jugadores con '%s', usa el numero" % who[:20]) if part else \
+                 ("no hay ningun jugador '%s'" % who[:20])
+
+def vote_open(kind, nick, uid, **kw):
+    now = time.time()
+    VOTE.update(active=True, kind=kind, caller=nick, caller_nick=nick, end=now + VOTE_TIME,
+                remind=now + VOTE_REMIND, votes={uid: True}, **kw)
+
+def vote_line(line, dry=False):
+    """Atiende los comandos de votacion de cualquier jugador. None si la linea no es de votacion."""
+    cp = vote_parse_chat(line)
+    if not cp: return None
+    nick, text = cp
+    t = text.strip()
+    if not t.startswith("!"): return None
+    words = t[1:].split()
+    if not words: return None
+    verb = norm(words[0])
+    if verb not in VOTE_START | VOTE_KICK | VOTE_YES | VOTE_NO | VOTE_INFO: return None
+    res = ("vote", nick, text, None)
+    out = lambda msg: (say(msg) if not dry else None, print("VOTE %s -> %s" % (nick, msg)))
+    if not vote_enabled():
+        if verb in VOTE_START | VOTE_KICK: out("[VOTO] la votacion por chat esta apagada")
+        return res
+    if not rate_ok(nick):
+        return ("rate", nick, text, None)
+    pl = players()
+    # el slot del que vota: un voto por slot aunque se cambie el nick
+    uid = next((u for u, n in pl if n == nick), None)
+    if uid is None:
+        print("VOTE %s no aparece en status, se ignora" % nick)
+        return res
+
+    if verb in VOTE_INFO:
+        out(vote_status() if VOTE["active"] else "[VOTO] uso: !votemap <mapa>, !votekick <nick>, !si, !no")
+        return res
+
+    if verb in VOTE_YES | VOTE_NO:
+        if not VOTE["active"]:
+            out("[VOTO] no hay ninguna votacion en curso"); return res
+        if VOTE["kind"] == "kick" and uid == VOTE["target"]:
+            out("[VOTO] no puedes votar en tu propio kick"); return res
+        VOTE["votes"][uid] = verb in VOTE_YES
+        if not vote_check():
+            out(vote_status())
+        return res
+
+    # abrir una votacion
+    if VOTE["active"]:
+        out(vote_status()); return res
+    if time.time() < VOTE["next"]:
+        out("[VOTO] espera %d s para proponer otra" % int(VOTE["next"] - time.time() + 0.9)); return res
+    if len(words) < 2:
+        out("[VOTO] uso: !votemap <mapa> o !votekick <nick>"); return res
+    why = vote_blocked()
+    if why:
+        out("[VOTO] " + why); return res
+
+    if verb in VOTE_KICK:
+        if len(pl) < VOTE_KICK_MIN:
+            out("[VOTO] para votar un kick hacen falta %d jugadores (hay %d)" % (VOTE_KICK_MIN, len(pl))); return res
+        wait = KICK_WAIT_CALLER.get(norm(nick), 0) - time.time()
+        if wait > 0:
+            out("[VOTO] espera %d s para proponer otro kick" % int(wait + 0.9)); return res
+        tuid, tnick = find_target(" ".join(words[1:]), pl)
+        if tuid is None:
+            out("[VOTO] " + tnick); return res
+        if tuid == uid:
+            out("[VOTO] no puedes votar para echarte a ti mismo"); return res
+        if is_allowed(tnick):
+            out("[VOTO] no se puede votar para echar a un admin"); return res
+        wait = KICK_WAIT_TARGET.get(norm(tnick), 0) - time.time()
+        if wait > 0:
+            out("[VOTO] a %s ya lo votaron hace poco, espera %d s" % (tnick, int(wait + 0.9))); return res
+        vote_open("kick", nick, uid, target=tuid, target_nick=tnick)
+    else:
+        maps = server_maps()
+        real = maps.get(words[1].lower())
+        if not real:
+            sug = map_suggest(words[1], list(maps))
+            out("[VOTO] el mapa '%s' no esta en el servidor%s" % (words[1][:20],
+                ". Quisiste decir: " + ", ".join(maps[s] for s in sug) + "?" if sug else "")); return res
+        kind = map_kind(real)
+        if kind != "ok":
+            out("[VOTO] '%s' %s" % (real, "esta en el servidor pero no es un mapa de D-Day" if kind == "nodday"
+                                    else "tiene el archivo danado, no se puede votar")); return res
+        vote_open("map", nick, uid, map=real, target=None, target_nick="")
+    if dry:
+        print("VOTE %s abre votacion: %s" % (nick, vote_what())); return res
+    if not vote_check():
+        out(vote_status())
+    return res
+
+def vote_tick():
+    """Desde el bucle del daemon: vence la votacion y recuerda cada VOTE_REMIND segundos."""
+    if not VOTE["active"]: return
+    now = time.time()
+    if not vote_enabled():
+        vote_finish(False, "votacion apagada"); return
+    if now >= VOTE["end"]:
+        if not vote_check():
+            vote_finish(False, "se acabo el tiempo")
+        return
+    if now >= VOTE["remind"]:
+        VOTE["remind"] = now + VOTE_REMIND
+        if not vote_check():
+            say(vote_status())
+
+# ── nicks protegidos (los revisa la DLL con dday/nicks.txt; aca solo se avisa) ──
+NICKS_FILE = os.path.join(GAMEDIR, "nicks.txt")
+
+def nick_rules():
+    """[(tipo, substring?, clave normalizada)] de nicks.txt (sin las claves)."""
+    rules = []
+    try:
+        for line in open(NICKS_FILE, encoding="latin1"):
+            p = line.strip().split()
+            if len(p) < 3 or p[0].startswith("#") or p[0].lower() not in ("nick", "tag"): continue
+            name = " ".join(p[1:-1]); sub = len(name) > 2 and name[0] == name[-1] == "*"
+            if sub: name = name[1:-1]
+            rules.append((p[0].lower(), sub, norm(name)))
+    except Exception:
+        pass
+    return rules
+
+def check_admin_protection():
+    """Avisa en el journal si algun admin de la allowlist no esta protegido en nicks.txt."""
+    rules = [r for r in nick_rules() if r[0] == "nick"]
+    if not rules:
+        print("AVISO: no hay %s (o no tiene nicks): cualquiera puede usar el nick de un admin" % NICKS_FILE)
+        return
+    for nick in ALLOW_RAW:
+        n = norm(nick)
+        if not any((sub and key in n) or key == n for _, sub, key in rules):
+            print("AVISO: el admin %s no esta protegido en nicks.txt" % nick)
+    for s in ALLOW_SUB:
+        if not any(sub and key in norm(s) for _, sub, key in rules):
+            print("AVISO: los nicks con '%s' no estan protegidos en nicks.txt (falta 'nick *%s* clave')" % (s, s))
+
+# ── alias: nicks usados desde la misma IP (base local en Oracle, nunca sale de aca) ──
+ALIASDB = "/home/ubuntu/dday/aliases.db"
+ALIAS_POLL = 20          # cada cuantos segundos se mira status
+ALIAS_KEEP_DAYS = 180
+ALIAS_SESSION = 1800     # mas de 30 min sin verlo = otra vez que entro
+_ALIAS = {"next": 0, "purge": 0, "db": None}
+
+def alias_db():
+    if _ALIAS["db"] is None:
+        import sqlite3
+        db = sqlite3.connect(ALIASDB)
+        db.execute("CREATE TABLE IF NOT EXISTS alias (ip TEXT, nick TEXT, nnick TEXT, first REAL, last REAL,"
+                   " times INTEGER, PRIMARY KEY (ip, nick))")
+        db.execute("CREATE INDEX IF NOT EXISTS alias_nnick ON alias (nnick)")
+        _ALIAS["db"] = db
+    return _ALIAS["db"]
+
+def players_ip():
+    """[(uid, nick, ip)] de status."""
+    res = []
+    for line in rcon("status").splitlines():
+        m = re.match(r'\s*(\d+)\s+-?\d+\s+\S+\s+(.+?)\s+\d+\s+(\d{1,3}(?:\.\d{1,3}){3}):\d+', line)
+        if m: res.append((int(m.group(1)), m.group(2).strip(), m.group(3)))
+    return res
+
+def alias_record(rows, now=None):
+    now = now or time.time()
+    db = alias_db()
+    for _, nick, ip in rows:
+        if ip.startswith("127."): continue
+        cur = db.execute("SELECT last FROM alias WHERE ip=? AND nick=?", (ip, nick)).fetchone()
+        if cur is None:
+            db.execute("INSERT INTO alias VALUES (?,?,?,?,?,1)", (ip, nick, norm(nick), now, now))
+        else:
+            db.execute("UPDATE alias SET last=?, times=times+? WHERE ip=? AND nick=?",
+                       (now, 1 if now - cur[0] > ALIAS_SESSION else 0, ip, nick))
+    if now > _ALIAS["purge"]:
+        db.execute("DELETE FROM alias WHERE last < ?", (now - ALIAS_KEEP_DAYS * 86400,))
+        _ALIAS["purge"] = now + 86400
+    db.commit()
+
+def alias_tick():
+    if time.time() < _ALIAS["next"]: return
+    _ALIAS["next"] = time.time() + ALIAS_POLL
+    rows = players_ip()
+    if rows: alias_record(rows)
+
+def alias_lookup(who):
+    """Texto con los otros nicks usados desde las mismas IPs que 'who' (solo IP exacta)."""
+    db = alias_db(); n = norm(who)
+    if not n: return "uso: alias <nick>"
+    nicks = [r[0] for r in db.execute("SELECT DISTINCT nick FROM alias WHERE nnick=?", (n,))]
+    if not nicks:
+        nicks = [r[0] for r in db.execute("SELECT DISTINCT nick FROM alias WHERE nnick LIKE ?", ("%" + n + "%",))]
+        if len(nicks) > 1:
+            return "alias: hay varios nicks con '%s': %s" % (who, ", ".join(nicks[:8]))
+    if not nicks:
+        return "alias: no hay datos de '%s'" % who
+    ips = [r[0] for r in db.execute("SELECT DISTINCT ip FROM alias WHERE nick=?", (nicks[0],))]
+    q = "SELECT nick, SUM(times), MAX(last) FROM alias WHERE ip IN (%s) AND nick<>? GROUP BY nick ORDER BY MAX(last) DESC" \
+        % ",".join("?" * len(ips))
+    others = db.execute(q, ips + [nicks[0]]).fetchall()
+    if not others:
+        return "alias %s: sin otros nicks (visto desde %d IP%s)" % (nicks[0], len(ips), "" if len(ips) == 1 else "s")
+    return "alias %s: %s" % (nicks[0], ", ".join("%s (%d %s, %s)" % (k, t, "vez" if t == 1 else "veces",
+                             time.strftime("%Y-%m-%d", time.localtime(l))) for k, t, l in others[:12]))
+
+def tell_private(nick, text):
+    """Manda texto solo a la consola de ese jugador (stuff echo). False si no esta conectado."""
+    uid = next((u for u, k in players() if k == nick), None)
+    if uid is None: return False
+    clean = re.sub(r'[;"$\\\n\r]', "", text)
+    for i in range(0, len(clean), 180):
+        rcon("stuff %d echo %s" % (uid, clean[i:i + 180]), wait=0.3)
+    return True
+
 def parse_chat(line):
     for p in CHAT_PATS:
         m = re.match(p, line)
@@ -720,12 +1123,14 @@ def looks_command(text):
     if text.strip().startswith("!"): return True
     v = norm(t.split(None, 1)[0] if t else "")
     return v in {"ayuda","help","estado","status","jugadores","players","kick","kickea","echar",
-                 "kickban","ban","unban","delban","desban","lock","unlock","bloquear","abrir",
+                 "kickban","ban","votacion","votaciones","alias","aliases","unban","delban","desban","lock","unlock","bloquear","abrir",
                  "mapa","map","cambiamapa","duelo","duel","publico","publica","cuenta","startcount",
                  "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","dm","kamikaze","kamikase","kamicase","grabar","graba","grabacion","grabacin","mvd","medic","medico","mdico","dardo","sleepdart","officer","oficial","officers","oficiales","tab","scoreboard","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
                  "restart","reload"}
 
 def handle_line(line, dry=False):
+    v = vote_line(line, dry)
+    if v: return v
     cp = parse_chat(line)
     if not cp: return None
     nick, text = cp
@@ -737,8 +1142,8 @@ def handle_line(line, dry=False):
         aud = re.sub(r"(?i)(pass(word)?\s+)\S+", r"\1****", text)
         resp, ok = run_cmd(text, nick)
         if not dry:
-            log_action("test-local" if TESTMODE else nick, aud, resp)
-            say(resp)
+            log_action("test-local" if TESTMODE else nick, aud, resp or "(respuesta privada)")
+            if resp: say(resp)
         print("CMD %s -> %s" % (nick, resp))
         return ("cmd", nick, text, resp)
     else:
@@ -840,8 +1245,13 @@ def daemon():
         print("FATAL: no existe %s" % LOG); sys.exit(1)
     f = open(LOG, encoding="utf-8", errors="replace")
     f.seek(0, 2)
-    print("chat-admin escuchando en %s" % LOG); sys.stdout.flush()
+    print("chat-admin escuchando en %s" % LOG)
+    check_admin_protection(); sys.stdout.flush()
     while True:
+        try: vote_tick()
+        except Exception as e: print("ERR vote %s" % e)
+        try: alias_tick()
+        except Exception as e: print("ERR alias %s" % e)
         line = f.readline()
         if not line: time.sleep(0.3); continue
         try: handle_line(line.rstrip("\n"))
@@ -863,8 +1273,9 @@ def main():
         i = args.index("--cmd"); by = "hermes"
         if "--by" in args: by = args[args.index("--by")+1]
         resp, _ = run_cmd(args[i+1], by)
-        log_action(by, args[i+1], resp)
-        say(resp)
+        log_action(by, args[i+1], resp or "(respuesta privada)")
+        if resp and norm(args[i+1].split()[0] if args[i+1].split() else "") not in ("alias", "aliases"):
+            say(resp)
         print(resp)
         return
     if any(a in ("-h", "--help") for a in args):
