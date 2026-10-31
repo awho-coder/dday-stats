@@ -2967,6 +2967,9 @@ void ClientUserinfoChanged (edict_t *ent, char *userinfo)
 		strcpy (userinfo, "\\name\\badinfo\\skin\\usa/USMC");
 	}
 
+	// nicks y tags protegidos: sin la clave se cambia el name del userinfo
+	Nick_Check (ent, userinfo);
+
 	// set name
 	s = Info_ValueForKey (userinfo, "name");
 	strncpy (ent->client->pers.netname, s, sizeof(ent->client->pers.netname)-1);
@@ -3206,6 +3209,7 @@ void ClientDisconnect (edict_t *ent)
 
 	StatsLog_ClientDisconnect (ent);
 	Vote_ClientDisconnect (ent);
+	Nick_ClientDisconnect (ent);
 
 	if (stats->value && !level.intermissiontime)
 		Write_Player_Stats(ent);

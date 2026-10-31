@@ -1213,6 +1213,7 @@ void SpawnEntities2 (char *mapname, char *entities, char *spawnpoint)
 	mapvotes[3] = 0;
 	mapvotes[4] = 0;
 	Vote_Reset ();
+	Nick_Load ();
 
 	InitItems ();
 

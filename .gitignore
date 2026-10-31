@@ -69,3 +69,6 @@ stats/.venv/
 
 # Planes futuros: locales, no se suben
 planes/
+
+# claves de los nicks protegidos (solo en el server)
+nicks.txt

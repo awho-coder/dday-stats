@@ -462,7 +462,7 @@ void Cmd_DDHelp_f(edict_t *ent)
 		" shout xxx   - Play xxx.wav in your team shout directory\n"
 		" binds       - This dialog\n"
 		"Edit your autoexec.cfg in your dday folder to bind these commands to the keys you want.\n"
-		"To vote, type \"Vote yes\" or \"Vote map xxx\" in the console.\n" 
+		"To vote, type \"vote map xxx\", \"vote kick xxx\", \"vote yes\" or \"vote no\" in the console.\n" 
 		"To open the console, hit the key above the TAB key on your keyboard.\n"
 
 	);

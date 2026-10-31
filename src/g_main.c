@@ -1661,6 +1661,7 @@ void G_RunFrame (void)
 	}
 
 	Vote_RunFrame ();
+	Nick_RunFrame ();
 
 	if ((level.framenum%40 == 1 && qbots && bots->value == 0) ||
 		(bots->value == 1 && 

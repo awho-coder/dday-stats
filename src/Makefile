@@ -83,6 +83,7 @@ GAME_OBJS =	\
 	g_main.o \
 	g_maps.o \
 	g_misc.o \
+	g_nicks.o \
 	g_monster.o \
 	g_objectives.o \
 	g_phys.o \
@@ -178,6 +179,8 @@ g_spawn.o: g_spawn.c g_local.h g_defines.h q_shared.h game.h p_menu.h \
 g_statslog.o: g_statslog.c g_local.h g_defines.h q_shared.h game.h \
  p_menu.h g_maps.h g_statslog.h x_fire.h
 g_vote.o: g_vote.c g_local.h g_defines.h q_shared.h game.h \
+ p_menu.h g_maps.h g_statslog.h x_fire.h
+g_nicks.o: g_nicks.c g_local.h g_defines.h q_shared.h game.h \
  p_menu.h g_maps.h g_statslog.h x_fire.h
 g_svcmds.o: g_svcmds.c g_local.h g_defines.h q_shared.h game.h \
  p_menu.h g_maps.h
