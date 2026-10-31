@@ -58,6 +58,7 @@ cvar_t	*control_engineer_at;
 cvar_t	*control_engineer_rockets;
 cvar_t	*control_engineer_grenades;
 cvar_t	*ffa; // Free For All mode (0 disabled, 1 enabled): teamless, every player is an enemy
+cvar_t	*ffa_roulette;
 cvar_t	*ffa_gungame;
 cvar_t	*ffa_gg_steps;
 cvar_t	*ffa_gg_deaths;

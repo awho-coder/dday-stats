@@ -51,7 +51,7 @@ def cfg_value(name):
 
 def restore_rotation():
     """Modo normal: sin control ni FFA, con la rotacion y la votacion de server.cfg."""
-    rcon("set control_mode 0"); rcon("set ffa 0"); rcon("set ffa_gungame 0")
+    rcon("set control_mode 0"); rcon("set ffa 0"); rcon("set ffa_gungame 0"); rcon("set ffa_roulette 0")
     ml = normal_maplist()
     if ml: rcon('set sv_maplist "%s"' % ml)
     mv = cfg_value("mapvoting")
@@ -161,7 +161,7 @@ def admin_map(arg):
 HELP = ("[ADMIN] comandos: estado, kick <quien>, kickban <quien>, ban <ip>, unban <ip>, "
         "mapa <nombre>, duelo <mapa>, publico, cuenta, reset, resetscore, tiempo, mapas, bans, "
         "bots on|off, kickbots, screenshot, stuff <cmd>, autostuff <cmd>, autostuffoff, "
-        "control <mapa>, ffa <mapa>, gungame <mapa>, dm <mapa>, kamikaze on|off, medic on|off, medic bazooka on|off, dardo on|off, officer bonus on|off, tab nuevo on|off, "
+        "control <mapa>, ffa <mapa>, ffa ruleta <mapa>, gungame <mapa>, dm <mapa>, kamikaze on|off, medic on|off, medic bazooka on|off, dardo on|off, officer bonus on|off, tab nuevo on|off, "
         "grabar on|off|ahora, votacion on|off|cancelar, alias <nick>, lock, unlock, say <texto>, ayuda")
 
 def run_cmd(text, by):
@@ -262,16 +262,23 @@ def run_cmd(text, by):
         return "[ADMIN] modo CONTROL en %s, sin votación hasta volver a normal (petición de %s)" % (real, by), True
     if verb in ("ffa", "freeforall", "todoscontratodos", "gungame", "gg"):
         gg = verb in ("gungame", "gg")
+        # 'ffa ruleta <mapa>': FFA con un arma sorteada por mapa (la ruleta de snako) en vez de todos Sniper
+        sub_arg = arg.split(None, 1)
+        ruleta = not gg and bool(sub_arg) and norm(sub_arg[0]) in ("ruleta", "sorteo", "roulette")
+        if ruleta:
+            arg = sub_arg[1] if len(sub_arg) > 1 else ""
         real = current_map() or "dday2"
         if norm(arg) not in MAPA_ACTUAL:
             real, err = admin_map(arg)
             if err: return err, True
         # ffa y ffa_gungame son latched: se aplican con el 'map'. Sin votacion para que la sesion siga en
         # este mapa hasta que se pida normal/dm/mapa (como en control)
-        rcon("set mapvoting 0"); rcon("set control_mode 0"); rcon("set ffa 1"); rcon("set ffa_gungame %d" % (1 if gg else 0))
+        rcon("set mapvoting 0"); rcon("set control_mode 0"); rcon("set ffa 1"); rcon("set ffa_gungame %d" % (1 if gg else 0)); rcon("set ffa_roulette %d" % (1 if ruleta else 0))
         rcon('set sv_maplist "%s"' % real); rcon("map %s" % real)
         if gg:
             return "[ADMIN] modo GUN GAME en %s: cada kill te da la siguiente arma, gana quien mata con cuchillo al final (petición de %s)" % (real, by), True
+        if ruleta:
+            return "[ADMIN] modo FREE FOR ALL con RULETA en %s: un arma sorteada para todos, sin votación hasta volver a normal (petición de %s)" % (real, by), True
         return "[ADMIN] modo FREE FOR ALL en %s, todos contra todos, sin votación hasta volver a normal (petición de %s)" % (real, by), True
     if verb in ("dm", "deathmatch"):
         real = "dday2"
