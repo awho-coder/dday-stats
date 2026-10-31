@@ -79,8 +79,17 @@ def _cl(s):
     import re as _r
     return _r.sub(r'[\x00-\x08\x0b-\x1f\ufffd]+', '', s).replace('print', '').strip()
 
+_ASCII = str.maketrans({"¿": "", "¡": "", "–": "-", "—": "-", "“": '"', "”": '"', "‘": "'", "’": "'",
+                        "…": "...", "º": "o", "ª": "a", "°": "o", "€": "E"})
+
+def sin_tildes(s):
+    """Texto solo ASCII: Quake 2 muestra mal las tildes, la ñ y los signos ¿ ¡ (á->a, ñ->n)."""
+    import unicodedata
+    s = unicodedata.normalize("NFKD", (s or "").translate(_ASCII))
+    return "".join(c for c in s if ord(c) < 128 and not unicodedata.combining(c))
+
 def say(msg):
-    return rcon("say " + _cl(msg)[:190], wait=0.3)
+    return rcon("say " + sin_tildes(_cl(msg))[:190], wait=0.3)
 
 def log_action(by, text, result):
     try:
@@ -421,7 +430,7 @@ def run_cmd(text, by):
         return "[ADMIN] password de entrada eliminada (server abierto)", True
     if verb in ("say", "anuncia"):
         if arg:
-            rcon("say " + arg[:190])
+            rcon("say " + sin_tildes(arg)[:190])
             return "[ADMIN] dicho", True
         return "[ADMIN] uso: say <texto>", True
 
@@ -1095,7 +1104,7 @@ def tell_private(nick, text):
     """Manda texto solo a la consola de ese jugador (stuff echo). False si no esta conectado."""
     uid = next((u for u, k in players() if k == nick), None)
     if uid is None: return False
-    clean = re.sub(r'[;"$\\\n\r]', "", text)
+    clean = re.sub(r'[;"$\\\n\r]', "", sin_tildes(text))
     for i in range(0, len(clean), 180):
         rcon("stuff %d echo %s" % (uid, clean[i:i + 180]), wait=0.3)
     return True
@@ -1136,7 +1145,7 @@ def handle_line(line, dry=False):
     nick, text = cp
     if looks_command(text):
         if not rate_ok(nick):
-            if not dry: say("[ADMIN] calma, esperá unos segundos")
+            if not dry: say("[ADMIN] calma, espera unos segundos")
             print("RATE-LIMIT %s" % nick)
             return ("rate", nick, text, None)
         aud = re.sub(r"(?i)(pass(word)?\s+)\S+", r"\1****", text)
