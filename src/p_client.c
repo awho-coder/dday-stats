@@ -933,6 +933,10 @@ void TossClientWeapon (edict_t *self)
 	if (self->client->weaponstate == WEAPON_DROPPING)
 		return;//faf:  fixes dropping 2 weaps with drop_shot
 
+	// Free For All Gun Game: the weapons only come from the ladder
+	if (G_IsFFA() && ffa_gg_on)
+		return;
+
 
 
 	item = self->client->pers.weapon;
@@ -1195,6 +1199,10 @@ void Drop_All_Knives(edict_t *self)
 {
 	gitem_t *knife_item;
 	int knife_index, i, count;
+
+	// Free For All Gun Game: the knives of the last step are not dropped
+	if (G_IsFFA() && ffa_gg_on)
+		return;
 
 	knife_item = FindItem("Knife");
 	knife_index = ITEM_INDEX(knife_item);
@@ -4560,7 +4568,12 @@ void ClientBeginServerFrame (edict_t *ent)
 	client = ent->client;
 
 	if (G_IsFFA())
+	{
 		FFA_JoinPlayer(ent);
+
+		if (ffa_gg_on)
+			FFA_GunGameThink(ent);
+	}
 
 //		gi.dprintf("    %i\n", ent->client->ps.gunframe);//faf test
 

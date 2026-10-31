@@ -189,15 +189,33 @@ void Killed (edict_t *targ, edict_t *inflictor, edict_t *attacker, int damage, v
 		// to whoever last wounded the victim when the victim bled out (as in the score below)
 		if (G_IsFFA() && targ->client)
 		{
+			edict_t	*killer = NULL;
+
 			targ->client->resp.ffa_deaths++;
 
 			if (attacker && attacker->client && attacker != targ)
+			{
 				attacker->client->resp.ffa_kills++;
+				killer = attacker;
+			}
 			else if ((attacker == targ || attacker == NULL || attacker == world) &&
 				targ->client->last_wound_inflictor &&
 				targ->client->last_wound_inflictor != targ &&
 				targ->client->last_wound_inflictor->client)
+			{
 				targ->client->last_wound_inflictor->client->resp.ffa_kills++;
+				killer = targ->client->last_wound_inflictor;
+			}
+
+			// Gun Game: the killer goes up a step, the victim may go down
+			if (ffa_gg_on)
+			{
+				// forced team changes and penalties are not real deaths
+				if (meansOfDeath != MOD_CHANGETEAM && meansOfDeath != MOD_CHANGETEAM_WOUNDED && meansOfDeath != MOD_PENALTY)
+					FFA_GunGameDeath (targ, !killer, meansOfDeath);
+				if (killer)
+					FFA_GunGameKill (killer, meansOfDeath);
+			}
 		}
 
 	// pbowens: suicide gives other team kill
@@ -738,6 +756,10 @@ void Drop_Flamed (edict_t *ent)
 	int		index;
 	gitem_t *item;
 
+	// Free For All Gun Game: the weapon of the ladder is never dropped
+	if (G_IsFFA() && ffa_gg_on)
+		return;
+
 	item = 	ent->client->pers.weapon;
 
 	if (item->classnameb == WEAPON_FISTS ||
@@ -1138,6 +1160,7 @@ void T_Damage (edict_t *targ, edict_t *inflictor, edict_t *attacker, vec3_t dir,
 
 			// wheaty: Don't let drop shot affect Morphine/Flamethrower/Fists/Binocs
 			if (randnum >= DROP_SHOT && IsValidPlayer(targ) &&
+				!(G_IsFFA() && ffa_gg_on) && // Gun Game: the weapon of the ladder is never dropped
 				!(targ->client->newweapon) && //faf:  if dropping/changing weap, dont hit gun
 				targ->client->pers.weapon &&
 				targ->client->pers.weapon->classname &&
