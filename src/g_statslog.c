@@ -91,6 +91,8 @@ typedef struct
 	int			zone_time;		// modo control: segundos dentro de la zona
 	int			zone_kills;		// modo control: kills a enemigos con el que mata o el que muere en la zona
 	int			place;			// FFA: puesto al terminar (0 = sin puesto)
+	int			gg_level;		// FFA Gun Game: escalon de la escalera (0 = el primero)
+	qboolean	gg_winner;		// FFA Gun Game: gano matando con el cuchillo en el ultimo escalon
 
 	stats_counter_t	hits;
 	stats_counter_t	misses;
@@ -410,6 +412,9 @@ static void StatsLog_WritePlayer (stats_player_t *p, const char *reason)
 	// puesto en FFA: solo quien llega al final de la partida
 	if (p->place > 0)
 		fprintf (sl.file, ",\"place\":%d", p->place);
+	// Gun Game: escalon al que llego (1 = el primero)
+	if (ffa_gg_on)
+		fprintf (sl.file, ",\"gg_level\":%d", p->gg_level + 1);
 	StatsLog_WriteKey ("reason");
 	StatsLog_WriteString (reason);
 	StatsLog_EndEvent ();
@@ -527,6 +532,8 @@ static void StatsLog_SamplePlayer (edict_t *ent, qboolean add_time)
 	StatsLog_CounterSet (&p->hits, ent->client->resp.accuracy_hits);
 	StatsLog_CounterSet (&p->misses, ent->client->resp.accuracy_misses);
 	p->score = ent->client->resp.score - p->score_base;
+	p->gg_level = ent->client->resp.ffa_level;
+	p->gg_winner = (ffa_gg_on && ent == ffa_gg_winner);
 	StatsLog_CounterSet (&p->points, ent->client->resp.points);
 }
 
@@ -846,6 +853,12 @@ void StatsLog_MatchBegin (void)
 	StatsLog_WriteString (level.mapname);
 	StatsLog_WriteKey ("mode");
 	StatsLog_WriteString (mode);
+	// variante del FFA: el Gun Game sigue siendo "ffa" para el ingestor, con el ganador y los puestos por escalon
+	if (G_IsFFA () && ffa_gg_on)
+	{
+		StatsLog_WriteKey ("variant");
+		StatsLog_WriteString ("gungame");
+	}
 	StatsLog_WriteKey ("kind");
 	StatsLog_WriteString (sl.duel ? "duel" : "public");
 	StatsLog_WriteKey ("event");
@@ -957,7 +970,17 @@ void StatsLog_EndDMLevel (void)
 		sl.ffa_end = true;
 }
 
-// FFA: puesto de cada jugador por score; los empatados comparten puesto
+// FFA: valor que ordena a los jugadores (como FFA_Rank en g_main.c): el score o, en el Gun Game,
+// primero el que gano con el cuchillo, despues el escalon y despues el score
+static int StatsLog_FFARank (stats_player_t *p)
+{
+	if (ffa_gg_on)
+		return (p->gg_winner ? 1000000 : 0) + p->gg_level * 1000 + p->score;
+
+	return p->score;
+}
+
+// FFA: puesto de cada jugador por score (Gun Game: por escalon); los empatados comparten puesto
 // (1, 1, 3...). Devuelve cuantos quedaron en el primer puesto y deja su nombre
 // (el ultimo que lo tenga) en first_name.
 static int StatsLog_FFAPlaces (char *first_name, size_t size)
@@ -974,7 +997,7 @@ static int StatsLog_FFAPlaces (char *first_name, size_t size)
 			continue;
 		better = 0;
 		for (j = 0; j < MAX_CLIENTS; j++)
-			if (j != i && StatsLog_Recordable (&sl.players[j]) && sl.players[j].score > p->score)
+			if (j != i && StatsLog_Recordable (&sl.players[j]) && StatsLog_FFARank (&sl.players[j]) > StatsLog_FFARank (p))
 				better++;
 		p->place = better + 1;
 		if (p->place == 1)

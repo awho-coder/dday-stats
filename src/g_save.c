@@ -157,11 +157,10 @@ field_t fields[] = {
 
 	{"fullbright",FOFS(groundentity_linkcount),F_INT},
 	{"fog",FOFS(teleport_time),F_FLOAT},
-	{"obj_origin", FOFS(obj_origin), F_VECTOR}
+	{"obj_origin", FOFS(obj_origin), F_VECTOR},
 
-	
-	
-
+	// fin de la lista: sin esto un campo desconocido del mapa (p. ej. "focus" en dday1) recorre memoria ajena
+	{NULL, 0, F_INT}
 };
 
 // -------- just for savegames ----------
@@ -439,6 +438,12 @@ void InitGame (void)
 	// kernel: modes for CTB: (0 disabled, 1 one briefcase, 2 many briefcases)
 	ctb_mode = gi.cvar("ctb_mode", "0", CVAR_LATCH);
 	ffa = gi.cvar("ffa", "0", CVAR_SERVERINFO|CVAR_LATCH);
+	ffa_gungame = gi.cvar("ffa_gungame", "0", CVAR_LATCH);
+	ffa_gg_steps = gi.cvar("ffa_gg_steps", "29", 0);
+	ffa_gg_deaths = gi.cvar("ffa_gg_deaths", "0", 0);
+	ffa_gg_factions = gi.cvar("ffa_gg_factions", "1", 0);
+	ffa_gg_snd_up = gi.cvar("ffa_gg_snd_up", "ffa/gg_up2.wav", 0);
+	ffa_gg_snd_down = gi.cvar("ffa_gg_snd_down", "misc/menu3.wav", 0);
 
 	// modo control de zona: carga ents/<mapa>.ctl con una entidad objective_control
 	control_mode = gi.cvar("control_mode", "0", CVAR_LATCH);
