@@ -24,6 +24,9 @@
  *   vote_kick          1    0 = no se puede votar kick (con vote_enable 1)
  *   vote_kick_percent  75   porcentaje de "si" que hay que superar (kick)
  *   vote_kick_min      3    humanos en equipo necesarios para un kick
+ *   vote_announce      600  segundos entre avisos de como votar (0 = sin avisos); ademas
+ *                           se avisa al entrar al server, a los 45 s del mapa y al terminar
+ *   vote_chat          0    lo pone el bot: 1 = el aviso incluye !votemap/!votekick
  *
  * Mapas: cualquier .bsp de dday/maps que sea de D-Day (tiene spawns de equipo
  * en el .bsp o en ents/<mapa>.ent). Sin distinguir mayusculas.
@@ -78,6 +81,15 @@ static cvar_t *vote_cooldown;
 static cvar_t *vote_kick;
 static cvar_t *vote_kick_percent;
 static cvar_t *vote_kick_min;
+static cvar_t *vote_announce;	// segundos entre avisos de como votar (0 = sin avisos)
+static cvar_t *vote_chat;		// 1 = el bot tiene prendida la votacion por chat (lo pone el bot)
+
+// avisos de como votar: al entrar al server (una vez por jugador), al empezar el mapa,
+// cada vote_announce segundos y al terminar el mapa
+static qboolean	howto_told[MAX_CLIENTS];	// ya se le explico (hasta que se desconecte)
+static int		howto_frames[MAX_CLIENTS];	// aviso privado pendiente
+static float	next_announce;
+static qboolean	end_announced;
 
 static struct
 {
@@ -109,6 +121,8 @@ void Vote_Init (void)
 	vote_kick         = gi.cvar ("vote_kick", "1", 0);
 	vote_kick_percent = gi.cvar ("vote_kick_percent", "75", 0);
 	vote_kick_min     = gi.cvar ("vote_kick_min", "3", 0);
+	vote_announce     = gi.cvar ("vote_announce", "600", 0);
+	vote_chat         = gi.cvar ("vote_chat", "0", 0);
 }
 
 // al iniciar cada mapa (level se borra, pero esto es static)
@@ -116,6 +130,91 @@ void Vote_Reset (void)
 {
 	memset (&vote, 0, sizeof(vote));
 	vote_nummaps = -1;	// por si subieron mapas nuevos
+	next_announce = 45;	// primer aviso a los 45 s del mapa
+	end_announced = false;
+}
+
+/*
+==============================================================================
+Avisos de como votar
+==============================================================================
+*/
+
+static void Vote_HowTo (edict_t *ent)
+{
+	const char *l1 = "Votaciones: en la consola escribe vote map <mapa>, vote kick <jugador>, "
+		"vote yes o vote no (vote maps <texto> busca mapas).\n";
+	const char *l2 = "Tambien en el chat: !votemap <mapa>, !votekick <jugador>, !si o !no.\n";
+
+	if (ent)
+	{
+		safe_cprintf (ent, PRINT_HIGH, "%s", l1);
+		if (vote_chat->value)
+			safe_cprintf (ent, PRINT_HIGH, "%s", l2);
+	}
+	else
+	{
+		safe_bprintf (PRINT_HIGH, "%s", l1);
+		if (vote_chat->value)
+			safe_bprintf (PRINT_HIGH, "%s", l2);
+	}
+}
+
+// desde ClientBeginDeathmatch (cada mapa): solo la primera vez que entra al server
+void Vote_ClientBegin (edict_t *ent)
+{
+	int slot = ent - g_edicts - 1;
+
+	if (ent->ai || slot < 0 || slot >= MAX_CLIENTS || howto_told[slot])
+		return;
+	howto_told[slot] = true;
+	howto_frames[slot] = 50;	// 5 s, despues de los mensajes de entrada
+}
+
+static qboolean Vote_AnyHuman (void)
+{
+	int i;
+
+	for (i = 1; i <= game.maxclients; i++)
+		if (g_edicts[i].inuse && g_edicts[i].client && !g_edicts[i].ai)
+			return true;
+	return false;
+}
+
+static void Vote_AnnounceFrame (void)
+{
+	int		i;
+	edict_t	*ent;
+	qboolean on = vote_enable->value && vote_announce->value > 0;
+
+	for (i = 0; i < game.maxclients && i < MAX_CLIENTS; i++)
+	{
+		if (!howto_frames[i])
+			continue;
+		ent = g_edicts + 1 + i;
+		if (!ent->inuse || !ent->client)
+			continue;
+		if (--howto_frames[i] == 0 && on)
+			Vote_HowTo (ent);
+	}
+
+	if (!on)
+		return;
+
+	if (level.intermissiontime)
+	{
+		if (!end_announced && level.time > level.intermissiontime + 2)
+		{
+			end_announced = true;
+			Vote_HowTo (NULL);
+		}
+		return;
+	}
+	if (vote.active || level.time < next_announce)
+		return;
+	next_announce = level.time + (vote_announce->value > 60 ? vote_announce->value : 60);
+	if (Vote_AnyHuman ())
+		Vote_HowTo (NULL);
 }
 
 /*
@@ -854,6 +953,7 @@ void Vote_RunFrame (void)
 {
 	int yes, no, total;
 
+	Vote_AnnounceFrame ();
 	if (!vote.active)
 		return;
 
@@ -893,6 +993,8 @@ void Vote_ClientDisconnect (edict_t *ent)
 	if (slot < 0 || slot >= MAX_CLIENTS)
 		return;
 	vote.choice[slot] = VOTE_NONE;
+	howto_told[slot] = false;
+	howto_frames[slot] = 0;
 	vote.kick_caller_wait[slot] = 0;
 	vote.kick_target_wait[slot] = 0;
 

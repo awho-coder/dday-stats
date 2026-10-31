@@ -2546,6 +2546,7 @@ void Vote_Init (void);
 void Vote_Reset (void);
 void Vote_RunFrame (void);
 void Vote_ClientDisconnect (edict_t *ent);
+void Vote_ClientBegin (edict_t *ent);
 void Cmd_Vote_f (edict_t *ent);
 void Svcmd_VoteCancel_f (void);
 
