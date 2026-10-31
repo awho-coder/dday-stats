@@ -654,6 +654,10 @@ static void FFA_RollFrame (void)
 {
 	int		i;
 
+	// Gun Game: no roulette (the lobby shows the banner of the mode, see FFA_HudStats)
+	if (ffa_gg_on)
+		return;
+
 	if (!ffa_roll_count)
 		return;
 
@@ -699,7 +703,9 @@ static void FFA_HudStats (edict_t *ent)
 			if (!cl_ent->inuse || !cl_ent->client || !cl_ent->client->resp.team_on)
 				continue;
 
-			if (!top || cl_ent->client->resp.score > top->client->resp.score)
+			// Gun Game: the leader is the one on the highest step, then the one with more frags
+			if (!top || (cl_ent->client->resp.score + (ffa_gg_on ? cl_ent->client->resp.ffa_level * 1000 + (cl_ent == ffa_gg_winner ? 1000000 : 0) : 0)) >
+				(top->client->resp.score + (ffa_gg_on ? top->client->resp.ffa_level * 1000 + (top == ffa_gg_winner ? 1000000 : 0) : 0)))
 				top = cl_ent;
 		}
 
@@ -707,7 +713,11 @@ static void FFA_HudStats (edict_t *ent)
 		{
 			// padded on the left to 12 characters so the name ends at the same edge as the score
 			Com_sprintf (text, sizeof(text), "%12.12s", top->client->pers.netname);
-			ffa_hud_topscore = top->client->resp.score;
+			// Gun Game: the number is the step of the leader (the frags during the intermission: the banner shows them)
+			if (ffa_gg_on && !level.intermissiontime)
+				ffa_hud_topscore = top->client->resp.ffa_level + 1;
+			else
+				ffa_hud_topscore = top->client->resp.score;
 		}
 		else
 		{
@@ -727,7 +737,8 @@ static void FFA_HudStats (edict_t *ent)
 	}
 
 	ent->client->ps.stats[STAT_TEAM0_ICON] = FFA_TOP_SCORER_CS;
-	ent->client->ps.stats[STAT_TEAM0_KILLS] = ent->client->resp.score;
+	// Gun Game: "LEVEL" shows the step of the player instead of his frags
+	ent->client->ps.stats[STAT_TEAM0_KILLS] = ffa_gg_on ? ent->client->resp.ffa_level + 1 : ent->client->resp.score;
 	ent->client->ps.stats[STAT_TEAM0_POINTS] = ffa_hud_topscore;
 
 	// announcement: the big number (stat 25) and the two texts (stats 26 and 27), only while it is on screen
@@ -746,7 +757,11 @@ static void FFA_HudStats (edict_t *ent)
 	}
 
 	// weapon roulette: icon of the weapon (stat 2 is not used by anything else in the Free For All statusbar)
-	ent->client->ps.stats[STAT_ROUNDS_ICON] = FFA_RollImage ();
+	// (Gun Game: the banner of the mode during the same lobby wait)
+	if (ffa_gg_on)
+		ent->client->ps.stats[STAT_ROUNDS_ICON] = (level.framenum < FFA_ROLL_END_FRAME) ? ffa_gg_banner : 0;
+	else
+		ent->client->ps.stats[STAT_ROUNDS_ICON] = FFA_RollImage ();
 }
 
 void TeamStats (edict_t *ent)
@@ -823,6 +838,7 @@ void TeamStats (edict_t *ent)
 #define FFA_BANNER_TITLE_Y		34
 #define FFA_BANNER_NUMBER_Y		44
 #define FFA_BANNER_FRAGS_Y		72
+#define FFA_BANNER_GG_NAME_Y	68		// Gun Game winner banner (ffa_gungame_win.png): name on its plate (dark area y 56..88)
 
 // Free For All scoreboard panel: pics/ffa_score.png, 320 x 332, drawn centered on the 320 x 240 layout
 // (FFA_PANEL_Y = (240 - 332) / 2). Its dark area is x 23..297, y 28..270 of the picture: the title is at
@@ -852,6 +868,9 @@ static void FFA_ScoreboardMessage (edict_t *ent, qboolean accuracy_page)
 			continue;
 
 		score = game.clients[i].resp.score;
+		// Gun Game: the step of the ladder first, then the score (as FFA_Rank in g_main.c)
+		if (ffa_gg_on)
+			score += game.clients[i].resp.ffa_level * 1000 + (cl_ent == ffa_gg_winner ? 1000000 : 0);
 		for (j = 0; j < total; j++)
 		{
 			if (score > sortedscores[j])
@@ -879,7 +898,8 @@ static void FFA_ScoreboardMessage (edict_t *ent, qboolean accuracy_page)
 	else
 	{
 		sprintf (string + strlen(string), "xv 112 yv %d string \"FREE FOR ALL\" ", FFA_PANEL_Y + 30);
-		sprintf (string + strlen(string), "xv %d yv %d string \"Ping Player           K  D +/-\" ", FFA_TEXT_X, FFA_PANEL_Y + 44);
+		sprintf (string + strlen(string), "xv %d yv %d string \"%s\" ", FFA_TEXT_X, FFA_PANEL_Y + 44,
+				 ffa_gg_on ? "Ping Player           K  D Lvl" : "Ping Player           K  D +/-");
 	}
 
 	if (level.intermissiontime && total)
@@ -887,18 +907,30 @@ static void FFA_ScoreboardMessage (edict_t *ent, qboolean accuracy_page)
 		char	title[40];
 
 		// the winner is not repeated inside the panel: it is shown by the banner below
-		if (total > 1 && sortedscores[0] == sortedscores[1])
+		if (ffa_gg_on && ffa_gg_winner && ffa_gg_winner->client)
+			Com_sprintf (title, sizeof(title), "%.12s WINS!", ffa_gg_winner->client->pers.netname);
+		else if (total > 1 && sortedscores[0] == sortedscores[1])
 			Com_sprintf (title, sizeof(title), "TIE GAME");
 		else
 			Com_sprintf (title, sizeof(title), "%.12s WINS!", game.clients[sorted[0]].pers.netname);
 
+		if (ffa_gg_on && ffa_gg_winner && ffa_gg_winner->client)
+		{
+			// Gun Game: the banner of the mode with its plate empty (pics/ffa_gungame_win.png) and the name of the winner on it
+			sprintf (string + strlen(string), "xv 0 yv %d picn ffa_gungame_win ", FFA_PANEL_Y - FFA_BANNER_H - 4);
+			sprintf (string + strlen(string), "xv %d yv %d string2 \"%s\" ", 160 - 4 * (int)strlen(title),
+					 FFA_PANEL_Y - FFA_BANNER_H - 4 + FFA_BANNER_GG_NAME_Y, title);
+		}
+		else
+		{
 		// winner banner right above the panel; the number is the top score (stat 24)
 		sprintf (string + strlen(string), "xv 0 yv %d picn ffa_winner ", FFA_PANEL_Y - FFA_BANNER_H - 4);
 		sprintf (string + strlen(string), "xv %d yv %d string2 \"%s\" ", 160 - 4 * (int)strlen(title),
 				 FFA_PANEL_Y - FFA_BANNER_H - 4 + FFA_BANNER_TITLE_Y, title);
-		if (sortedscores[0] > 0)
+		if (game.clients[sorted[0]].resp.score > 0)
 			sprintf (string + strlen(string), "xv 126 yv %d num 3 24 xv 140 yv %d string2 \"FRAGS\" ",
 					 FFA_PANEL_Y - FFA_BANNER_H - 4 + FFA_BANNER_NUMBER_Y, FFA_PANEL_Y - FFA_BANNER_H - 4 + FFA_BANNER_FRAGS_Y);
+		}
 	}
 
 	// the x of the rows is set once (it stays) to keep the layout string short
@@ -940,6 +972,16 @@ static void FFA_ScoreboardMessage (edict_t *ent, qboolean accuracy_page)
 					 game.clients[sorted[i]].pers.netname,
 					 acc, hits, shots);
 		}
+		else if (ffa_gg_on)
+			// Gun Game: the last column is the step of the ladder
+			sprintf (string + strlen(string), "yv %d %s \"%s  %-15.15s%3d%3d%4d\" ",
+					 FFA_PANEL_Y + 58 + i * 10,
+					 (sorted[i] == ent - g_edicts - 1) ? "string2" : "string",
+					 pingstring,
+					 game.clients[sorted[i]].pers.netname,
+					 game.clients[sorted[i]].resp.ffa_kills,
+					 game.clients[sorted[i]].resp.ffa_deaths,
+					 game.clients[sorted[i]].resp.ffa_level + 1);
 		else
 		// +/- is kills minus deaths (suicides are deaths)
 		sprintf (string + strlen(string), "yv %d %s \"%s  %-15.15s%3d%3d%+4d\" ",
@@ -2007,6 +2049,23 @@ void G_SetStats (edict_t *ent)
 	{
 		ent->client->ps.stats[STAT_PICKUP_ICON] = 0;
 		ent->client->ps.stats[STAT_PICKUP_STRING] = 0;
+	}
+
+	// Free For All Gun Game: the katana and the sabre are their own ammo, so they would show their icon and a
+	// count in the ammo slot. The icon of the sabre (pics/w_sabre.pcx) is a 256 x 256 texture of the hands, not an
+	// icon: it is not shown anywhere (the name of the weapon still is)
+	if (G_IsFFA() && ffa_gg_on && ent->client->pers.weapon &&
+		(ent->client->pers.weapon->classnameb == WEAPON_KATANA || ent->client->pers.weapon->classnameb == WEAPON_SABRE))
+	{
+		ent->client->ps.stats[STAT_MAGS] = 0;
+		ent->client->ps.stats[STAT_MAGS_ICON] = 0;
+		ent->client->ps.stats[STAT_ROUNDS] = 0;
+
+		if (ent->client->pers.weapon->classnameb == WEAPON_SABRE)
+		{
+			ent->client->ps.stats[STAT_SELECTED_ICON] = 0;
+			ent->client->ps.stats[STAT_PICKUP_ICON] = 0;
+		}
 	}
 
 	//

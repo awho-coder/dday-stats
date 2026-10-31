@@ -47,6 +47,12 @@ cvar_t	*deathmatch;
 cvar_t	*coop;
 cvar_t	*ctb_mode; // kernel: selects mode for CTB (0 disabled, 1 one briefcase, 2 many briefcases)
 cvar_t	*ffa; // Free For All mode (0 disabled, 1 enabled): teamless, every player is an enemy
+cvar_t	*ffa_gungame;
+cvar_t	*ffa_gg_steps;
+cvar_t	*ffa_gg_deaths;
+cvar_t	*ffa_gg_factions;
+cvar_t	*ffa_gg_snd_up;
+cvar_t	*ffa_gg_snd_down;
 cvar_t	*dmflags;
 cvar_t	*skill;
 cvar_t	*fraglimit;
@@ -985,6 +991,16 @@ void EndDMLevel (void)
 CheckDMRules
 =================
 */
+// Free For All: value that ranks a player; the score, or in the Gun Game the step first and then the score
+static int FFA_Rank (edict_t *ent)
+{
+	// the one who won with the last weapon is always the first
+	if (ffa_gg_on)
+		return ent->client->resp.ffa_level * 1000 + ent->client->resp.score + (ent == ffa_gg_winner ? 1000000 : 0);
+
+	return ent->client->resp.score;
+}
+
 // Free For All: player with the highest score among those who joined (NULL if nobody),
 // *tie is set when several players share that score
 static edict_t *FFA_TopPlayer (qboolean *tie)
@@ -1000,12 +1016,12 @@ static edict_t *FFA_TopPlayer (qboolean *tie)
 		if (!ent->inuse || !ent->client || !ent->client->resp.team_on)
 			continue;
 
-		if (!top || ent->client->resp.score > top->client->resp.score)
+		if (!top || FFA_Rank (ent) > FFA_Rank (top))
 		{
 			top = ent;
 			*tie = false;
 		}
-		else if (ent->client->resp.score == top->client->resp.score)
+		else if (FFA_Rank (ent) == FFA_Rank (top))
 			*tie = true;
 	}
 
@@ -1016,6 +1032,38 @@ static void FFA_AnnounceWinner (void)
 {
 	qboolean	tie;
 	edict_t		*top = FFA_TopPlayer(&tie);
+
+	// Gun Game: the one who killed with the knife on the last step wins
+	if (ffa_gg_on && ffa_gg_winner)
+	{
+		safe_bprintf (PRINT_HIGH, "%s wins the Gun Game!\n", ffa_gg_winner->client->pers.netname);
+		FFA_ShowAnnouncement (va("%.12s WINS!", ffa_gg_winner->client->pers.netname), ffa_gg_winner->client->resp.score,
+							  (ffa_gg_winner->client->resp.score > 0) ? "FRAGS" : " ");
+
+		// victory anthem of the faction of the players for everybody, as at the end of a team game
+		// (BeginIntermission plays it only for a winning team): the speakers of the map are shut off so it plays
+		// alone and it is repeated 3 times because it is quiet
+		if (team_list[0])
+		{
+			edict_t		*speaker = NULL, *cl;
+			int			i, snd = gi.soundindex (va ("%s/victory.wav", team_list[0]->teamid));
+
+			while ((speaker = G_Find (speaker, FOFS(classname), "target_speaker")))
+				speaker->s.sound = 0;
+
+			for (i = 1; i <= game.maxclients; i++)
+			{
+				cl = g_edicts + i;
+				if (!cl->inuse || !cl->client || cl->ai)
+					continue;
+
+				gi.sound (cl, (CHAN_NO_PHS_ADD|CHAN_RELIABLE), snd, 1, ATTN_NONE, 0);
+				gi.sound (cl, (CHAN_NO_PHS_ADD|CHAN_RELIABLE), snd, 1, ATTN_NONE, 0);
+				gi.sound (cl, (CHAN_NO_PHS_ADD|CHAN_RELIABLE), snd, 1, ATTN_NONE, 0);
+			}
+		}
+		return;
+	}
 
 	if (!top)
 		return;
@@ -1437,7 +1485,18 @@ void CheckDMRules (void)
 		qboolean	tie;
 		edict_t		*top = FFA_TopPlayer(&tie);
 
-		if (top && top->client->resp.score >= FFA_FragLimit())
+		if (ffa_gg_on)
+		{
+			// Gun Game: there is no fraglimit, the match ends when somebody kills with the last weapon
+			if (ffa_gg_winner)
+			{
+				FFA_AnnounceWinner();
+				Last_Team_Winner = 99;
+				ResetCountTimer();
+				EndDMLevel ();
+			}
+		}
+		else if (top && top->client->resp.score >= FFA_FragLimit())
 		{
 			safe_bprintf (PRINT_HIGH, "Fraglimit hit.\n");
 			FFA_AnnounceWinner();

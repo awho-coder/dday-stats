@@ -903,6 +903,26 @@ void FFA_JoinPlayer(edict_t *ent)
 		return;
 	}
 
+	// Gun Game: somebody who joins later starts on the lowest step of those playing, not behind all of them
+	if (ffa_gg_on)
+	{
+		edict_t	*other;
+		int		i, low = -1;
+
+		for (i = 0; i < game.maxclients; i++)
+		{
+			other = g_edicts + 1 + i;
+			if (other == ent || !other->inuse || !other->client || !other->client->resp.team_on)
+				continue;
+
+			if (low < 0 || other->client->resp.ffa_level < low)
+				low = other->client->resp.ffa_level;
+		}
+
+		if (low > 0)
+			ent->client->resp.ffa_level = low;
+	}
+
 	ent->client->resp.team_on = team_list[ffa_team];
 	ent->client->resp.mos = ffa_mos;
 	ent->client->resp.newmos = NONE;
