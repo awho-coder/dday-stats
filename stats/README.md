@@ -176,6 +176,31 @@ o `null` si empataron). Quien se fue antes no tiene puesto ni resultado.
 - Las partidas FFA cargadas antes de este cambio (final `other`, sin puestos) las
   completa `--init-schema`: puesto por puntaje, resultado y `end_reason = 'normal'`.
 
+### Gun Game (`mode = 'gungame'`)
+
+La DLL manda el Gun Game (`ffa 1` + `ffa_gungame 1`) como `"mode":"ffa"` con
+`"variant":"gungame"` en `match_start`; el ingestor lo guarda como `mode = 'gungame'` (un
+ingestor viejo lo cargaria como FFA). Datos propios:
+
+- `match_start`: `gg_steps` (escalones, el ultimo es el cuchillo; cambia por mapa, de 19 a 30)
+  y `gg_ladder` (armas en orden) → `matches.gg_steps`, `matches.gg_ladder`. Partidas de
+  antes de que la DLL los mandara: `gg_steps` = escalon del ganador.
+- Cada jugador: `gg_level` (escalon al terminar o irse) → `match_players.gg_level`.
+- Evento `gg` por cada cambio de escalon (`level`, `weapon`, `why`: `kill`, `suicide`,
+  `knifed`, `streak`, `join`) → tabla `gg_levels` (carrera de niveles).
+- `place` y `ffa_winner` van por escalon (gana quien mata con el cuchillo en el ultimo).
+- **Rankeada** (solo para `ladder_gungame`): final normal con ganador, al menos 2 minutos
+  (`--gg-min-duration`, 120) y 3 humanos que terminaron (`--ffa-min-humans`). No mueve el Elo.
+- `ladder_gungame()` (solo partidas rankeadas): victorias, podios, puesto promedio,
+  progreso promedio (% de la escalera), llegadas al cuchillo, bajadas, K/D y mejor racha.
+- `player_stats` (`mode = 'gungame'`): `gg_progress_sum`, `gg_knife`, `gg_downs`, y los
+  `ffa_podiums` / `ffa_placed` / `ffa_place_sum` de siempre.
+- FFA con ruleta (`ffa_roulette 1`): sigue siendo `ffa`; `match_start.ffa_weapon` →
+  `matches.ffa_weapon` (el arma sorteada).
+- `--reingest A.jsonl ...` vuelve a cargar partidas ya cargadas (las borra y las recarga, y
+  recalcula resumenes y, si hace falta, el Elo). Se uso para las 2 primeras partidas de Gun
+  Game de Oracle, que habian entrado como FFA.
+
 ### Modo control: kills en la zona
 
 En mapas con zona, cada `kill` lleva `kzone` y `vzone` (si el que mató / el que
@@ -283,6 +308,7 @@ SELECT * FROM ladder_zone(1, 'all', 'all');          -- idem, sin mínimo de par
 
 SELECT * FROM ladder_ffa();                          -- Free For All: victorias, podios, puesto promedio (mín. 3)
 SELECT * FROM ladder_ffa(1, 'all', 'all');           -- idem, sin mínimo de partidas, histórico
+SELECT * FROM ladder_gungame();                      -- Gun Game: victorias, podios, progreso (mín. 3, rankeadas)
 
 SELECT * FROM ladder_luck();                         -- los más suertudos (casco + pie), mín. 5 partidas
 SELECT * FROM ladder_unlucky();                      -- tiradores con más tiros desviados por cascos

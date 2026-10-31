@@ -936,6 +936,10 @@ void FFA_JoinPlayer(edict_t *ent)
 
 	ent->client->resp.team_on = team_list[ffa_team];
 	ent->client->resp.mos = ffa_mos;
+
+	// Gun Game: quien entra tarde parte en un escalon mas alto (stats: punto de partida de su carrera)
+	if (ffa_gg_on && ent->client->resp.ffa_level > 0)
+		StatsLog_GunGame (ent, "join");
 	ent->client->resp.newmos = NONE;
 	ent->client->pers.afk_check_time = level.framenum;
 }

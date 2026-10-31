@@ -35,6 +35,10 @@ void StatsLog_ClientDisconnect (edict_t *ent);
 void StatsLog_Kill (edict_t *targ, edict_t *inflictor, edict_t *attacker);
 void StatsLog_Objective (const char *type, const char *name, int team, edict_t *player);
 
+// FFA Gun Game: el jugador cambio de escalon. why: "kill" (subio), "suicide", "knifed", "streak" (bajo),
+// "join" (entro tarde y parte en el escalon mas bajo de los que juegan)
+void StatsLog_GunGame (edict_t *ent, const char *why);
+
 // golpes de suerte para StatsLog_Luck()
 #define STATS_LUCK_HELMET		"helmet"	// el casco desvio un tiro a la cabeza
 #define STATS_LUCK_FOOT			"foot"		// "almost lost a foot": sobrevivio desangrandose
