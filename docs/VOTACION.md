@@ -37,6 +37,9 @@ Reglas:
   `info_team_start` o `info_reinforcements_start` en el `.bsp` o en
   `ents/<mapa>.ent`), sin distinguir mayúsculas. Si no está, avisa y sugiere
   parecidos; si no es de D-Day o el archivo está dañado, también avisa.
+  En **FFA / Gun Game** solo se votan los mapas con `ents/<mapa>_ffa.ent` y en
+  **control de zona** los que tienen `ents/<mapa>.ctl` (los mismos de la rotación
+  del modo); `vote maps` muestra esa lista. Igual con `!votemap` del bot.
   Aprobada, termina como `sv nextmap`: la partida queda en las stats como
   cortada (`reason: forced`), no sale la votación de fin de mapa y el mapa
   cambia al terminar la intermisión.

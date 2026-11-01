@@ -10,6 +10,11 @@ el documento enlazado en cada sección.
 
 Detalle: [`modos/CONTROL.md`](modos/CONTROL.md).
 
+**Rotación:** con `control_mode 1` el siguiente mapa es siempre otro con `ents/<mapa>.ctl`
+(orden alfabético, vuelve al primero; sin votación de fin de mapa) y `vote map` solo acepta esos
+mapas. Lo mismo en FFA / Gun Game con los mapas que tienen `ents/<mapa>_ffa.ent` (hoy dday2 y
+tebessa2). Si no hay ningún mapa preparado se usa `sv_maplist` como siempre.
+
 | Cvar | Por defecto | Qué hace |
 |---|---|---|
 | `control_mode` | `0` | `1` activa el modo en los mapas con `ents/<mapa>.ctl` (requiere `deathmatch 1`; se aplica al cambiar de mapa). |
@@ -358,10 +363,12 @@ comando.
   `ffa <mapa>` `ffa ruleta <mapa>` `gungame <mapa>` `dm <mapa>` `modo normal|control|ffa|gungame|dm|duelo [mapa]` `kamikaze on|off` `tab nuevo on|off` `dardo on|off` `grabar on|off|ahora` `evento <nombre>` `cuenta [minutos]`
   `reset` `resetscore` `torneo on|off` `freeze` `proximamapa` `lock` `unlock`
   `say <texto>`
-- `control <mapa>` (o `modo control <mapa>`) deja solo ese mapa y **apaga la
-  votación** mientras dure la sesión: las rondas se repiten en ese mapa.
+- `control <mapa>` (o `modo control <mapa>`) arranca el modo control en ese mapa y **apaga la
+  votación de fin de mapa** mientras dure la sesión; después **rota entre los mapas con `.ctl`**
+  (la DLL elige el siguiente) y `vote map` / `!votemap` solo aceptan esos mapas.
 - `ffa <mapa>` (o `ffa` solo = el mapa actual; también en frase: "admin quiero probar
-  el ffa en dust") arranca Free For All en ese mapa y, como `control`, apaga la votación.
+  el ffa en dust") arranca Free For All en ese mapa; como `control`, rota entre los mapas con
+  `ents/<mapa>_ffa.ent` (dday2 y tebessa2) y la votación de mapa solo acepta esos.
 - `gungame <mapa>` igual que `ffa`, pero con el Gun Game (`ffa_gungame 1`); `ffa` lo apaga.
 - `ffa ruleta <mapa>` FFA con la ruleta de armas (`ffa_roulette 1`) en vez de todos Sniper.
 - `mapa`, `dm`, `normal` y `publico` apagan el modo control y el FFA, y restauran la

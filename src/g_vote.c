@@ -442,12 +442,115 @@ static int Vote_CheckMap (const char *map)
 	return result;
 }
 
+/*
+==============================================================================
+Mapas de cada modo: FFA / Gun Game (ents/<mapa>_ffa.ent) y control de zona
+(ents/<mapa>.ctl). En esos modos la rotacion (EndDMLevel) y la votacion de
+mapa van solo entre los mapas preparados para el modo.
+==============================================================================
+*/
+
+// patron del archivo que prepara un mapa para el modo actual; NULL en los demas modos
+static const char *Mode_FileFormat (void)
+{
+	if (G_IsFFA ())
+		return "ents/%s_ffa.ent";
+	if (control_mode && control_mode->value && deathmatch->value && !ctb_mode->value)
+		return "ents/%s.ctl";
+	return NULL;
+}
+
+// nombre del modo para los mensajes
+const char *Mode_Label (void)
+{
+	if (G_IsFFA ())
+		return (ffa_gungame && ffa_gungame->value) ? "Gun Game" : "Free For All";
+	return "control de zona";
+}
+
+static qboolean Mode_FileExists (const char *fmt, const char *map)
+{
+	char	name[MAX_QPATH + 16];
+	FILE	*f;
+	int		i;
+
+	Com_sprintf (name, sizeof(name), fmt, map);
+	for (i = 0; name[i]; i++)
+		name[i] = tolower ((unsigned char)name[i]);	// los archivos de ents/ van en minusculas (Linux)
+
+	f = DDay_OpenFullPathFile (sys_homedir->string, GAMEVERSION, name, "r");
+	if (!f)
+		f = DDay_OpenFullPathFile (sys_basedir->string, GAMEVERSION, name, "r");
+	if (!f)
+		f = DDay_OpenFullPathFile (".", GAMEVERSION, name, "r");
+	if (!f)
+		return false;
+	fclose (f);
+	return true;
+}
+
+// el mapa sirve para el modo actual (siempre true fuera de FFA / control)
+qboolean Mode_MapFits (const char *map)
+{
+	const char *fmt = Mode_FileFormat ();
+
+	return !fmt || Mode_FileExists (fmt, map);
+}
+
+// mapas del servidor preparados para el modo actual (en orden alfabetico); 0 fuera de esos modos
+static int Mode_Maps (int *idx, int max)
+{
+	const char	*fmt = Mode_FileFormat ();
+	int			i, n = 0;
+
+	if (!fmt)
+		return 0;
+	Vote_LoadMaps ();
+	for (i = 0; i < vote_nummaps && n < max; i++)
+		if (Mode_FileExists (fmt, vote_maps[i]))
+			idx[n++] = i;
+	return n;
+}
+
+// lista "dday2, tebessa2" de los mapas del modo actual
+static void Mode_MapList (char *out, int size)
+{
+	int idx[VOTE_MAX_MAPS], n = Mode_Maps (idx, VOTE_MAX_MAPS), i;
+
+	out[0] = '\0';
+	for (i = 0; i < n; i++)
+	{
+		Vote_Cat (out, i ? ", " : "", size);
+		Vote_Cat (out, vote_maps[idx[i]], size);
+	}
+}
+
+// proximo mapa de la rotacion del modo: el siguiente al actual en orden alfabetico (o el primero si
+// el actual no esta preparado). NULL fuera de FFA / control o si no hay ningun mapa preparado.
+const char *Mode_NextMap (const char *current)
+{
+	int idx[VOTE_MAX_MAPS], n = Mode_Maps (idx, VOTE_MAX_MAPS), i;
+
+	if (!n)
+		return NULL;
+	for (i = 0; i < n; i++)
+		if (!Q_stricmp (vote_maps[idx[i]], current))
+			return vote_maps[idx[(i + 1) % n]];
+	return vote_maps[idx[0]];
+}
+
 static void Vote_PrintMaps (edict_t *ent, const char *filter)
 {
 	char	line[1024];
 	int		i, shown = 0, total = 0;
 
 	Vote_LoadMaps ();
+	if (Mode_FileFormat ())
+	{
+		Mode_MapList (line, sizeof(line));
+		safe_cprintf (ent, PRINT_HIGH, "En modo %s se vota entre: %s\n", Mode_Label (), line[0] ? line : "(ninguno)");
+		return;
+	}
 	if (!filter[0])
 	{
 		safe_cprintf (ent, PRINT_HIGH, "Hay %d mapas en el servidor. Busca con: vote maps <texto> (ej: vote maps dday)\n",
@@ -839,6 +942,14 @@ static void Vote_StartMap (edict_t *ent, const char *arg)
 		return;
 	case MAP_BROKEN:
 		safe_cprintf (ent, PRINT_HIGH, "El archivo de \"%s\" esta danado, no se puede votar.\n", vote_maps[idx]);
+		return;
+	}
+
+	// FFA / Gun Game / control: solo los mapas preparados para el modo (para volver al juego normal, el admin)
+	if (!Mode_MapFits (vote_maps[idx]))
+	{
+		Mode_MapList (sug, sizeof(sug));
+		safe_cprintf (ent, PRINT_HIGH, "En modo %s solo se vota entre: %s\n", Mode_Label (), sug[0] ? sug : "(ninguno)");
 		return;
 	}
 
