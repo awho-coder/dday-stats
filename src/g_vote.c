@@ -474,7 +474,7 @@ static qboolean Mode_FileExists (const char *fmt, const char *map)
 	FILE	*f;
 	int		i;
 
-	Com_sprintf (name, sizeof(name), fmt, map);
+	Com_sprintf (name, sizeof(name), (char *)fmt, map);
 	for (i = 0; name[i]; i++)
 		name[i] = tolower ((unsigned char)name[i]);	// los archivos de ents/ van en minusculas (Linux)
 
@@ -534,7 +534,7 @@ const char *Mode_NextMap (const char *current)
 	if (!n)
 		return NULL;
 	for (i = 0; i < n; i++)
-		if (!Q_stricmp (vote_maps[idx[i]], current))
+		if (!Q_stricmp (vote_maps[idx[i]], (char *)current))
 			return vote_maps[idx[(i + 1) % n]];
 	return vote_maps[idx[0]];
 }
