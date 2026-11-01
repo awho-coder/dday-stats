@@ -416,7 +416,7 @@ void InitGame (void)
 	tornado          = gi.cvar("tornado", "0", 0);            // 1 = tornado automatico en tornado_maps
 	tornado_maps     = gi.cvar("tornado_maps", "tebessa tebessa2", 0);
 	tornado_gungame  = gi.cvar("tornado_gungame", "0", 0);    // 1 = tambien automatico en el Gun Game de tornado_maps (aunque tornado sea 0)
-	tornado_interval = gi.cvar("tornado_interval", "150", 0); // segundos entre tornados (+-50%)
+	tornado_interval = gi.cvar("tornado_interval", "150", 0); // maximo de segundos entre tornados (minimo: la mitad)
 	tornado_time     = gi.cvar("tornado_time", "40", 0);      // segundos que dura
 	tornado_radius   = gi.cvar("tornado_radius", "300", 0);
 	tornado_height   = gi.cvar("tornado_height", "1000", 0);

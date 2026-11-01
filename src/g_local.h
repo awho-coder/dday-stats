@@ -907,7 +907,7 @@ extern cvar_t *kamikaze_radius;    // radio del choque (bomba: 300)
 extern cvar_t *tornado;            // 1 = tornado de broma automatico en los mapas de tornado_maps (sv tornado lo llama a mano)
 extern cvar_t *tornado_maps;       // mapas con tornado automatico, separados por espacio ("*" = todos)
 extern cvar_t *tornado_gungame;    // 1 = tornado automatico tambien en el Gun Game (ffa_gungame) de tornado_maps
-extern cvar_t *tornado_interval;   // segundos entre tornados (+-50%)
+extern cvar_t *tornado_interval;   // maximo de segundos entre tornados (minimo: la mitad)
 extern cvar_t *tornado_time;       // segundos que dura cada tornado
 extern cvar_t *tornado_radius;     // radio en que agarra a los jugadores
 extern cvar_t *tornado_height;     // alto del embudo (hasta donde sube a los jugadores)

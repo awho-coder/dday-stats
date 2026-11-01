@@ -756,7 +756,7 @@ static qboolean Tornado_MapAllowed (void)
 }
 
 // cada frame (G_RunFrame): con tornado 1 (o tornado_gungame 1 en el Gun Game), uno cada
-// tornado_interval (+-50%) en tornado_maps
+// tornado_interval (al azar entre la mitad y ese valor) en tornado_maps
 void Tornado_RunFrame (void)
 {
 	float interval;
@@ -774,13 +774,13 @@ void Tornado_RunFrame (void)
 
 	if (!level.tornado_next)
 	{
-		level.tornado_next = level.time + interval * (0.5 + random ());
+		level.tornado_next = level.time + interval * (0.5 + 0.5 * random ());
 		return;
 	}
 	if (level.time < level.tornado_next)
 		return;
 
-	level.tornado_next = level.time + interval * (0.5 + random ());
+	level.tornado_next = level.time + interval * (0.5 + 0.5 * random ());
 	if (!Tornado_Count ())
 		Tornado_Spawn (NULL);
 }
