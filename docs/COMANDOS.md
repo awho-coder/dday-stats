@@ -143,6 +143,38 @@ de airstrike a su nombre. Los aviones de los mapas (`misc_airstrike`) no cambian
 | `kamikaze_dmg` | `1000` | Daño del choque (una bomba normal hace 700). |
 | `kamikaze_radius` | `700` | Radio del choque (una bomba normal: 300). Un anillo de explosiones a media distancia muestra el área. |
 
+## Servidor: tornado (`tornado`)
+
+Otra feature de chiste, apagada por defecto. Un remolino de arena (nubes de polvo y escombros
+girando en embudo, con viento) recorre el mapa: va de un destino lejano a otro por los nodos de
+los bots (`navigation/<mapa>.nav`; a veces el destino es donde hay un jugador). En mapas sin
+nodos va de un punto de aparición a otro bordeando las paredes. A quien agarra lo sube girando,
+arriba le da `tornado_spins` vueltas y lo lanza hacia afuera. **La caída no hace daño**: el seguro
+dura hasta que el jugador vuelve a tocar el piso. No agarra a muertos, espectadores, pilotos kamikaze ni a los que están en una torreta.
+Usa archivos que ya trae el pak0 (`sprites/null.sp2`, `debris1/2`) y `sound/wind2x.wav`, así que
+no hay que descargar nada.
+
+- `sv tornado` hace aparecer uno ahora, en cualquier mapa, cerca de un jugador al azar;
+  `sv tornado <id>` lo pone cerca de ese jugador; `sv tornado off` saca los que haya. Máximo 2.
+
+| Cvar | Por defecto | Qué hace |
+|---|---|---|
+| `tornado` | `0` | `1` = aparece solo cada `tornado_interval` segundos en los mapas de `tornado_maps`. |
+| `tornado_gungame` | `0` | `1` = lo mismo, pero solo cuando hay Gun Game (`ffa_gungame 1`). En Oracle va en 1 en `server.cfg`. |
+| `tornado_maps` | `tebessa tebessa2` | Mapas con tornado automático, separados por espacio (`*` = todos). |
+| `tornado_interval` | `150` | Segundos entre tornados (al azar entre la mitad y 1,5 veces). |
+| `tornado_time` | `40` | Segundos que dura cada tornado. |
+| `tornado_radius` | `300` | Radio en que agarra a los jugadores (y ancho del embudo). |
+| `tornado_height` | `1000` | Alto del embudo (baja solo si hay cielo o techo más abajo). |
+| `tornado_speed` | `160` | Velocidad con que anda. |
+| `tornado_lift` | `400` | Velocidad de subida del jugador. |
+| `tornado_spins` | `2` | Vueltas que le da arriba antes de soltarlo. |
+| `tornado_fling` | `900` | Fuerza con que lo lanza al soltarlo. |
+
+`navigation/tebessa2.nav` es una copia de `tebessa.nav`: el mapa tiene la misma estructura (de 269
+nodos, solo 1 quedó dentro de una pared y 5 de 1021 enlaces chocan con algo nuevo). Además de
+guiar al tornado, deja entrar bots en tebessa2.
+
 ## Servidor: Medic nuevo (`medic_new`)
 
 Apagado por defecto: con `medic_new 0` el Medic es el clásico (la pistola de su facción y
@@ -381,7 +413,7 @@ comando.
 - **Info:** `estado` `ayuda` `bans` `tiempo` `mapas` `infomapa` `marcador`
   `zona` `versiones` `lag` `tiempos`
 - **Juego** (los mapas: cualquier mapa de D-Day del server): `mapa <x>` `duelo <mapa>` `publico` `normal` `control <mapa>`
-  `ffa <mapa>` `ffa ruleta <mapa>` `gungame <mapa>` `dm <mapa>` `modo normal|control|ffa|gungame|dm|duelo [mapa]` `kamikaze on|off` `tab nuevo on|off` `dardo on|off` `grabar on|off|ahora` `evento <nombre>` `cuenta [minutos]`
+  `ffa <mapa>` `ffa ruleta <mapa>` `gungame <mapa>` `dm <mapa>` `modo normal|control|ffa|gungame|dm|duelo [mapa]` `kamikaze on|off` `tornado [on|off]` `tab nuevo on|off` `dardo on|off` `grabar on|off|ahora` `evento <nombre>` `cuenta [minutos]`
   `reset` `resetscore` `torneo on|off` `freeze` `proximamapa` `lock` `unlock`
   `say <texto>`
 - `control <mapa>` (o `modo control <mapa>`) arranca el modo control en ese mapa y **apaga la
@@ -397,6 +429,8 @@ comando.
 - `kamikaze on|off` prende o apaga el airstrike kamikaze del Officer (`kamikaze_arty`);
   sin argumento dice el estado. También entiende frases ("admin activa el kamikaze").
   Rige desde el próximo airstrike y un reinicio del server lo apaga.
+- `tornado` hace aparecer un tornado ahora (`sv tornado`); `tornado on|off` prende o apaga el
+  automático de tebessa y tebessa2 (`tornado`; `off` también saca el que haya).
 - `dardo on|off` es lo mismo que `medic on|off`: el dardo de sueño viene con el Medic nuevo
   (`medic_new`, próximo mapa). También entiende frases ("admin activa el dardo").
 - La votación de fin de mapa **nunca** lleva al modo control: el mapa votado

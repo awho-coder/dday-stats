@@ -902,6 +902,8 @@ void	ServerCommand (void)
 		Svcmd_VoteCancel_f();
 	else if (Q_stricmp(cmd, "nicks") == 0)
 		Svcmd_Nicks_f();
+	else if (Q_stricmp(cmd, "tornado") == 0)
+		Svcmd_Tornado_f();
 
 	else
 		safe_cprintf (NULL, PRINT_HIGH, "Unknown server command \"%s\"\n", cmd);

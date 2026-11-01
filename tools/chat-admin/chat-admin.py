@@ -161,7 +161,7 @@ def admin_map(arg):
 HELP = ("[ADMIN] comandos: estado, kick <quien>, kickban <quien>, ban <ip>, unban <ip>, "
         "mapa <nombre>, duelo <mapa>, publico, cuenta, reset, resetscore, tiempo, mapas, bans, "
         "bots on|off, kickbots, screenshot, stuff <cmd>, autostuff <cmd>, autostuffoff, "
-        "control <mapa>, ffa <mapa>, ffa ruleta <mapa>, gungame <mapa>, dm <mapa>, kamikaze on|off, medic on|off, medic bazooka on|off, dardo on|off, officer bonus on|off, tab nuevo on|off, "
+        "control <mapa>, ffa <mapa>, ffa ruleta <mapa>, gungame <mapa>, dm <mapa>, kamikaze on|off, tornado [on|off], medic on|off, medic bazooka on|off, dardo on|off, officer bonus on|off, tab nuevo on|off, "
         "grabar on|off|ahora, votacion on|off|cancelar, alias <nick>, lock, unlock, say <texto>, ayuda")
 
 def run_cmd(text, by):
@@ -326,6 +326,22 @@ def run_cmd(text, by):
         m = re.search(r'is\s+"(\d+)"', rcon("kamikaze_arty"))
         estado = "?" if not m else ("ON" if m.group(1) != "0" else "OFF")
         return "[ADMIN] arty kamikaze: %s (uso: kamikaze on|off)" % estado, True
+    if verb == "tornado":
+        # tornado de broma (cvar de la DLL, no latched): 'tornado' llama uno ahora en cualquier mapa;
+        # on/off: automatico cada tornado_interval segundos en los mapas de tornado_maps (tebessa)
+        a = norm(arg)
+        if a in ("on", "1", "si", "activar", "activa", "prender", "prende", "encender", "enciende", "poner", "pon"):
+            rcon("set tornado 1")
+            return ("[ADMIN] TORNADO automatico activado en tebessa y tebessa2: aparece cada "
+                    "par de minutos, levanta a los jugadores y la caida no hace dano"), True
+        if a in ("off", "0", "no", "desactivar", "desactiva", "apagar", "apaga", "quitar", "quita", "sacar", "saca"):
+            rcon("set tornado 0")
+            rcon("sv tornado off")
+            return "[ADMIN] tornado DESACTIVADO (y se saco el que hubiera)", True
+        r = rcon("sv tornado")
+        if "camino" in r: return "[ADMIN] se viene un TORNADO! (la caida no hace dano)", True
+        if "Ya hay" in r: return "[ADMIN] ya hay tornados en el mapa", True
+        return "[ADMIN] no encontre donde poner el tornado (tiene que haber alguien vivo al aire libre)", True
     if verb in ("grabar", "graba", "grabacion", "grabacin", "mvd"):
         # MVD de la partida con nombre = id de la partida, para bajarlo desde la web.
         # mvd_partidas es cvar de la DLL (no latched); un reinicio del server lo apaga
@@ -1215,7 +1231,7 @@ def looks_command(text):
     return v in {"ayuda","help","estado","status","jugadores","players","kick","kickea","echar",
                  "kickban","ban","votacion","votaciones","alias","aliases","unban","delban","desban","lock","unlock","bloquear","abrir",
                  "mapa","map","cambiamapa","duelo","duel","publico","publica","cuenta","startcount",
-                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","gungame","dm","kamikaze","kamikase","kamicase","grabar","graba","grabacion","grabacin","mvd","medic","medico","mdico","dardo","sleepdart","officer","oficial","officers","oficiales","tab","scoreboard","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
+                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","gungame","dm","kamikaze","kamikase","kamicase","tornado","grabar","graba","grabacion","grabacin","mvd","medic","medico","mdico","dardo","sleepdart","officer","oficial","officers","oficiales","tab","scoreboard","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
                  "restart","reload"}
 
 def handle_line(line, dry=False):

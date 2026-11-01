@@ -205,6 +205,17 @@ cvar_t *fast_arty;
 cvar_t *kamikaze_arty;
 cvar_t *kamikaze_dmg;
 cvar_t *kamikaze_radius;
+cvar_t *tornado;
+cvar_t *tornado_maps;
+cvar_t *tornado_gungame;
+cvar_t *tornado_interval;
+cvar_t *tornado_time;
+cvar_t *tornado_radius;
+cvar_t *tornado_height;
+cvar_t *tornado_speed;
+cvar_t *tornado_lift;
+cvar_t *tornado_fling;
+cvar_t *tornado_spins;
 cvar_t *medic_new;
 cvar_t *medic_bazooka;
 cvar_t *syringe_count;
@@ -1734,6 +1745,7 @@ void G_RunFrame (void)
 
 	Vote_RunFrame ();
 	Nick_RunFrame ();
+	Tornado_RunFrame ();
 
 	if ((level.framenum%40 == 1 && qbots && bots->value == 0) ||
 		(bots->value == 1 && 

@@ -413,6 +413,17 @@ void InitGame (void)
 	kamikaze_arty   = gi.cvar("kamikaze_arty", "0", 0);
 	kamikaze_dmg    = gi.cvar("kamikaze_dmg", "1000", 0);    // bomba: 700
 	kamikaze_radius = gi.cvar("kamikaze_radius", "700", 0);  // bomba: 300
+	tornado          = gi.cvar("tornado", "0", 0);            // 1 = tornado automatico en tornado_maps
+	tornado_maps     = gi.cvar("tornado_maps", "tebessa tebessa2", 0);
+	tornado_gungame  = gi.cvar("tornado_gungame", "0", 0);    // 1 = tambien automatico en el Gun Game de tornado_maps (aunque tornado sea 0)
+	tornado_interval = gi.cvar("tornado_interval", "150", 0); // segundos entre tornados (+-50%)
+	tornado_time     = gi.cvar("tornado_time", "40", 0);      // segundos que dura
+	tornado_radius   = gi.cvar("tornado_radius", "300", 0);
+	tornado_height   = gi.cvar("tornado_height", "1000", 0);
+	tornado_speed    = gi.cvar("tornado_speed", "160", 0);
+	tornado_lift     = gi.cvar("tornado_lift", "400", 0);
+	tornado_fling    = gi.cvar("tornado_fling", "900", 0);
+	tornado_spins    = gi.cvar("tornado_spins", "2", 0);      // vueltas arriba antes de soltarlo
 	medic_new       = gi.cvar("medic_new", "0", CVAR_LATCH); // 1 = Medic nuevo (Browning, botiquin, jeringas); se aplica en el proximo mapa
 	medic_bazooka   = gi.cvar("medic_bazooka", "0", CVAR_LATCH); // 1 = lanzajeringas en lugar de la pistola del Medic; se aplica en el proximo mapa
 	syringe_count   = gi.cvar("syringe_count", "9", 0);      // jeringas lanzables por vida

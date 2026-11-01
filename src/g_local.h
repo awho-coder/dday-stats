@@ -505,6 +505,8 @@ typedef struct
 	edict_t		*control_beams[CONTROL_MAX_BEAMS];	// laseres del borde de la zona (control_border)
 	int			control_numbeams;
 
+	float		tornado_next;	// g_tornado.c: cuando aparece el proximo tornado automatico
+
 } level_locals_t;
 
 
@@ -902,6 +904,17 @@ extern cvar_t *fast_arty;
 extern cvar_t *kamikaze_arty;     // 1 = el Officer viaja en el avion del airstrike y se estrella (requiere airstrikes 1)
 extern cvar_t *kamikaze_dmg;       // dano del choque (bomba: 700)
 extern cvar_t *kamikaze_radius;    // radio del choque (bomba: 300)
+extern cvar_t *tornado;            // 1 = tornado de broma automatico en los mapas de tornado_maps (sv tornado lo llama a mano)
+extern cvar_t *tornado_maps;       // mapas con tornado automatico, separados por espacio ("*" = todos)
+extern cvar_t *tornado_gungame;    // 1 = tornado automatico tambien en el Gun Game (ffa_gungame) de tornado_maps
+extern cvar_t *tornado_interval;   // segundos entre tornados (+-50%)
+extern cvar_t *tornado_time;       // segundos que dura cada tornado
+extern cvar_t *tornado_radius;     // radio en que agarra a los jugadores
+extern cvar_t *tornado_height;     // alto del embudo (hasta donde sube a los jugadores)
+extern cvar_t *tornado_speed;      // velocidad con que anda por el mapa
+extern cvar_t *tornado_lift;       // velocidad de subida del jugador
+extern cvar_t *tornado_fling;      // fuerza con que lo lanza al soltarlo
+extern cvar_t *tornado_spins;      // vueltas que da arriba antes de soltarlo
 extern cvar_t *medic_bazooka;      // 1 = el Medic lleva el lanzajeringas en lugar de la pistola (latched)
 extern cvar_t *medic_new;          // 1 = Medic nuevo: Browning, botiquin lanzable y jeringas lanzables (latched)
 extern cvar_t *syringe_count;      // jeringas lanzables por vida (sin contar la de la mano)
@@ -1729,6 +1742,11 @@ struct gclient_s
 //	float		arty_time_restrict;
 	edict_t     *airstrike;//faf
 	edict_t     *kamikaze_plane; // avion kamikaze en el que va este jugador (NULL si ninguno)
+	edict_t     *tornado;            // tornado que lo lleva (NULL si ninguno)
+	float       tornado_catch_time;  // cuando lo agarro
+	float       tornado_top_time;    // cuando llego arriba y empezo a dar vueltas (0 = subiendo)
+	float       tornado_free_time;   // hasta cuando no lo puede volver a agarrar
+	float       tornado_safe_until;  // sin dano por caida hasta aterrizar (o hasta este tiempo)
 
 	float		jump_stamina;
 	qboolean	jump_push;
@@ -2605,6 +2623,15 @@ void Nick_RunFrame (void);
 void Nick_ClientDisconnect (edict_t *ent);
 qboolean Nick_IsProtected (edict_t *ent);
 void Svcmd_Nicks_f (void);
+
+// g_tornado.c: tornado de broma que levanta a los jugadores (sin dano por caida)
+edict_t *Tornado_Spawn (edict_t *anchor);
+void Tornado_RunFrame (void);
+void Svcmd_Tornado_f (void);
+// ai_navigation.c: nodos de los bots para el recorrido del tornado
+int AI_NumNodes (void);
+void AI_NodeOrigin (int n, vec3_t out);
+int AI_FindClosestReachableNode (vec3_t origin, edict_t *passent, int range, int flagsmask);
 edict_t *CreateTargetChangeLevel (char *map);
 
 #endif /* __G_LOCAL_H__ */
