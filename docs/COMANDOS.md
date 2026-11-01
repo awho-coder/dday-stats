@@ -10,6 +10,12 @@ el documento enlazado en cada sección.
 
 Detalle: [`modos/CONTROL.md`](modos/CONTROL.md).
 
+**Nombre del server:** con `hostname_mode 1` (0 por defecto; en Oracle va en `server.cfg`) la palabra
+"Ladder" del `hostname` cambia por el modo al cargar cada mapa: `D-Day Chile FFA Test`,
+`D-Day Chile Gungame Test` o `D-Day Chile Control Test` (control solo en mapas con `.ctl`); en el
+juego normal vuelve al nombre original (`hostname_base`). Si se cambia `hostname` a mano, ese pasa a
+ser el original.
+
 **Rotación:** con `control_mode 1` el siguiente mapa es siempre otro con `ents/<mapa>.ctl`
 (orden alfabético, vuelve al primero; sin votación de fin de mapa) y `vote map` solo acepta esos
 mapas. Lo mismo en FFA / Gun Game con los mapas que tienen `ents/<mapa>_ffa.ent` (hoy dday2 y

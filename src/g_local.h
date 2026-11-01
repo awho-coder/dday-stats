@@ -736,6 +736,8 @@ extern	int		ffa_pistol;			// Free For All: the weapon of the match is the pistol
 #define FFA_PISTOL_MAGS		6		// Free For All: pistol magazines in a pistol match (the class gives 2 or 3 in team games)
 extern	char	*ffa_weapon_name;	// Free For All: pickup name of that weapon
 void FFA_RouletteInit (void);		// g_spawn.c
+extern	cvar_t	*hostname_mode;		// 1 = en FFA / Gun Game / control la palabra "Ladder" del hostname cambia por el modo
+void G_ModeHostname (void);			// g_spawn.c
 extern	cvar_t	*ffa_roulette;		// Free For All: 1 = un arma sorteada por mapa (con ruleta); 0 = todos Sniper (clasico, por defecto)
 extern	cvar_t	*ffa_gungame;		// Free For All Gun Game: every kill gives the killer the next weapon of a ladder (0 disabled, 1 enabled)
 extern	cvar_t	*ffa_gg_steps;		// Free For All Gun Game: weapons of the ladder before the knife (default 29: 30 steps with the knife; 0 = all the weapons)
