@@ -429,8 +429,10 @@ comando.
 - `kamikaze on|off` prende o apaga el airstrike kamikaze del Officer (`kamikaze_arty`);
   sin argumento dice el estado. También entiende frases ("admin activa el kamikaze").
   Rige desde el próximo airstrike y un reinicio del server lo apaga.
-- `tornado` hace aparecer un tornado ahora (`sv tornado`); `tornado on|off` prende o apaga el
-  automático de tebessa y tebessa2 (`tornado`; `off` también saca el que haya).
+- `tornado` hace aparecer un tornado ahora (`sv tornado`); `tornado on` prende el automático de
+  tebessa y tebessa2 (`tornado 1`); `tornado off` lo apaga también en el Gun Game
+  (`tornado_gungame 0`, vuelve a 1 al reiniciar) y saca el que haya. También entiende frases:
+  "admin tira un tornado", "admin apaga el tornado", "admin activa el tornado automático".
 - `dardo on|off` es lo mismo que `medic on|off`: el dardo de sueño viene con el Medic nuevo
   (`medic_new`, próximo mapa). También entiende frases ("admin activa el dardo").
 - La votación de fin de mapa **nunca** lleva al modo control: el mapa votado
