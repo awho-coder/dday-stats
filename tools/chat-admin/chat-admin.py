@@ -336,8 +336,9 @@ def run_cmd(text, by):
                     "par de minutos, levanta a los jugadores y la caida no hace dano"), True
         if a in ("off", "0", "no", "desactivar", "desactiva", "apagar", "apaga", "quitar", "quita", "sacar", "saca"):
             rcon("set tornado 0")
+            rcon("set tornado_gungame 0")  # server.cfg lo vuelve a 1 al reiniciar
             rcon("sv tornado off")
-            return "[ADMIN] tornado DESACTIVADO (y se saco el que hubiera)", True
+            return "[ADMIN] tornado DESACTIVADO, tambien en el Gun Game (y se saco el que hubiera)", True
         r = rcon("sv tornado")
         if "camino" in r: return "[ADMIN] se viene un TORNADO! (la caida no hace dano)", True
         if "Ya hay" in r: return "[ADMIN] ya hay tornados en el mapa", True
@@ -695,6 +696,20 @@ def kamikaze_phrase(text):
     if any(re.search(r"\b%s" % re.escape(w), low) for w in KAMIKAZE_ON):
         return "kamikaze on"
     return "kamikaze"
+
+TORNADO_AUTO = ("automatico", "automático", "siempre", "solo", "cada")
+
+def tornado_phrase(text):
+    """Frases tipo 'admin tira un tornado' -> 'tornado' (uno ahora); 'admin apaga el tornado' ->
+    'tornado off'; 'admin activa el tornado automatico' -> 'tornado on'. None si no hablan del tornado."""
+    low = " " + text.lower() + " "
+    if not re.search(r"\btornado", low):
+        return None
+    if any(w in low for w in KAMIKAZE_OFF):  # primero: 'desactiva' contiene 'activa'
+        return "tornado off"
+    if any(w in low for w in TORNADO_AUTO) and any(re.search(r"\b%s" % re.escape(w), low) for w in KAMIKAZE_ON):
+        return "tornado on"
+    return "tornado"
 
 MEDIC_ON_VERBS = ("activa", "prende", "enciende", "habilita", "pon ", "mete")
 MEDIC_CLASSIC = ("clasico", "clásico", "normal", "viejo", "original", "antiguo")
@@ -1291,6 +1306,17 @@ def handle_line(line, dry=False):
             say(resp)
             print("KAMIKAZE-PHRASE %s -> %s" % (nick, resp))
             return ("kamikazephrase", nick, text, resp)
+        # tornado en frase natural: local, sin LLM
+        tor = tornado_phrase(text)
+        if tor:
+            if not rate_ok(nick):
+                say("[ADMIN] calma, espera unos segundos")
+                return ("rate", nick, text, None)
+            resp, _ = run_cmd(tor, nick)
+            log_action(nick, "frase:" + tor, resp)
+            say(resp)
+            print("TORNADO-PHRASE %s -> %s" % (nick, resp))
+            return ("tornadophrase", nick, text, resp)
         # bonus del Officer en frase natural: local, sin LLM
         off = officer_phrase(text)
         if off:
