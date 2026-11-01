@@ -1302,7 +1302,58 @@ void SpawnEntities2 (char *mapname, char *entities, char *spawnpoint)
 
 	AI_NewMap();//JABot
 
+	G_ModeHostname ();
+
 	StatsLog_MatchBegin ();
+}
+
+/*
+=================
+G_ModeHostname
+
+hostname_mode 1: en FFA, Gun Game o control de zona la palabra "Ladder" del nombre del server cambia por
+el modo ("D-Day Chile Ladder Test" -> "D-Day Chile Gungame Test"); en el juego normal vuelve al nombre
+original. La DLL se recarga en cada mapa, asi que el nombre original y el ultimo aplicado se guardan en
+cvars (hostname_base, hostname_applied). Si un admin cambia hostname a mano, ese pasa a ser el original.
+=================
+*/
+void G_ModeHostname (void)
+{
+	cvar_t		*host = gi.cvar ("hostname", "", 0);
+	cvar_t		*base = gi.cvar ("hostname_base", "", 0);
+	cvar_t		*applied = gi.cvar ("hostname_applied", "", 0);
+	const char	*label = NULL;
+	char		name[128], *p;
+
+	if (!hostname_mode || !hostname_mode->value)
+	{
+		// recien apagado: si el nombre sigue siendo el del modo, vuelve el original
+		if (applied->string[0] && base->string[0] && !strcmp (host->string, applied->string))
+			gi.cvar_set ("hostname", base->string);
+		gi.cvar_set ("hostname_applied", "");
+		return;
+	}
+
+	if (!base->string[0] || strcmp (host->string, applied->string))
+		gi.cvar_set ("hostname_base", host->string);
+
+	if (G_IsFFA ())
+		label = (ffa_gungame && ffa_gungame->value) ? "Gungame" : "FFA";
+	else if (level.control_zone)
+		label = "Control";
+
+	p = label ? strstr (base->string, "Ladder") : NULL;
+	if (p)
+		Com_sprintf (name, sizeof(name), "%.*s%s%s", (int)(p - base->string), base->string, label, p + 6);
+	else
+		Com_sprintf (name, sizeof(name), "%s", base->string);
+
+	if (strcmp (host->string, name))
+	{
+		gi.cvar_set ("hostname", name);
+		gi.dprintf ("hostname: %s\n", name);
+	}
+	gi.cvar_set ("hostname_applied", name);
 }
 
 

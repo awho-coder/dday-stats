@@ -439,6 +439,7 @@ void InitGame (void)
 	ctb_mode = gi.cvar("ctb_mode", "0", CVAR_LATCH);
 	ffa = gi.cvar("ffa", "0", CVAR_SERVERINFO|CVAR_LATCH);
 	ffa_roulette = gi.cvar("ffa_roulette", "0", CVAR_LATCH);
+	hostname_mode = gi.cvar("hostname_mode", "0", 0);
 	ffa_gungame = gi.cvar("ffa_gungame", "0", CVAR_LATCH);
 	ffa_gg_steps = gi.cvar("ffa_gg_steps", "29", 0);
 	ffa_gg_deaths = gi.cvar("ffa_gg_deaths", "0", 0);
