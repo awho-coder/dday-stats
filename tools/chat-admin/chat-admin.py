@@ -175,7 +175,7 @@ def run_cmd(text, by):
         sub = arg.split(None, 1)
         verb = norm(sub[0]) if sub else "normal"
         arg = sub[1] if len(sub) > 1 else ""
-        if verb not in ("control", "ffa", "freeforall", "todoscontratodos", "gungame", "gg", "dm", "deathmatch", "duelo", "duel",
+        if verb not in ("control", "ffa", "freeforall", "todoscontratodos", "gungame", "dm", "deathmatch", "duelo", "duel",
                         "publico", "publica", "normal", "clasico", "restaurar", "default"):
             return "[ADMIN] uso: modo normal | modo control <mapa> | modo ffa <mapa> | modo gungame <mapa> | modo dm <mapa> | modo duelo <mapa>", True
 
@@ -262,8 +262,9 @@ def run_cmd(text, by):
         rot = prepared_maps(".ctl")
         return "[ADMIN] modo CONTROL en %s%s, sin votación de fin de mapa hasta volver a normal (petición de %s)" % (
             real, ", rota entre: " + ", ".join(rot) if rot else "", by), True
-    if verb in ("ffa", "freeforall", "todoscontratodos", "gungame", "gg"):
-        gg = verb in ("gungame", "gg")
+    # "gg" NO es un atajo: en el chat es "good game"
+    if verb in ("ffa", "freeforall", "todoscontratodos", "gungame"):
+        gg = verb == "gungame"
         # 'ffa ruleta <mapa>': FFA con un arma sorteada por mapa (la ruleta de snako) en vez de todos Sniper
         sub_arg = arg.split(None, 1)
         ruleta = not gg and bool(sub_arg) and norm(sub_arg[0]) in ("ruleta", "sorteo", "roulette")
@@ -1214,7 +1215,7 @@ def looks_command(text):
     return v in {"ayuda","help","estado","status","jugadores","players","kick","kickea","echar",
                  "kickban","ban","votacion","votaciones","alias","aliases","unban","delban","desban","lock","unlock","bloquear","abrir",
                  "mapa","map","cambiamapa","duelo","duel","publico","publica","cuenta","startcount",
-                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","gungame","gg","dm","kamikaze","kamikase","kamicase","grabar","graba","grabacion","grabacin","mvd","medic","medico","mdico","dardo","sleepdart","officer","oficial","officers","oficiales","tab","scoreboard","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
+                 "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","gungame","dm","kamikaze","kamikase","kamicase","grabar","graba","grabacion","grabacin","mvd","medic","medico","mdico","dardo","sleepdart","officer","oficial","officers","oficiales","tab","scoreboard","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
                  "restart","reload"}
 
 def handle_line(line, dry=False):

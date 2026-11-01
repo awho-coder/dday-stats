@@ -36,6 +36,7 @@ SYSTEM = (
         "'modo control'->control <mapa> (lo pide el dueño; apaga la votacion hasta volver a normal); "
         "'free for all'/'todos contra todos'/'modo ffa'/'sin equipos'->ffa <mapa> (solo 'ffa' si no nombran un mapa: usa el actual; "
         "apaga la votacion hasta volver a normal); 'gun game'/'gungame'/'escalera de armas'->gungame <mapa> (igual que ffa); "
+        "'gg' es 'good game' (saludo al final), NUNCA una accion; "
         "'sacar el ffa'/'apagar ffa'/'sacar el gun game'->normal; "
         "'torneo/evento <nombre>'->evento <nombre>; 'terminar torneo'/'sacar el evento'->evento off.\n"
 "Para preguntas de estado ('quien hay', 'en que mapa vamos', 'como estamos') usa action='estado' y reply=''.\n"
