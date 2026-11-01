@@ -6,20 +6,34 @@ el documento enlazado en cada sección.
 
 > Al agregar un cvar, comando u opción nueva, sumarlo aquí.
 
+## Servidor: modos especiales, rotación y nombre del server
+
+Modos que activa un admin (bot del chat o rcon): **control de zona** (`control_mode 1`),
+**Free For All** (`ffa 1`) y **Gun Game** (`ffa 1` + `ffa_gungame 1`). Cada uno se juega en los
+mapas **preparados** para él:
+
+| Modo | Mapa preparado si existe | Mapas hoy |
+|---|---|---|
+| Control | `ents/<mapa>.ctl` | eurovilla, inland4, invade2, invade6, itadday3, townwar |
+| FFA / Gun Game | `ents/<mapa>_ffa.ent` | dday2, tebessa2 |
+
+- **Rotación:** al terminar un mapa, la DLL pasa al siguiente mapa preparado (orden alfabético,
+  vuelve al primero) y no abre la votación de fin de mapa. Si el modo arrancó en un mapa sin
+  preparar, sigue con el primero preparado. Sin ningún mapa preparado se usa `sv_maplist`.
+- **Votación de los jugadores:** `vote map` y `!votemap` solo aceptan mapas preparados para el
+  modo; `vote maps` muestra la lista.
+- **Agregar un mapa a un modo:** subir su `.ctl` o `_ffa.ent` a `ents/` del server (sin reinicio).
+- **Nombre del server** (`hostname_mode 1`, 0 por defecto; en Oracle va en `server.cfg`): al cargar
+  cada mapa la palabra "Ladder" del `hostname` cambia por el modo: `D-Day Chile FFA Test`,
+  `D-Day Chile Gungame Test` o `D-Day Chile Control Test` (control solo en mapas con `.ctl`). En el
+  juego normal vuelve al original (`hostname_base`). Si se cambia `hostname` a mano, ese pasa a ser
+  el original.
+- **Volver al juego normal:** `normal`, `mapa <x>` o `dm` en el bot (restauran `sv_maplist` y
+  `mapvoting` de `server.cfg`).
+
 ## Servidor: modo control de zona
 
 Detalle: [`modos/CONTROL.md`](modos/CONTROL.md).
-
-**Nombre del server:** con `hostname_mode 1` (0 por defecto; en Oracle va en `server.cfg`) la palabra
-"Ladder" del `hostname` cambia por el modo al cargar cada mapa: `D-Day Chile FFA Test`,
-`D-Day Chile Gungame Test` o `D-Day Chile Control Test` (control solo en mapas con `.ctl`); en el
-juego normal vuelve al nombre original (`hostname_base`). Si se cambia `hostname` a mano, ese pasa a
-ser el original.
-
-**Rotación:** con `control_mode 1` el siguiente mapa es siempre otro con `ents/<mapa>.ctl`
-(orden alfabético, vuelve al primero; sin votación de fin de mapa) y `vote map` solo acepta esos
-mapas. Lo mismo en FFA / Gun Game con los mapas que tienen `ents/<mapa>_ffa.ent` (hoy dday2 y
-tebessa2). Si no hay ningún mapa preparado se usa `sv_maplist` como siempre.
 
 | Cvar | Por defecto | Qué hace |
 |---|---|---|
@@ -49,7 +63,8 @@ Rama `free-for-all-mod` de ddaychile. Apagado por defecto; con `ffa 0` el juego 
 Todos entran como Sniper (rifle + cuchillo), sin equipos ni fuego amigo, con spawns al azar lejos de los demás, puntaje individual,
 marcador propio y anuncios del líder. Termina por `fraglimit` (30 si el server usa 0) o
 `timelimit`. No funciona junto con `tournament` y las stats persistentes (`stats 1`) no lo
-distinguen. Desde el bot: `ffa <mapa>`.
+distinguen. Desde el bot: `ffa <mapa>`. Mapas preparados (spawns extra): dday2 y tebessa2, ver
+[`ents/README.md`](../ents/README.md).
 
 **Ruleta de armas** (`ffa_roulette 1`, apagada por defecto; rama `ffa-gungame` de ddaychile, 2026-10-31): en vez del Sniper, al empezar cada mapa se sortea
 una sola arma para todos entre las de Infantry, Officer, Light/Heavy Gunner, Sniper y Special de

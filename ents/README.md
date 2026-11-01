@@ -23,8 +23,14 @@ Al cargar el mapa en FFA, la consola del servidor debe decir `dday2_ffa.ent Load
 | Archivo | Descripción |
 |---|---|
 | `dday2_ffa.ent` | Copia de `dday2.ent` más 19 puntos de spawn para FFA (`info_reinforcements_start`). |
+| `tebessa2_ffa.ent` | Las 6 entidades del `.bsp` (el mapa no tiene `.ent`) más 14 puntos de spawn (16 en total). Sin `.nav`: en tebessa2 no entran bots. |
+
+Los mapas con `_ffa.ent` son los **preparados** para FFA y Gun Game: con `ffa 1` la rotación va solo
+entre ellos y la votación de mapa solo los acepta (ver `docs/COMANDOS.md`).
 
 ## Notas
 
-- Cada `_ffa.ent` es una copia completa del `.ent` normal del mapa. Si el `.ent` normal cambia, hay que copiar el cambio al de FFA.
+- Cada `_ffa.ent` es una copia completa de las entidades del mapa: del `.ent` normal o, si el mapa no tiene, del `.bsp`. Si el `.ent` normal cambia, hay que copiar el cambio al de FFA.
+- Antes de subir uno nuevo: `python3 tools/ffa/spawncheck.py <mapa>.bsp ents/<mapa>_ffa.ent [ents/<mapa>.ent]` compara con las entidades del mapa (las del `.ent` normal si se pasa, si no las del `.bsp`; no debe faltar ninguna) y revisa que ningún spawn quede dentro de una pared (`esquinas_en_solido=0`).
+- Para que el mapa tenga bots hace falta `navigation/<mapa>.nav` y `.cmp`.
 - No se usa si `ent_files` vale 0, ni en mapas con la entidad `misc_civilian` o la palabra `override` en el BSP (igual que el `.ent` normal).

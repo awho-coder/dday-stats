@@ -100,11 +100,16 @@ partida). El Elo es uno solo para todos los modos.
 ## Votación de mapa
 
 El modo control solo se juega cuando un admin lo pide (`control <mapa>` en el
-chat del bot, o `control_mode 1` por rcon). Si la votación de fin de mapa está
-activa (`mapvoting 1`), el mapa votado **siempre arranca en deathmatch**: la DLL
-pone `control_mode 0` al contar los votos y ofrece todos los mapas de
-`votemaps.txt`, no solo los que tienen zona. El bot apaga la votación durante
-una sesión de control para que las rondas sigan en el mismo mapa.
+chat del bot, o `control_mode 1` por rcon). Con `control_mode 1`:
+
+- **Rotación:** al terminar un mapa la DLL pasa al siguiente mapa con `.ctl`
+  (orden alfabético, vuelve al primero) y **no abre la votación de fin de mapa**.
+  Sin ningún `.ctl` en `ents/` se usa `sv_maplist` como antes.
+- **Votación de los jugadores:** `vote map` y `!votemap` solo aceptan mapas con `.ctl`.
+- Si igual se llega a la votación de fin de mapa (`mapvoting 1` sin mapas con `.ctl`), el
+  mapa votado arranca en deathmatch: la DLL pone `control_mode 0` al contar los votos.
+
+Ver la sección "modos especiales, rotación y nombre del server" de `docs/COMANDOS.md`.
 
 ## Cvars del servidor
 
@@ -121,8 +126,7 @@ una sesión de control para que las rondas sigan en el mismo mapa.
 | `control_engineer_grenades` | `1` | Granadas del ingeniero desbloqueado. |
 | `control_grenades` | `0` | Máximo de granadas por jugador en este modo (`0` = sin granadas, `-1` = sin límite, como el juego normal). Se aplica al reaparecer. |
 
-Con `control_mode 1` la votación de mapas solo ofrece mapas que tengan archivo
-`.ctl`. Un mapa sin `.ctl` se juega en modo normal.
+Un mapa sin `.ctl` se juega en modo normal aunque `control_mode` sea 1.
 
 Ejemplo:
 
@@ -197,8 +201,9 @@ rcon map dday2
 ```
 
 `control_mode` se aplica al cambiar de mapa, así que siempre va seguido de
-`map`. Hay que cambiar también `sv_maplist`: si sigue apuntando a `invade6` con
-`control_mode 0`, el mapa se juega en modo normal (por kills).
+`map`. Con `control_mode 1` la rotación la decide la DLL (mapas con `.ctl`);
+al volver a `control_mode 0` hay que restaurar `sv_maplist` (el bot lo hace
+con `normal`).
 
 Para actualizar el DLL, **no** copiar encima de `gamex86_64.so` con el servidor
 corriendo: el proceso tiene el archivo cargado en memoria y se cae
