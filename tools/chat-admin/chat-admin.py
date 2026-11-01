@@ -259,7 +259,9 @@ def run_cmd(text, by):
         # sin votacion durante la sesion de control: las rondas siguen en este mapa hasta
         # que se pida normal/dm/mapa (la votacion nunca debe llevar al modo control)
         rcon("set mapvoting 0"); rcon("set ffa 0"); rcon("set control_mode 1"); rcon('set sv_maplist "%s"' % real); rcon("map %s" % real)
-        return "[ADMIN] modo CONTROL en %s, sin votación hasta volver a normal (petición de %s)" % (real, by), True
+        rot = prepared_maps(".ctl")
+        return "[ADMIN] modo CONTROL en %s%s, sin votación de fin de mapa hasta volver a normal (petición de %s)" % (
+            real, ", rota entre: " + ", ".join(rot) if rot else "", by), True
     if verb in ("ffa", "freeforall", "todoscontratodos", "gungame", "gg"):
         gg = verb in ("gungame", "gg")
         # 'ffa ruleta <mapa>': FFA con un arma sorteada por mapa (la ruleta de snako) en vez de todos Sniper
@@ -275,11 +277,13 @@ def run_cmd(text, by):
         # este mapa hasta que se pida normal/dm/mapa (como en control)
         rcon("set mapvoting 0"); rcon("set control_mode 0"); rcon("set ffa 1"); rcon("set ffa_gungame %d" % (1 if gg else 0)); rcon("set ffa_roulette %d" % (1 if ruleta else 0))
         rcon('set sv_maplist "%s"' % real); rcon("map %s" % real)
+        rot = prepared_maps("_ffa.ent")
+        rot = ", rota entre: " + ", ".join(rot) if rot else ""
         if gg:
-            return "[ADMIN] modo GUN GAME en %s: cada kill te da la siguiente arma, gana quien mata con cuchillo al final (petición de %s)" % (real, by), True
+            return "[ADMIN] modo GUN GAME en %s%s. Cada kill da la siguiente arma; gana quien mata con cuchillo al final (petición de %s)" % (real, rot, by), True
         if ruleta:
-            return "[ADMIN] modo FREE FOR ALL con RULETA en %s: un arma sorteada para todos, sin votación hasta volver a normal (petición de %s)" % (real, by), True
-        return "[ADMIN] modo FREE FOR ALL en %s, todos contra todos, sin votación hasta volver a normal (petición de %s)" % (real, by), True
+            return "[ADMIN] modo FREE FOR ALL con RULETA en %s%s: un arma sorteada para todos (petición de %s)" % (real, rot, by), True
+        return "[ADMIN] modo FREE FOR ALL en %s%s, todos contra todos (petición de %s)" % (real, rot, by), True
     if verb in ("dm", "deathmatch"):
         real = "dday2"
         if arg:
@@ -817,6 +821,34 @@ def server_maps():
         _MAPS_CACHE.update(t=time.time(), maps=maps)
     return _MAPS_CACHE["maps"]
 
+def cvar_value(name):
+    """Valor actual de un cvar del server por rcon ('' si no se pudo leer)."""
+    m = re.search(r'is\s+"([^"]*)"', rcon(name))
+    return m.group(1) if m else ""
+
+def mode_maps():
+    """(nombre del modo, [mapas]) si el server esta en FFA / Gun Game o en control de zona: los mapas
+    preparados para el modo (ents/<mapa>_ffa.ent o ents/<mapa>.ctl), como la rotacion de la DLL;
+    (None, None) en el juego normal."""
+    if cvar_value("ffa") == "1" and cvar_value("control_mode") in ("", "0"):
+        label = "Gun Game" if cvar_value("ffa_gungame") == "1" else "Free For All"
+        suffix = "_ffa.ent"
+    elif cvar_value("control_mode") == "1":
+        label, suffix = "control de zona", ".ctl"
+    else:
+        return None, None
+    return label, prepared_maps(suffix)
+
+def prepared_maps(suffix):
+    """Mapas del server con ents/<mapa><suffix> (_ffa.ent o .ctl), en orden alfabetico."""
+    try:
+        files = {fn[:-len(suffix)].lower() for fn in os.listdir(os.path.join(GAMEDIR, "ents"))
+                 if fn.lower().endswith(suffix)}
+    except Exception:
+        files = set()
+    maps = server_maps()
+    return sorted((maps[m] for m in files if m in maps), key=str.lower)
+
 def map_kind(real):
     """'ok' si es de D-Day (spawns de equipo en ents/<mapa>.ent o en el .bsp), 'nodday', o 'broken'."""
     want = (b"info_team_start", b"info_reinforcements_start")
@@ -1024,6 +1056,10 @@ def vote_line(line, dry=False):
         if kind != "ok":
             out("[VOTO] '%s' %s" % (real, "esta en el servidor pero no es un mapa de D-Day" if kind == "nodday"
                                     else "tiene el archivo danado, no se puede votar")); return res
+        # FFA / Gun Game / control: solo los mapas preparados para el modo (igual que la votacion de la DLL)
+        label, allowed = mode_maps()
+        if allowed is not None and real.lower() not in {m.lower() for m in allowed}:
+            out("[VOTO] en modo %s solo se vota entre: %s" % (label, ", ".join(allowed) or "(ninguno)")); return res
         vote_open("map", nick, uid, map=real, target=None, target_nick="")
     if dry:
         print("VOTE %s abre votacion: %s" % (nick, vote_what())); return res

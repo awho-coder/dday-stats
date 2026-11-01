@@ -1026,6 +1026,10 @@ void Think_Arty (edict_t *ent);
 
 qboolean OnSameTeam(edict_t *self,edict_t *target);
 qboolean G_IsFFA(void);
+// g_vote.c: mapas de cada modo (FFA / Gun Game: ents/<mapa>_ffa.ent; control: ents/<mapa>.ctl)
+const char *Mode_NextMap (const char *current);	// proximo mapa de la rotacion del modo, NULL fuera de esos modos
+qboolean Mode_MapFits (const char *map);		// el mapa sirve para el modo actual (true fuera de esos modos)
+const char *Mode_Label (void);					// "Gun Game", "Free For All" o "control de zona"
 // Free For All scoreboard pictures. The leading '/' makes them full paths: the client downloads the .png
 // itself (a plain name like "ffa_score" makes it ask for pics/ffa_score.pcx, which does not exist)
 #define FFA_PIC_SCORE	"/pics/ffa_score.png"
