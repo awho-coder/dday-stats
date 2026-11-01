@@ -162,7 +162,7 @@ no hay que descargar nada.
 | `tornado` | `0` | `1` = aparece solo cada `tornado_interval` segundos en los mapas de `tornado_maps`. |
 | `tornado_gungame` | `0` | `1` = lo mismo, pero solo cuando hay Gun Game (`ffa_gungame 1`). En Oracle va en 1 en `server.cfg`. |
 | `tornado_maps` | `tebessa tebessa2` | Mapas con tornado automático, separados por espacio (`*` = todos). |
-| `tornado_interval` | `150` | Segundos entre tornados (al azar entre la mitad y 1,5 veces). |
+| `tornado_interval` | `150` | Máximo de segundos entre tornados; se sortea entre la mitad y ese valor (90 = cada 45–90 s, lo que usa Oracle). |
 | `tornado_time` | `40` | Segundos que dura cada tornado. |
 | `tornado_radius` | `300` | Radio en que agarra a los jugadores (y ancho del embudo). |
 | `tornado_height` | `1000` | Alto del embudo (baja solo si hay cielo o techo más abajo). |
