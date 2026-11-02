@@ -91,6 +91,7 @@ y LEVEL, el TAB una columna `Lvl` y al final el banner del ganador.
 | `ffa_gg_deaths` | `0` | Muertes seguidas sin matar para bajar un escalón (`0` = un quinto de los escalones, mínimo 2; negativo = nunca). |
 | `ffa_gg_snd_up` | `ffa/gg_up2.wav` | Sonido al subir (ruta bajo `sound/`). |
 | `ffa_gg_snd_down` | `misc/menu3.wav` | Sonido al bajar. |
+| `ffa_gg_victory_vol` | 0.4 | Volumen del himno de victoria (0-1; suena 3 veces encima, 0 = sin himno). |
 
 Si en un mapa no caben todos los modelos o sonidos (Quake 2 admite 256 de cada uno), la escalera
 queda más corta y el log del server lo dice (`Gun Game: N weapons left out`). En las stats la
