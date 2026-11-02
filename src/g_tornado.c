@@ -615,15 +615,53 @@ static void Tornado_Think (edict_t *self)
 	self->nextthink = level.time + FRAMETIME;
 }
 
+// ningun jugador encima de ground (que no lo agarre al aparecer)
+static qboolean Tornado_FarFromPlayers (vec3_t ground)
+{
+	edict_t *p;
+	vec3_t v;
+	int i;
+
+	for (i = 1; i <= maxclients->value; i++)
+	{
+		p = g_edicts + i;
+		if (!Tornado_CanLift (p))
+			continue;
+		VectorSubtract (p->s.origin, ground, v);
+		if (VectorLength (v) < tornado_radius->value + 96)
+			return false;
+	}
+	return true;
+}
+
+// un lugar al azar del mapa al aire libre (sobre un nodo de los bots), lejos de los jugadores.
+// false si el mapa no tiene nodos o no hubo suerte
+static qboolean Tornado_PickAnywhere (vec3_t spot, float *top)
+{
+	vec3_t pos, ground;
+	int n = AI_NumNodes (), tries;
+
+	if (n < 1)
+		return false;
+
+	for (tries = 0; tries < 40; tries++)
+	{
+		AI_NodeOrigin (rand () % n, pos);
+		if (!Tornado_FindGround (pos, ground, top, true) || !Tornado_FarFromPlayers (ground))
+			continue;
+		VectorCopy (ground, spot);
+		return true;
+	}
+	return false;
+}
+
 // busca un lugar al aire libre a 350-1000 de anchor, lejos de los jugadores
 static qboolean Tornado_PickSpot (edict_t *anchor, vec3_t spot, float *top)
 {
-	vec3_t start, end, dir, cand, ground, v;
+	vec3_t start, end, dir, cand, ground;
 	trace_t tr;
-	edict_t *p;
 	float yaw, dist;
-	int tries, i;
-	qboolean ok;
+	int tries;
 
 	for (tries = 0; tries < 40; tries++)
 	{
@@ -637,20 +675,7 @@ static qboolean Tornado_PickSpot (edict_t *anchor, vec3_t spot, float *top)
 		tr = gi.trace (start, NULL, NULL, end, anchor, MASK_SOLID);
 		VectorMA (tr.endpos, -32, dir, cand);
 
-		if (!Tornado_FindGround (cand, ground, top, true))
-			continue;
-
-		ok = true;
-		for (i = 1; i <= maxclients->value && ok; i++)
-		{
-			p = g_edicts + i;
-			if (!Tornado_CanLift (p))
-				continue;
-			VectorSubtract (p->s.origin, ground, v);
-			if (VectorLength (v) < tornado_radius->value + 96)
-				ok = false;
-		}
-		if (!ok)
+		if (!Tornado_FindGround (cand, ground, top, true) || !Tornado_FarFromPlayers (ground))
 			continue;
 
 		VectorCopy (ground, spot);
@@ -659,7 +684,8 @@ static qboolean Tornado_PickSpot (edict_t *anchor, vec3_t spot, float *top)
 	return false;
 }
 
-// hace aparecer un tornado cerca de anchor (o de un jugador al azar si es NULL)
+// hace aparecer un tornado cerca de anchor, o si es NULL en cualquier lado del mapa (en mapas sin
+// nodos, cerca de un jugador al azar)
 edict_t *Tornado_Spawn (edict_t *anchor)
 {
 	edict_t *t, *p, *e, *list[MAX_CLIENTS];
@@ -682,10 +708,10 @@ edict_t *Tornado_Spawn (edict_t *anchor)
 		if (!Tornado_PickSpot (anchor, spot, &top))
 			return NULL;
 	}
-	else
+	else if (!n)
+		return NULL;
+	else if (!Tornado_PickAnywhere (spot, &top))	// sin nodos: cerca de un jugador al azar
 	{
-		if (!n)
-			return NULL;
 		start = rand () % n;
 		for (i = 0; i < n; i++)
 		{

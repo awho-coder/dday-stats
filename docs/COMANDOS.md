@@ -155,7 +155,7 @@ dura hasta que el jugador vuelve a tocar el piso. No agarra a muertos, espectado
 Usa archivos que ya trae el pak0 (`sprites/null.sp2`, `debris1/2`) y `sound/wind2x.wav`, así que
 no hay que descargar nada.
 
-- `sv tornado` hace aparecer uno ahora, en cualquier mapa, cerca de un jugador al azar;
+- `sv tornado` hace aparecer uno ahora, en cualquier mapa, en un lugar al azar al aire libre (sobre los nodos de los bots; en mapas sin nodos, cerca de un jugador al azar), lejos de los jugadores;
   `sv tornado <id>` lo pone cerca de ese jugador; `sv tornado off` saca los que haya. Máximo 2.
 
 | Cvar | Por defecto | Qué hace |
