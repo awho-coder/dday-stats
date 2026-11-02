@@ -457,6 +457,7 @@ void InitGame (void)
 	ffa_gg_factions = gi.cvar("ffa_gg_factions", "1", 0);
 	ffa_gg_snd_up = gi.cvar("ffa_gg_snd_up", "ffa/gg_up2.wav", 0);
 	ffa_gg_snd_down = gi.cvar("ffa_gg_snd_down", "misc/menu3.wav", 0);
+	ffa_gg_victory_vol = gi.cvar("ffa_gg_victory_vol", "0.4", 0);
 
 	// modo control de zona: carga ents/<mapa>.ctl con una entidad objective_control
 	control_mode = gi.cvar("control_mode", "0", CVAR_LATCH);
