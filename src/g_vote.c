@@ -32,7 +32,9 @@
  * en el .bsp o en ents/<mapa>.ent). Sin distinguir mayusculas.
  * Kick: el acusado no vota ni cuenta; no se puede echar a un admin (nick
  * protegido, ver g_nicks.c) ni a bots; sin ban, puede volver a entrar.
- * No se vota en torneo, duelo (stats_mode duel), campana ni intermision.
+ * Se vota tambien en duelo y torneo (un mapa votado a mitad de duelo lo deja guardado como
+ * cortado, sin ganador); ahi el aviso de como votar sale solo al inicio y al final del mapa.
+ * No se vota en campana ni intermision.
  * El admin puede cortar una votacion con "sv votecancel".
  */
 
@@ -212,7 +214,11 @@ static void Vote_AnnounceFrame (void)
 	}
 	if (vote.active || level.time < next_announce)
 		return;
-	next_announce = level.time + (vote_announce->value > 60 ? vote_announce->value : 60);
+	// duelo y torneo: solo el aviso del inicio (45 s) y el del final, nada en medio
+	if (tournament->value || !Q_stricmp (gi.cvar ("stats_mode", "public", 0)->string, "duel"))
+		next_announce = 999999;
+	else
+		next_announce = level.time + (vote_announce->value > 60 ? vote_announce->value : 60);
 	if (Vote_AnyHuman ())
 		Vote_HowTo (NULL);
 }
@@ -643,16 +649,10 @@ static const char *Vote_What (void)
 // por que no se puede votar ahora (NULL = se puede)
 static const char *Vote_Blocked (void)
 {
-	cvar_t *stats_mode = gi.cvar ("stats_mode", "public", 0);
-
 	if (!vote_enable->value)
 		return "La votacion esta desactivada en este servidor.";
 	if (level.intermissiontime)
 		return "No se puede votar durante la intermision.";
-	if (tournament->value)
-		return "No se puede votar durante un torneo.";
-	if (!Q_stricmp (stats_mode->string, "duel"))
-		return "No se puede votar durante un duelo.";
 	if (level.campaign)
 		return "No se puede votar en una campana.";
 	return NULL;

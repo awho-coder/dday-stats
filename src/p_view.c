@@ -2393,7 +2393,13 @@ void ClientEndServerFrame (edict_t *ent)
 		if (framediff % 10 == 0 && framediff < 10 * (int)(motd_time->value))
 			Cmd_MOTD(ent);
 
-		if (tournament->value && countdownTimeLimit <= 0 && !freeze_mode && !level.intermissiontime
+		// duelo/torneo con ready_mode: que tiene que hacer cada equipo para empezar
+		if (Ready_Waiting ())
+		{
+			if (framediff % 100 == 0 && !ent->ai)
+				Ready_CenterPrint (ent);
+		}
+		else if (tournament->value && countdownTimeLimit <= 0 && !freeze_mode && !level.intermissiontime
 			&& framediff % 100 == 0)
 			safe_centerprintf(ent, "Server is running in \"Tournament\" mode.\n\n"
 							  "Please wait for the countdown to begin the battle.");

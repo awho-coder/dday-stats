@@ -87,6 +87,7 @@ GAME_OBJS =	\
 	g_monster.o \
 	g_objectives.o \
 	g_phys.o \
+	g_ready.o \
 	g_save.o \
 	g_spawn.o \
 	g_statslog.o \
@@ -173,6 +174,8 @@ g_objectives.o: g_objectives.c g_local.h g_defines.h q_shared.h game.h \
  p_menu.h g_maps.h
 g_phys.o: g_phys.c g_local.h g_defines.h q_shared.h game.h p_menu.h \
  g_maps.h
+g_ready.o: g_ready.c g_local.h g_defines.h q_shared.h game.h \
+ p_menu.h g_maps.h g_statslog.h x_fire.h
 g_save.o: g_save.c g_local.h g_defines.h q_shared.h game.h p_menu.h \
  g_maps.h
 g_spawn.o: g_spawn.c g_local.h g_defines.h q_shared.h game.h p_menu.h \

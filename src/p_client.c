@@ -3227,6 +3227,7 @@ void ClientDisconnect (edict_t *ent)
 
 	StatsLog_ClientDisconnect (ent);
 	Vote_ClientDisconnect (ent);
+	Ready_ClientDisconnect (ent);
 	Nick_ClientDisconnect (ent);
 
 	if (stats->value && !level.intermissiontime)

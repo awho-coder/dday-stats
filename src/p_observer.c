@@ -1090,8 +1090,26 @@ void M_Team_Join(edict_t *ent, pmenu_t *p, int choice)
 
 
 
+// menu de equipos en duelo/torneo con ready: "<equipo> (capitan)" (filas 14 y 15)
+void M_Team_JoinCaptain(edict_t *ent, pmenu_t *p, int choice)
+{
+	int team = choice - 14;
+
+	if (team < 0 || team > 1 || !team_list[team])
+		return;
+
+	if (ent->client->resp.team_on == team_list[team])
+		PMenu_Close(ent);
+	else
+		M_Team_Join(ent, p, team + 11);
+
+	if (ent->client->resp.team_on == team_list[team])
+		Ready_ClaimCaptain(ent);
+}
+
 void ChooseTeam(edict_t *ent) {
 	int i;//,j;
+	qboolean captain_ok[2] = { false, false };	// equipos del menu (sin password de equipo)
 	char* theText = NULL;
 	char teamname[17];
 	int max_clients;
@@ -1190,6 +1208,8 @@ void ChooseTeam(edict_t *ent) {
 
 			// Put it on the menu
 			client_menu(ent, (i + 11), theText, PMENU_ALIGN_LEFT, NULL, M_Team_Join );
+			if (i < 2)
+				captain_ok[i] = true;
 		}
 	}
 
@@ -1204,7 +1224,23 @@ void ChooseTeam(edict_t *ent) {
 	}
 
 //	client_menu(ent, 9, NULL,				PMENU_ALIGN_RIGHT,	NULL, NULL );
-	client_menu(ent, 14, "Main Menu",		PMENU_ALIGN_RIGHT,	NULL, M_Main_Menu );
+	// duelo/torneo con ready_mode: entrar al equipo como capitan (el que pone ready)
+	if (Ready_MenuCaptain ())
+	{
+		for (i = 0; i < 2; i++)
+		{
+			if (!captain_ok[i])
+				continue;
+			strncpy(teamname, team_list[i]->teamname, 16);
+			teamname[16] = '\0';
+			theText = gi.TagMalloc(32, TAG_GAME);
+			Com_sprintf(theText, 32, "%s (capitan)", teamname);
+			client_menu(ent, (i + 14), theText, PMENU_ALIGN_LEFT, NULL, M_Team_JoinCaptain );
+		}
+		client_menu(ent, 16, "Main Menu",		PMENU_ALIGN_RIGHT,	NULL, M_Main_Menu );
+	}
+	else
+		client_menu(ent, 14, "Main Menu",		PMENU_ALIGN_RIGHT,	NULL, M_Main_Menu );
 //	client_menu(ent, 11, NULL,				PMENU_ALIGN_RIGHT,	NULL, NULL );
 	client_menu(ent, 17, "*Use [ and ] to select", PMENU_ALIGN_CENTER,	NULL, NULL );
 

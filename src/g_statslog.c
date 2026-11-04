@@ -940,8 +940,9 @@ void StatsLog_RunFrame (void)
 	if (!sl.open || level.intermissiontime)
 		return;
 
-	// mvd_partidas 1: cada partida se graba (tambien la actual si se prende a mitad)
-	if (mvd_partidas->value && !sl.mvd_started)
+	// mvd_partidas 1: cada partida se graba (tambien la actual si se prende a mitad).
+	// Duelo: solo desde que empieza (sin el calentamiento); si no se juega, no se graba
+	if (mvd_partidas->value && !sl.mvd_started && (!sl.duel || sl.live))
 		StatsLog_StartMvd ();
 
 	// tiempo por equipo y clase, con resolucion de 1 segundo
@@ -1356,6 +1357,13 @@ void StatsLog_CountdownReset (void)
 	sl.live_seconds = 0;
 	StatsLog_BeginEvent ("live_cancel");
 	StatsLog_EndEvent ();
+
+	// el MVD del duelo cancelado se corta; el proximo duelo lo vuelve a grabar con el mismo nombre
+	if (sl.mvd_started && mvd_partidas->value)
+	{
+		gi.AddCommandString ("mvdstop\n");
+		sl.mvd_started = false;
+	}
 }
 
 /*

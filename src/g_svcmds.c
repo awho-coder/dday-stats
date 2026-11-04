@@ -650,6 +650,7 @@ void StartCount(int seconds)
 void Svcmd_ResetCountdown_f()
 {
 	StatsLog_CountdownReset ();
+	Ready_CountReset ();
 	ResetCountTimer();
 	centerprintall("The running timelimit has been reset.");
 }
@@ -904,6 +905,8 @@ void	ServerCommand (void)
 		Svcmd_Nicks_f();
 	else if (Q_stricmp(cmd, "tornado") == 0)
 		Svcmd_Tornado_f();
+	else if (Q_stricmp(cmd, "ready") == 0)
+		Svcmd_Ready_f();
 
 	else
 		safe_cprintf (NULL, PRINT_HIGH, "Unknown server command \"%s\"\n", cmd);
