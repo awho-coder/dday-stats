@@ -140,9 +140,10 @@ void Ready_CenterPrint (edict_t *ent)
 
 	safe_centerprintf (ent, "Modo %s: la partida aun no empieza\n\n"
 		"El capitan de cada equipo escribe\n"
-		"ready en el chat o la consola\n"
-		"(capitan se elige al elegir lado\n"
-		"o escribiendo capitan)\n\n"
+		"ready o listo en el chat o la consola\n"
+		"(nolisto para deshacerlo)\n"
+		"Capitan: se elige al elegir lado\n"
+		"o escribiendo capitan\n\n"
 		"%s\n%s",
 		tournament->value ? "TORNEO" : "DUELO", line[0], line[1]);
 }
@@ -193,7 +194,7 @@ void Ready_ClaimCaptain (edict_t *ent)
 		return;
 	}
 	Ready_SetCaptain (ent, team);
-	safe_cprintf (ent, PRINT_HIGH, "Escribe ready cuando tu equipo este listo.\n");
+	safe_cprintf (ent, PRINT_HIGH, "Escribe ready o listo cuando tu equipo este listo (nolisto lo deshace).\n");
 	Ready_CenterAll ();
 }
 
@@ -249,10 +250,14 @@ static void Ready_Set (edict_t *ent, qboolean on)
 	rd.ready[team] = on;
 	other = !team;
 
+	if (on)
+		safe_cprintf (ent, PRINT_HIGH, "Si no estaban listos, escribe nolisto para deshacerlo.\n");
+
 	if (!on)
-		Ready_Say ("%s ya NO esta listo (%s).", Ready_TeamName (team), ent->client->pers.netname);
+		Ready_Say ("%s ya NO esta listo (%s): su capitan escribe ready o listo cuando esten.",
+			Ready_TeamName (team), ent->client->pers.netname);
 	else if (!rd.ready[other])
-		Ready_Say ("%s esta LISTO (%s). Falta %s: su capitan escribe ready.",
+		Ready_Say ("%s esta LISTO (%s). Falta %s: su capitan escribe ready o listo.",
 			Ready_TeamName (team), ent->client->pers.netname, Ready_TeamName (other));
 
 	if (rd.ready[0] && rd.ready[1])
