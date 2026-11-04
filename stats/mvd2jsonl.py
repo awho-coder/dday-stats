@@ -27,6 +27,7 @@ Solo lee: el archivo es un dato, no se ejecuta nada de él.
 import argparse
 import gzip
 import hashlib
+import io
 import json
 import math
 import re
@@ -51,6 +52,7 @@ CLIENTNUM_NONE = 255
 # extendidos usan otro y no se soportan (se avisa)
 CS_MODELS, CS_PLAYERSKINS, CS_END = 32, 1312, 2080
 MVD_VERSIONS = (2009, 2010)
+MAX_RAW_BYTES = 256 * 1024 * 1024  # MVD descomprimido
 
 # bits del estado de jugador en MVD (PPS_*)
 PPS_M_TYPE, PPS_M_ORIGIN, PPS_M_ORIGIN2 = 1 << 0, 1 << 1, 1 << 2
@@ -214,7 +216,10 @@ def read_mvd(path):
     frame (configstrings cambiados y estado de los jugadores) y los prints."""
     raw = Path(path).read_bytes()
     if raw[:2] == b"\x1f\x8b":
-        raw = gzip.decompress(raw)
+        with gzip.GzipFile(fileobj=io.BytesIO(raw)) as gz:
+            raw = gz.read(MAX_RAW_BYTES + 1)
+        if len(raw) > MAX_RAW_BYTES:
+            raise SystemExit(f"{path}: MVD demasiado grande al descomprimir (más de 256 MB)")
     if raw[:4] != b"MVD2":
         raise SystemExit(f"{path}: no es un MVD2")
     cs = {}
@@ -647,6 +652,23 @@ def convert(path, server, kind, event, end_ts, weapons):
     return match_id, out, report
 
 
+def convert_to_file(mvd_path, server, kind, event, end_ts, out_dir, weapons_path=None):
+    """Convierte y escribe <out_dir>/<match_id>.jsonl. Devuelve (match_id, ruta, report).
+    Escribe primero <id>.jsonl.tmp y lo renombra (el ingestor solo toma *.jsonl)."""
+    weapons_path = Path(weapons_path) if weapons_path else Path(__file__).with_name("mvd_weapons.json")
+    weapons = json.loads(weapons_path.read_text()) if weapons_path.exists() else {}
+    match_id, events, report = convert(mvd_path, server, kind, event.strip()[:64], end_ts, weapons)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dest = out_dir / f"{match_id}.jsonl"
+    tmp = dest.with_name(dest.name + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        for e in events:
+            f.write(json.dumps(e, ensure_ascii=False) + "\n")
+    tmp.replace(dest)
+    return match_id, dest, report
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("mvd", type=Path)
@@ -664,14 +686,8 @@ def main():
         end_ts = datetime.fromisoformat(args.end.replace(" ", "T")).timestamp()
     else:
         end_ts = args.mvd.stat().st_mtime
-    weapons = json.loads(args.weapons.read_text()) if args.weapons.exists() else {}
-    match_id, events, report = convert(args.mvd, args.server, args.kind, args.event.strip()[:64],
-                                       end_ts, weapons)
-    args.out.mkdir(parents=True, exist_ok=True)
-    dest = args.out / f"{match_id}.jsonl"
-    with open(dest, "w", encoding="utf-8") as f:
-        for e in events:
-            f.write(json.dumps(e, ensure_ascii=False) + "\n")
+    match_id, dest, report = convert_to_file(args.mvd, args.server, args.kind, args.event,
+                                             end_ts, args.out, args.weapons)
     print(json.dumps({"file": str(dest), **report}, ensure_ascii=False, indent=1))
     return 0
 

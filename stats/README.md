@@ -476,6 +476,18 @@ python3 stats/mvd2jsonl.py duelo1.mvd2.gz --server dday.cl-duelos1 --kind duel \
 cp /tmp/ev/*.jsonl /home/pi/dday-events/      # el ingestor lo carga en su próxima vuelta
 ```
 
+**Desde el panel admin.** La tarjeta «Importar MVD» sube el archivo al backend, que lo
+deja en `<data>/mvd-inbox/<file_key>.mvd2` y crea una fila en `mvd_imports` (función
+`mvd_import_request`). El servicio del ingestor, con `DDAY_STATS_MVD_INBOX` (esa
+carpeta) y `DDAY_STATS_DEMOS` (la de grabaciones del backend, `<match_id>.mvd2.gz`)
+en su `ingest.env` (o `--mvd-inbox` / `--demos`), las procesa al inicio de cada
+vuelta: convierte con `mvd2jsonl.py`, deja el `.jsonl` en `--events` y la grabación
+en `demos/`, y esa misma vuelta carga la partida. Estados de la fila: `pending`
+(en cola) -> `converted` (convertida; el panel la muestra «Cargada» cuando ya está
+en `matches`), `duplicate` (el id ya estaba cargado: no se deja el `.jsonl`) o
+`error` (con el motivo en `message`; el archivo va a `mvd-inbox/failed/` y se borra
+a los 14 días). Sin esas dos variables no importa nada (es el caso del cron).
+
 - Salen: mapa, jugadores con equipo y clase (por el modelo `usa/class_lmg`),
   tiempo en cada equipo y clase, cada muerte (del obituario que el mod manda a
   todos: víctima, frase, asesino, arma, `** HEADSHOT **`) con la posición de los
