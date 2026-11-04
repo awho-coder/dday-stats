@@ -8,7 +8,7 @@
  *                    se elige en el menu de equipos ("<equipo> (capitan)")
  *   ready / listo    el capitan marca a su equipo como listo (si el equipo no tiene
  *                    capitan, quien lo escribe queda de capitan)
- *   notready/nolisto lo desmarca
+ *   notready/unready/nolisto  lo desmarca
  *
  * Sirven en la consola y en el chat (el mensaje exacto, con o sin "!"). Cuando los dos
  * equipos estan listos arranca la cuenta de siempre ("Preparados! 3 2 1"). Al empezar,
@@ -290,7 +290,7 @@ qboolean Ready_ChatCommand (edict_t *ent, const char *text)
 
 	if (!strcmp (word, "ready") || !strcmp (word, "listo") || !strcmp (word, "listos"))
 		Ready_Set (ent, true);
-	else if (!strcmp (word, "notready") || !strcmp (word, "noready") || !strcmp (word, "nolisto") ||
+	else if (!strcmp (word, "notready") || !strcmp (word, "noready") || !strcmp (word, "unready") || !strcmp (word, "nolisto") ||
 		!strcmp (word, "no listo") || !strcmp (word, "not ready"))
 		Ready_Set (ent, false);
 	else if (!strcmp (word, "capitan") || !strcmp (word, "captain"))

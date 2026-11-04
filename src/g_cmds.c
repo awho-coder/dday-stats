@@ -3545,7 +3545,7 @@ void ClientCommand (edict_t *ent)
 		Cmd_Ready_f(ent);
 		return;
 	}
-	else if (Q_stricmp(cmd, "notready") == 0 || Q_stricmp(cmd, "nolisto") == 0)
+	else if (Q_stricmp(cmd, "notready") == 0 || Q_stricmp(cmd, "unready") == 0 || Q_stricmp(cmd, "nolisto") == 0)
 	{
 		Cmd_NotReady_f(ent);
 		return;

@@ -351,7 +351,7 @@ calentamiento (antes contaban para el ganador).
 | `ready_time` | `0` | Minutos de la partida. `0` = el duelo dura hasta que gane un equipo; en torneo (sin cuenta no se dispara) usa `timelimit` o 20. |
 | `capitan` / `captain` | — | (Jugador) queda de capitán de su equipo, uno por equipo. También en el menú de equipos: "<equipo> (capitan)". |
 | `ready` / `listo` | — | (Capitán) su equipo está listo. Si el equipo no tiene capitán, quien lo escribe queda de capitán. |
-| `notready` / `nolisto` | — | (Capitán) lo desmarca. |
+| `notready` / `unready` / `nolisto` | — | (Capitán) lo desmarca. |
 | `sv ready` / `sv ready reset` | — | Estado (capitanes, ready, humanos y kills) / borrar capitanes y ready. |
 
 Los comandos sirven en la consola y en el chat (el mensaje exacto, con o sin `!`). Si el capitán se va
