@@ -17,13 +17,21 @@ Cada archivo se procesa en una transaccion. Si la partida ya existe en la
 base, el archivo se considera procesado (idempotente). Los archivos
 procesados se mueven a <events>/processed/ (o se borran con --delete).
 
+Desde el panel admin: con --mvd-inbox y --demos (o DDAY_STATS_MVD_INBOX y
+DDAY_STATS_DEMOS) cada vuelta convierte primero los MVD que el panel dejo
+pedidos (tabla mvd_imports, estados pending -> converted / duplicate / error):
+deja el .jsonl en --events, la grabacion en <demos>/<match_id>.mvd2.gz y esa
+misma vuelta carga la partida. Sin esas carpetas no importa nada.
+
 Dependencia: psycopg 3 (pip install "psycopg[binary]").
 """
 
 import argparse
+import gzip
 import json
 import logging
 import os
+import shutil
 import sys
 import time
 from dataclasses import dataclass, field
@@ -646,6 +654,92 @@ def apply_event_changes(conn, cfg):
     return changed
 
 
+def save_demo(src, dest):
+    """Deja la grabacion en dest (<match_id>.mvd2.gz). Si ya existe no hace nada; si src ya
+    es gzip lo copia tal cual y si no, lo comprime. Escribe a dest.tmp y renombra."""
+    if dest.exists():
+        return
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".tmp")
+    try:
+        with open(src, "rb") as f:
+            gz = f.read(2) == b"\x1f\x8b"
+        if gz:
+            shutil.copyfile(src, tmp)
+        else:
+            with open(src, "rb") as fin, gzip.open(tmp, "wb") as fout:
+                shutil.copyfileobj(fin, fout, 1024 * 1024)
+        tmp.replace(dest)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def finish_import_file(src, ok):
+    """Archivo subido ya procesado: si salio bien se borra; si no, va a <inbox>/failed/
+    para poder revisarlo (y alli se borran los de mas de 14 dias)."""
+    if ok:
+        src.unlink(missing_ok=True)
+        return
+    failed = src.parent / "failed"
+    failed.mkdir(exist_ok=True)
+    if src.exists():
+        src.replace(failed / src.name)
+    limit = time.time() - 14 * 86400
+    for old in failed.iterdir():
+        try:
+            if old.is_file() and old.stat().st_mtime < limit:
+                old.unlink()
+        except OSError:
+            pass
+
+
+def process_mvd_imports(conn, inbox, demos, events_dir):
+    """Convierte los MVD que el panel admin dejo pedidos (tabla mvd_imports).
+    Cada fila en su transaccion, con SKIP LOCKED (el cron y el servicio pueden correr a la vez).
+    Un error de un archivo se anota en su fila y no corta la vuelta. Devuelve cuantas proceso."""
+    import mvd2jsonl  # mismo directorio que ingest.py
+    done = 0
+    while True:
+        with conn.transaction():
+            row = conn.execute(
+                "SELECT id, file_key, server, kind, event, end_at FROM mvd_imports"
+                " WHERE status = 'pending' ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED").fetchone()
+            if row is None:
+                return done
+            imp_id, key, server, kind, event, end_at = row
+            src = inbox / f"{key}.mvd2"
+            status, match_id, message, report = "error", None, "", None
+            dest = None
+            try:
+                if not src.is_file():
+                    raise SystemExit("no esta el archivo subido")
+                match_id, dest, report = mvd2jsonl.convert_to_file(
+                    src, server, kind, event, end_at.timestamp(), events_dir)
+                exists = conn.execute("SELECT 1 FROM matches WHERE id = %s", (match_id,)).fetchone()
+                status = "duplicate" if exists else "converted"
+                if exists:
+                    dest.unlink(missing_ok=True)  # ya cargada: no volver a dejar el .jsonl
+                save_demo(src, demos / f"{match_id}.mvd2.gz")
+            except psycopg.Error:
+                raise  # la transaccion quedo abortada: la fila sigue pendiente y se reintenta
+            except SystemExit as e:
+                message = str(e)[:300]
+            except Exception as e:  # noqa: BLE001 - un MVD raro no debe tumbar el ingestor
+                log.exception("importacion %s", imp_id)
+                message = f"error inesperado: {type(e).__name__}"
+            if status == "error":
+                match_id = None
+                if dest is not None:
+                    dest.unlink(missing_ok=True)  # no dejar un .jsonl de una importacion fallida
+            conn.execute(
+                "UPDATE mvd_imports SET status = %s, match_id = %s, message = %s, report = %s,"
+                " processed_at = now() WHERE id = %s",
+                (status, match_id, message, json.dumps(report) if report and status != "error" else None, imp_id))
+        finish_import_file(src, ok=status != "error")
+        log.info("importacion MVD %s: %s %s %s", imp_id, status, match_id or "", message)
+        done += 1
+
+
 def reingest(conn, cfg, paths):
     """Vuelve a cargar partidas ya cargadas (por ejemplo, para que una version nueva del
     ingestor las clasifique bien): borra cada partida (sus filas se borran en cascada), la
@@ -720,6 +814,10 @@ def main():
                     help="cadena de conexion PostgreSQL (o variable DDAY_STATS_DSN)")
     ap.add_argument("--events", type=Path, default=os.environ.get("DDAY_STATS_EVENTS"),
                     help="carpeta de eventos (dday/stats/events)")
+    ap.add_argument("--mvd-inbox", type=Path, default=os.environ.get("DDAY_STATS_MVD_INBOX") or None,
+                    help="carpeta donde el panel admin deja los MVD a importar (vacio = no importa)")
+    ap.add_argument("--demos", type=Path, default=os.environ.get("DDAY_STATS_DEMOS") or None,
+                    help="carpeta de grabaciones del backend (<match_id>.mvd2.gz)")
     ap.add_argument("--loop", type=int, default=0, metavar="SEG",
                     help="repetir cada SEG segundos en vez de terminar")
     ap.add_argument("--delete", action="store_true", help="borrar archivos procesados en vez de moverlos")
@@ -810,6 +908,12 @@ def main():
         return 0
 
     while True:
+        if args.mvd_inbox and args.demos:
+            try:
+                with psycopg.connect(args.dsn, autocommit=True) as conn:
+                    process_mvd_imports(conn, args.mvd_inbox, args.demos, args.events)
+            except psycopg.Error as e:
+                log.error("importaciones MVD: error de base de datos: %s", e)
         files = pending_files(args.events, args.stale_hours)
         try:
             # conexion nueva en cada vuelta (sobrevive a reinicios de PostgreSQL):
