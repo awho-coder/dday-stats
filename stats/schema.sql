@@ -579,6 +579,8 @@ CREATE TABLE IF NOT EXISTS mvd_imports (
 );
 CREATE INDEX IF NOT EXISTS mvd_imports_pending_idx ON mvd_imports (id) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS mvd_imports_requested_idx ON mvd_imports (requested_at DESC);
+-- clanes que el ingestor inscribio en el torneo al cargar la importacion (NULL = sin revisar)
+ALTER TABLE mvd_imports ADD COLUMN IF NOT EXISTS clans_added text[];
 
 -- para ladder_streak (top N sin recorrer toda la tabla)
 CREATE INDEX IF NOT EXISTS match_players_streak_idx ON match_players (best_streak DESC);
@@ -2150,6 +2152,53 @@ BEGIN
     RETURN v_id;
 END $$;
 
+-- Tras cargar una partida importada de torneo: inscribe en el torneo el clan de cada lado
+-- (mayoria de humanos, misma regla que tournament_sides, entre los clanes activos) si no
+-- estaba. Solo si el torneo ya tiene inscritos: sin inscritos todos los clanes activos
+-- cuentan y agregar dos dejaria fuera a los demas. Anota los tags en clans_added
+-- ('{}' = nada que inscribir). La ejecuta el ingestor (dueno); sin GRANT.
+CREATE OR REPLACE FUNCTION mvd_import_register_clans(p_import_id integer) RETURNS text[]
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_match text;
+    v_tid   integer;
+    v_tags  text[] := '{}';
+BEGIN
+    SELECT i.match_id, t.id INTO v_match, v_tid
+      FROM mvd_imports i JOIN tournaments t ON t.event = i.event
+     WHERE i.id = p_import_id AND i.event <> '';
+    IF v_tid IS NOT NULL AND v_match IS NOT NULL
+       AND EXISTS (SELECT 1 FROM tournament_teams WHERE tournament_id = v_tid) THEN
+        WITH side AS (
+            SELECT mp.team, count(*) AS humans
+              FROM match_players mp JOIN players p ON p.id = mp.player_id AND NOT p.is_bot
+             WHERE mp.match_id = v_match AND mp.team IN (0, 1)
+             GROUP BY mp.team
+        ), votes AS (
+            SELECT mp.team, pc.clan_id, count(*) AS n
+              FROM match_players mp
+              JOIN v_player_clan pc ON pc.player_id = mp.player_id
+              JOIN clans c ON c.id = pc.clan_id AND c.active AND NOT c.unregistered
+             WHERE mp.match_id = v_match AND mp.team IN (0, 1)
+             GROUP BY mp.team, pc.clan_id
+        ), best AS (
+            SELECT v.clan_id FROM votes v JOIN side s ON s.team = v.team
+             WHERE 2 * v.n >= s.humans
+               AND NOT EXISTS (SELECT 1 FROM votes o WHERE o.team = v.team
+                                AND o.clan_id <> v.clan_id AND o.n >= v.n)
+        ), ins AS (
+            INSERT INTO tournament_teams (tournament_id, clan_id)
+            SELECT DISTINCT v_tid, clan_id FROM best
+            ON CONFLICT DO NOTHING
+            RETURNING clan_id
+        )
+        SELECT coalesce(array_agg(c.tag ORDER BY c.tag), '{}') INTO v_tags
+          FROM ins JOIN clan_tags c ON c.clan_id = ins.clan_id AND c.is_primary;
+    END IF;
+    UPDATE mvd_imports SET clans_added = v_tags WHERE id = p_import_id;
+    RETURN v_tags;
+END $$;
+
 -- Permisos: igual que clanes. tournament_side_prune y apply_event_changes no se dan a nadie.
 REVOKE ALL ON FUNCTION tournament_save(integer, jsonb, jsonb, jsonb, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION tournament_delete(integer) FROM PUBLIC;
@@ -2160,6 +2209,7 @@ REVOKE ALL ON FUNCTION tournament_side_prune(text[]) FROM PUBLIC;
 REVOKE ALL ON FUNCTION tournament_event_request(text[], text, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION apply_event_changes() FROM PUBLIC;
 REVOKE ALL ON FUNCTION mvd_import_request(text, text, integer, text, text, text, timestamptz, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION mvd_import_register_clans(integer) FROM PUBLIC;
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'dday_clans') THEN

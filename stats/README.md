@@ -487,6 +487,11 @@ en `demos/`, y esa misma vuelta carga la partida. Estados de la fila: `pending`
 en `matches`), `duplicate` (el id ya estaba cargado: no se deja el `.jsonl`) o
 `error` (con el motivo en `message`; el archivo va a `mvd-inbox/failed/` y se borra
 a los 14 días). Sin esas dos variables no importa nada (es el caso del cron).
+Después de cargar una partida de torneo importada, el ingestor inscribe en el
+torneo el clan de cada lado que falte (`mvd_import_register_clans`: mayoría de
+humanos del lado entre los clanes activos, la misma regla de `tournament_sides`) y
+anota los tags en `clans_added` (`{}` = nada que inscribir). Solo si el torneo ya
+tiene inscritos: sin inscritos cuentan todos los clanes activos.
 
 - Salen: mapa, jugadores con equipo y clase (por el modelo `usa/class_lmg`),
   tiempo en cada equipo y clase, cada muerte (del obituario que el mod manda a
