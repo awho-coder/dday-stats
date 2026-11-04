@@ -556,6 +556,30 @@ CREATE TABLE IF NOT EXISTS match_event_changes (
 CREATE INDEX IF NOT EXISTS match_event_changes_pending_idx
     ON match_event_changes (match_id) WHERE applied_at IS NULL;
 
+-- Importaciones de MVD pedidas desde el panel admin. El backend guarda el archivo en
+-- <data>/mvd-inbox/<file_key>.mvd2 y crea la fila; el ingestor (process_mvd_imports) lo
+-- convierte con mvd2jsonl.py, deja el .jsonl en la carpeta de eventos y la grabacion en demos/.
+CREATE TABLE IF NOT EXISTS mvd_imports (
+    id           serial PRIMARY KEY,
+    file_key     text NOT NULL UNIQUE CHECK (file_key ~ '^[0-9a-f-]{36}$'),
+    file_name    text NOT NULL CHECK (length(file_name) BETWEEN 1 AND 100),
+    size_bytes   integer NOT NULL CHECK (size_bytes > 0),
+    server       text NOT NULL CHECK (server ~ '^[A-Za-z0-9._-]{1,32}$'),
+    kind         text NOT NULL CHECK (kind IN ('public', 'duel')),
+    event        text NOT NULL DEFAULT '' CHECK (length(event) <= 64),
+    end_at       timestamptz NOT NULL,
+    status       text NOT NULL DEFAULT 'pending'
+                 CHECK (status IN ('pending', 'converted', 'duplicate', 'error')),
+    match_id     text,
+    message      text NOT NULL DEFAULT '',
+    report       jsonb,
+    requested_by text,
+    requested_at timestamptz NOT NULL DEFAULT now(),
+    processed_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS mvd_imports_pending_idx ON mvd_imports (id) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS mvd_imports_requested_idx ON mvd_imports (requested_at DESC);
+
 -- para ladder_streak (top N sin recorrer toda la tabla)
 CREATE INDEX IF NOT EXISTS match_players_streak_idx ON match_players (best_streak DESC);
 
@@ -2109,6 +2133,23 @@ BEGIN
     RETURN v_n;
 END $$;
 
+-- Pedido de importacion de MVD (lo llama el panel admin con el rol dday_clans).
+-- El torneo, si viene, debe existir con ficha. Devuelve el id de la fila.
+CREATE OR REPLACE FUNCTION mvd_import_request(
+    p_file_key text, p_file_name text, p_size integer, p_server text, p_kind text,
+    p_event text, p_end timestamptz, p_by text) RETURNS integer
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_id integer;
+BEGIN
+    IF coalesce(p_event, '') <> '' AND NOT EXISTS (SELECT 1 FROM tournaments WHERE event = p_event) THEN
+        RAISE EXCEPTION 'torneo inexistente' USING ERRCODE = 'P0002';
+    END IF;
+    INSERT INTO mvd_imports (file_key, file_name, size_bytes, server, kind, event, end_at, requested_by)
+    VALUES (p_file_key, p_file_name, p_size, p_server, p_kind, coalesce(p_event, ''), p_end, p_by)
+    RETURNING id INTO v_id;
+    RETURN v_id;
+END $$;
+
 -- Permisos: igual que clanes. tournament_side_prune y apply_event_changes no se dan a nadie.
 REVOKE ALL ON FUNCTION tournament_save(integer, jsonb, jsonb, jsonb, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION tournament_delete(integer) FROM PUBLIC;
@@ -2118,6 +2159,7 @@ REVOKE ALL ON FUNCTION tournament_assign_save(text[], integer, text, text) FROM 
 REVOKE ALL ON FUNCTION tournament_side_prune(text[]) FROM PUBLIC;
 REVOKE ALL ON FUNCTION tournament_event_request(text[], text, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION apply_event_changes() FROM PUBLIC;
+REVOKE ALL ON FUNCTION mvd_import_request(text, text, integer, text, text, text, timestamptz, text) FROM PUBLIC;
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'dday_clans') THEN
@@ -2127,6 +2169,7 @@ BEGIN
         GRANT EXECUTE ON FUNCTION tournament_side_clear(text) TO dday_clans;
         GRANT EXECUTE ON FUNCTION tournament_assign_save(text[], integer, text, text) TO dday_clans;
         GRANT EXECUTE ON FUNCTION tournament_event_request(text[], text, text) TO dday_clans;
+        GRANT EXECUTE ON FUNCTION mvd_import_request(text, text, integer, text, text, text, timestamptz, text) TO dday_clans;
     END IF;
 END $$;
 
