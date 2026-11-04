@@ -78,6 +78,14 @@ qboolean Ready_Waiting (void)
 		!freeze_remaining && !level.intermissiontime;
 }
 
+// duelo o torneo que todavia no empieza (con o sin ready_mode): calentamiento
+qboolean Ready_MatchPending (void)
+{
+	if (!deathmatch->value || G_IsFFA () || level.campaign || level.intermissiontime)
+		return false;
+	return (Ready_IsDuel () || tournament->value) && !rd.started;
+}
+
 static int Ready_TeamOf (edict_t *ent)
 {
 	if (!ent || !ent->inuse || !ent->client || ent->ai || !ent->client->resp.team_on)

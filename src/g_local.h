@@ -2621,6 +2621,7 @@ void Ready_Reset (void);
 void Ready_RunFrame (void);
 void Ready_ClientDisconnect (edict_t *ent);
 qboolean Ready_Waiting (void);
+qboolean Ready_MatchPending (void);
 qboolean Ready_MenuCaptain (void);
 void Ready_CenterPrint (edict_t *ent);
 void Ready_ClaimCaptain (edict_t *ent);

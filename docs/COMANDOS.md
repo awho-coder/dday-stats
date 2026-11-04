@@ -358,6 +358,10 @@ Los comandos sirven en la consola y en el chat (el mensaje exacto, con o sin `!`
 del equipo o del server, el equipo queda sin capitán. `sv startcount` del admin sigue funcionando y se
 salta el ready; `sv resetcount` vuelve a pedirlo.
 
+Duelo en modo control (`control_mode 1` + `stats_mode duel`): durante el calentamiento la zona se ve pero queda
+cerrada (nadie la gana antes del duelo); el bloqueo (`control_lock`) cuenta desde "Que comience el juego!". Rota y se
+vota solo entre los mapas con `.ctl`.
+
 ## Servidor: MVD de la partida (para bajarlo desde la web)
 
 Graba con el MVD de Q2PRO (`sv_mvd_enable 1` en `server.cfg`) y le pone de nombre
