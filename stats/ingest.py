@@ -723,7 +723,7 @@ def process_mvd_imports(conn, inbox, demos, events_dir):
             except psycopg.Error:
                 raise  # la transaccion quedo abortada: la fila sigue pendiente y se reintenta
             except SystemExit as e:
-                message = str(e)[:300]
+                message = str(e).replace(f"{inbox}{os.sep}", "")[:300]  # sin la ruta del servidor
             except Exception as e:  # noqa: BLE001 - un MVD raro no debe tumbar el ingestor
                 log.exception("importacion %s", imp_id)
                 message = f"error inesperado: {type(e).__name__}"
