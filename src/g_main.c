@@ -1751,6 +1751,7 @@ void G_RunFrame (void)
 	}
 
 	Vote_RunFrame ();
+	Ready_RunFrame ();
 	Nick_RunFrame ();
 	Tornado_RunFrame ();
 
@@ -1942,6 +1943,7 @@ void G_RunFrame (void)
 				centerprintall("Que comience el juego!");
 				gameStartTime = level.time;
 				StatsLog_CountdownDone ();
+				Ready_MatchStart ();	// duelo: borra las kills del calentamiento
 				timelimit->value = countdownTimeLimit / 60.0; // kernel: now in seconds
 				countdownActive = 0;
 			}

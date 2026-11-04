@@ -2615,6 +2615,22 @@ void Vote_ClientBegin (edict_t *ent);
 void Cmd_Vote_f (edict_t *ent);
 void Svcmd_VoteCancel_f (void);
 
+// g_ready.c: en duelo/torneo la partida empieza con el ready de los dos capitanes (ready_mode)
+void Ready_Init (void);
+void Ready_Reset (void);
+void Ready_RunFrame (void);
+void Ready_ClientDisconnect (edict_t *ent);
+qboolean Ready_Waiting (void);
+qboolean Ready_MenuCaptain (void);
+void Ready_CenterPrint (edict_t *ent);
+void Ready_ClaimCaptain (edict_t *ent);
+qboolean Ready_ChatCommand (edict_t *ent, const char *text);
+void Ready_MatchStart (void);
+void Ready_CountReset (void);
+void Cmd_Ready_f (edict_t *ent);
+void Cmd_NotReady_f (edict_t *ent);
+void Svcmd_Ready_f (void);
+
 // g_nicks.c: nicks y tags de clan protegidos con clave (dday/nicks.txt)
 void Nick_Init (void);
 void Nick_Load (void);

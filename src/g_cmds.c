@@ -2493,8 +2493,9 @@ void Cmd_Say_f (edict_t *ent, qboolean team, qboolean arg0, qboolean saved)
 		}
 	*/
 
-
-
+		// duelo/torneo con ready_mode: "ready", "listo", "capitan" en el chat (el mensaje se muestra igual)
+		if (!arg0)
+			Ready_ChatCommand (ent, gi.args ());
 
 		if (team)
 			Com_sprintf (text, sizeof(text), "(Team)%s: ", ent->client->pers.netname);
@@ -3536,6 +3537,22 @@ void ClientCommand (edict_t *ent)
 	else if (Q_stricmp(cmd, "vote") == 0)
 	{
 		Cmd_Vote_f(ent);
+		return;
+	}
+	// duelo/torneo con ready_mode: los capitanes ponen ready para empezar (g_ready.c)
+	else if (Q_stricmp(cmd, "ready") == 0 || Q_stricmp(cmd, "listo") == 0)
+	{
+		Cmd_Ready_f(ent);
+		return;
+	}
+	else if (Q_stricmp(cmd, "notready") == 0 || Q_stricmp(cmd, "nolisto") == 0)
+	{
+		Cmd_NotReady_f(ent);
+		return;
+	}
+	else if (Q_stricmp(cmd, "capitan") == 0 || Q_stricmp(cmd, "captain") == 0)
+	{
+		Ready_ClaimCaptain(ent);
 		return;
 	}
 

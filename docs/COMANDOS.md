@@ -334,8 +334,29 @@ Detalle: [`../stats/README.md`](../stats/README.md).
 | `stats_log` | `0` | `1` escribe un archivo JSONL por partida (se aplica al cargar el siguiente mapa). |
 | `stats_server` | hostname | Identificador del servidor en la base. |
 | `stats_log_dir` | `""` | Carpeta de salida absoluta (vacío = `dday/stats/events`). |
-| `stats_mode` | `public` | `public` o `duel` (en duelo solo cuenta desde `sv startcount`). |
+| `stats_mode` | `public` | `public` o `duel` (en duelo solo cuenta desde que termina la cuenta: `sv startcount` o el ready de los capitanes). |
 | `stats_event` | `""` | Nombre del torneo: marca las partidas como duelo oficial. Vaciarlo al terminar. |
+
+## Servidor: duelo con ready de los capitanes (`ready_mode`)
+
+En duelo (`stats_mode duel`) o torneo (`tournament 1`) la partida empieza sola cuando el capitán de
+cada equipo pone `ready`, sin admin. Mientras se espera, cada 10 s el centro de la pantalla explica qué
+hacer y muestra el estado de cada equipo. Cuando los dos están listos sale la cuenta de siempre
+("Preparados! 3 2 1 Que comience el juego!"). Al empezar un duelo se borran las kills del
+calentamiento (antes contaban para el ganador).
+
+| Cvar / comando | Por defecto | Qué hace |
+|---|---|---|
+| `ready_mode` | `0` | `1` = en duelo o torneo la partida empieza con el ready de los dos capitanes. |
+| `ready_time` | `0` | Minutos de la partida. `0` = el duelo dura hasta que gane un equipo; en torneo (sin cuenta no se dispara) usa `timelimit` o 20. |
+| `capitan` / `captain` | — | (Jugador) queda de capitán de su equipo, uno por equipo. También en el menú de equipos: "<equipo> (capitan)". |
+| `ready` / `listo` | — | (Capitán) su equipo está listo. Si el equipo no tiene capitán, quien lo escribe queda de capitán. |
+| `notready` / `nolisto` | — | (Capitán) lo desmarca. |
+| `sv ready` / `sv ready reset` | — | Estado (capitanes, ready, humanos y kills) / borrar capitanes y ready. |
+
+Los comandos sirven en la consola y en el chat (el mensaje exacto, con o sin `!`). Si el capitán se va
+del equipo o del server, el equipo queda sin capitán. `sv startcount` del admin sigue funcionando y se
+salta el ready; `sv resetcount` vuelve a pedirlo.
 
 ## Servidor: MVD de la partida (para bajarlo desde la web)
 
@@ -348,6 +369,10 @@ Q2PRO no graba nada (los bots no cuentan).
 |---|---|---|
 | `mvd_partidas` | `0` | `1` graba un MVD de cada partida, desde la actual. Al instante; un reinicio lo apaga. |
 | `sv mvd_partida` | — | Graba solo la partida en curso, desde ese momento. |
+
+En duelo (`stats_mode duel`) `mvd_partidas` graba solo el duelo: empieza con "Que comience el juego!" (sin el
+calentamiento) y, si no se juega, no graba nada. Con `sv resetcount` se corta y el próximo duelo lo vuelve a grabar
+con el mismo nombre.
 
 Un `mvdrecord` manual con otro nombre sigue funcionando, pero esa grabación no sale en la web.
 

@@ -49,8 +49,10 @@ Reglas:
   puede volver a entrar. Si el acusado se va, se cancela. Quien propone un
   kick rechazado espera 2 min, y a un mismo jugador no se le vota más de una
   vez cada 2 min. Se anota en el log quién propuso y quién votó sí.
-- No se vota en **torneo** (`tournament 1`), **duelo** (`stats_mode duel`),
-  campaña ni intermisión. Con un solo humano se aprueba al tiro.
+- Se vota también en **duelo** (`stats_mode duel`) y **torneo** (`tournament 1`), durante todo
+  el duelo: un mapa votado a mitad de duelo deja la partida guardada como cortada (sin ganador).
+  Ahí el aviso de cómo votar sale solo al inicio (al entrar y a los 45 s) y al final del mapa.
+- No se vota en campaña ni intermisión. Con un solo humano se aprueba al tiro.
 
 Mensajes: al proponer y al terminar sale un aviso **al medio de la pantalla**
 (como q2admin) y una línea en el chat; cada 10 s se recuerda en el chat cómo
