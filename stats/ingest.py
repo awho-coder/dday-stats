@@ -740,6 +740,21 @@ def process_mvd_imports(conn, inbox, demos, events_dir):
         done += 1
 
 
+def register_imported_clans(conn):
+    """Partidas de torneo importadas desde el panel y ya cargadas: inscribe en el torneo los
+    clanes de cada lado que falten (mvd_import_register_clans). Cada importacion se revisa
+    una sola vez (clans_added deja de ser NULL). Devuelve cuantas reviso."""
+    rows = conn.execute(
+        "SELECT i.id FROM mvd_imports i"
+        " WHERE i.status IN ('converted', 'duplicate') AND i.event <> '' AND i.clans_added IS NULL"
+        " AND EXISTS (SELECT 1 FROM matches m WHERE m.id = i.match_id) ORDER BY i.id").fetchall()
+    for (imp_id,) in rows:
+        tags = conn.execute("SELECT mvd_import_register_clans(%s)", (imp_id,)).fetchone()[0]
+        if tags:
+            log.info("importacion MVD %s: clanes inscritos en el torneo: %s", imp_id, ", ".join(tags))
+    return len(rows)
+
+
 def reingest(conn, cfg, paths):
     """Vuelve a cargar partidas ya cargadas (por ejemplo, para que una version nueva del
     ingestor las clasifique bien): borra cada partida (sus filas se borran en cascada), la
@@ -922,6 +937,8 @@ def main():
             with psycopg.connect(args.dsn, autocommit=True) as conn:
                 if files:
                     run_once(conn, args, cfg, files)
+                if args.mvd_inbox and args.demos:
+                    register_imported_clans(conn)
                 apply_event_changes(conn, cfg)
         except psycopg.Error as e:
             # el archivo queda donde estaba y se reintenta en la proxima vuelta
