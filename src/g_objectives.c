@@ -1598,6 +1598,15 @@ void objective_control_think (edict_t *self)
 	if (!level.control_start || level.control_gamestart != gameStartTime)
 		Control_Reset (self);
 
+	// duelo/torneo que aun no empieza (calentamiento): la zona se ve pero queda cerrada, asi
+	// nadie la gana antes del duelo; el bloqueo cuenta desde "Que comience el juego!"
+	if (Ready_MatchPending ())
+	{
+		if (level.control_unlocked)
+			Control_Reset (self);	// sv resetcount a mitad de duelo
+		level.control_start = level.time;
+	}
+
 	Control_CountPlayers (self);
 	Control_Intro (self);
 
@@ -1614,7 +1623,7 @@ void objective_control_think (edict_t *self)
 		if ((int)(unlock_time - level.time) == 10 && level.framenum % 10 == 0)
 			safe_bprintf (PRINT_HIGH, "La zona %s se abre en 10 segundos.\n", self->obj_name);
 
-		if (level.time < unlock_time)
+		if (level.time < unlock_time || Ready_MatchPending ())
 			return;
 
 		level.control_unlocked = true;
