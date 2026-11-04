@@ -74,6 +74,25 @@ loginctl enable-linger $USER                       # sobrevive al logout
 | Modelo LLM | `relay.py` → `MODEL` | `deepseek-v4.1-flash` |
 | Máquina del elo | `relay.py` → `PG_*` | Postgres del pipeline |
 
+## Server de duelos (server 2)
+
+El mismo `chat-admin.py` corre en los dos servers. Si el `server.cfg` tiene `stats_mode "duel"` (server 2,
+"D-Day Chile Test Duelos") el bot se comporta como admin de duelos:
+
+- Le manda al relay `role: "duel"` y el LLM usa el prompt de especialista en duelos (`SYSTEM_DUEL`: capitanes y
+  ready, duración, stats y Elo de duelo, MVD, votación, control y torneo). El elo que consulta es el de duelo.
+- `normal` deja el **duelo** del `server.cfg` (stats duel, ready de capitanes, sin control/FFA/torneo ni bots) en
+  el mapa de arranque; `publico` lo pasa a público y avisa que `normal` lo vuelve a duelo. `ayuda` muestra los
+  comandos de duelo y `estado` agrega el estado del ready.
+- `capitanes` (quién es capitán y quién está listo) · `capitanes reset` (borra capitanes y ready, p. ej. si el
+  capitán se fue AFK) · `modoready on|off` (cvar `ready_mode`) · `tiempoduelo <min>|libre` (cvar `ready_time`;
+  libre = hasta que gane un equipo).
+- `ready`, `listo`, `nolisto`, `capitan`… (con o sin `!`) los atiende la DLL: el bot no los toma como comando.
+
+Instalación en el server 2: igual que arriba, pero el servicio apunta a `dday2.service`
+(`sed 's/dday-test.service/dday2.service/g' dday-chat-admin.service`). El `.relay-token` es el mismo que en el
+server 1.
+
 ## Comandos (primer palabra; no requieren "admin")
 
 - **Admins**: `alias <nick>` (respuesta privada), `votacion on|off|cancelar`
@@ -123,7 +142,8 @@ Está apagada por defecto; el admin la prende con `votacion on` (queda guardado 
   vota; no se puede echar a un admin; sin ban. Si el acusado se va, se cancela. Un kick rechazado
   hace esperar 2 min al que lo propuso, y a un mismo jugador no se le vota más de una vez cada 2 min.
 - `!si` / `!no`: vota. `!voto`: muestra cómo va. Dura 30 s; tras un rechazo, 60 s de espera.
-- No se vota en torneo (`tournament 1`) ni en duelo. Un voto por slot de `status`.
+- Se vota también en torneo y duelo, como en la DLL (un mapa votado a mitad deja el duelo cortado). Un voto
+  por slot de `status`.
 
 ## Alias (otros nicks del mismo jugador)
 

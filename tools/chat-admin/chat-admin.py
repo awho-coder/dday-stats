@@ -49,6 +49,49 @@ def cfg_value(name):
     except Exception:
         return ""
 
+# palabras del duelo que atiende la DLL (ready de los capitanes): el bot no las toma como comando
+DUEL_WORDS = {"ready", "listo", "listos", "notready", "unready", "noready", "nolisto", "capitan", "captain"}
+_ROLE = {"t": 0, "v": "public"}
+
+def server_role():
+    """'duel' si el server.cfg deja el server en duelo (el server 2, de duelos); si no 'public'."""
+    if time.time() - _ROLE["t"] > 60:
+        _ROLE["v"] = "duel" if cfg_value("stats_mode").lower() == "duel" else "public"
+        _ROLE["t"] = time.time()
+    return _ROLE["v"]
+
+def cfg_map():
+    """Mapa con el que arranca el server (linea 'map X' del server.cfg)."""
+    try:
+        m = re.search(r'^\s*map\s+(\S+)', open(CFG).read(), re.M)
+        return m.group(1) if m else "dday2"
+    except Exception:
+        return "dday2"
+
+def duel_defaults():
+    """Server de duelos 'normal': lo que dice su server.cfg (duelo con ready de capitanes, sin control,
+    FFA, torneo ni bots, rotacion y votacion de siempre)."""
+    restore_rotation()
+    rcon("set stats_mode duel"); rcon('set stats_event ""'); rcon("set tournament 0")
+    rcon("set bots %s" % (cfg_value("bots") or "0"))
+    rcon("set ready_mode %s" % (cfg_value("ready_mode") or "0"))
+    rcon("set ready_time %s" % (cfg_value("ready_time") or "0"))
+
+def ready_status():
+    """Resumen corto de 'sv ready': capitanes y quien esta listo."""
+    out = _cl(rcon("sv ready"))
+    head = re.search(r"ready_mode (\d+), ([^,]+), ([^\n]+?)(?:\s{2,}|\n|$)", out)
+    teams = re.findall(r"(\S+): capitan (.+?), (LISTO|no listo), (\d+) humanos, (-?\d+) kills", out)
+    if not head:
+        return "sin datos del ready"
+    if head.group(1) == "0":
+        return "ready apagado (la partida la tira un admin con 'cuenta')"
+    parts = []
+    for name, cap, ready, hum, kills in teams:
+        cap = "sin capitan" if cap.startswith("(") else "cap. " + cap
+        parts.append("%s: %s, %s, %s jug, %s kills" % (name, ready, cap, hum, kills))
+    return "%s · %s" % (head.group(3).strip(), " | ".join(parts))
+
 def restore_rotation():
     """Modo normal: sin control ni FFA, con la rotacion y la votacion de server.cfg."""
     rcon("set control_mode 0"); rcon("set ffa 0"); rcon("set ffa_gungame 0"); rcon("set ffa_roulette 0")
@@ -164,12 +207,19 @@ HELP = ("[ADMIN] comandos: estado, kick <quien>, kickban <quien>, ban <ip>, unba
         "control <mapa>, ffa <mapa>, ffa ruleta <mapa>, gungame <mapa>, dm <mapa>, kamikaze on|off, tornado [on|off], medic on|off, medic bazooka on|off, dardo on|off, officer bonus on|off, tab nuevo on|off, "
         "grabar on|off|ahora, votacion on|off|cancelar, alias <nick>, lock, unlock, say <texto>, ayuda")
 
+HELP_DUEL = ("[ADMIN] server de DUELOS: estado, capitanes [reset], modoready on|off, tiempoduelo <min>|libre, "
+             "duelo <mapa>, control <mapa>, normal, cuenta [min], reset, resetscore, marcador, torneo on|off, freeze, "
+             "evento <nombre>|off, grabar on|off|ahora, mapa <x>, pass <nueva>, passoff, kick <quien>, bots on|off, say <texto>")
+
+def help_text():
+    return HELP_DUEL if server_role() == "duel" else HELP
+
 def run_cmd(text, by):
     """Ejecuta un comando de chat. SIEMPRE vía whitelist. Devuelve respuesta para say()."""
     t = text.strip().lstrip("!").strip()
     t = re.sub(r"^(oye\s+)?(admin[,: ]\s*)+", "", t, flags=re.I).strip()  # tolera 'oye admin ...'
     parts = t.split(None, 1)
-    if not parts: return HELP, True
+    if not parts: return help_text(), True
     verb = norm(parts[0]); arg = clean_arg(parts[1].strip()) if len(parts) > 1 else ""
     if verb == "modo":
         sub = arg.split(None, 1)
@@ -180,13 +230,40 @@ def run_cmd(text, by):
             return "[ADMIN] uso: modo normal | modo control <mapa> | modo ffa <mapa> | modo gungame <mapa> | modo dm <mapa> | modo duelo <mapa>", True
 
     # lecturas
-    if verb in ("ayuda", "help"): return HELP, True
+    if verb in ("ayuda", "help"): return help_text(), True
     if verb in ("estado", "status", "jugadores", "jugador", "players"):
         st = rcon("status")
         m = re.search(r"mapname\\(\S+)|Current map:\s*(\S+)", st)
         mapa = (m.group(1) or m.group(2)) if m else "?"
         pl = players()
+        if server_role() == "duel":
+            return "[ADMIN] mapa %s · %d conectado(s) · %s" % (mapa, len(pl), ready_status()), True
         return "[ADMIN] mapa %s · %d conectado(s)" % (mapa, len(pl)), True
+
+    # duelo con ready de los capitanes (DLL: ready_mode)
+    if verb in ("capitanes", "readystatus", "estadoready"):
+        if norm(arg) in ("reset", "borrar", "limpiar", "sacar", "quitar"):
+            rcon("sv ready reset")
+            return "[ADMIN] capitanes y ready borrados: cada equipo vuelve a elegir capitan", True
+        return "[ADMIN] " + ready_status(), True
+    if verb in ("modoready", "readymode"):
+        a = norm(arg)
+        if a in ("on", "1", "si", "activar", "activa", "prender", "prende"):
+            rcon("set ready_mode 1")
+            return "[ADMIN] ready ON: en duelo/torneo la partida empieza cuando los dos capitanes escriben ready", True
+        if a in ("off", "0", "no", "desactivar", "desactiva", "apagar", "apaga"):
+            rcon("set ready_mode 0")
+            return "[ADMIN] ready OFF: la partida la tira un admin con 'cuenta'", True
+        return "[ADMIN] ready_mode: %s (uso: modoready on|off)" % (cvar_value("ready_mode") or "?"), True
+    if verb in ("tiempoduelo", "duracion", "duracionduelo"):
+        a = norm(arg)
+        if a in ("libre", "0", "sintiempo", "hastaganar", "off"):
+            rcon("set ready_time 0")
+            return "[ADMIN] duelos sin tiempo: duran hasta que gane un equipo", True
+        if not re.match(r"^\d{1,3}$", a):
+            return "[ADMIN] ready_time: %s min (0 = hasta que gane uno). uso: tiempoduelo <min>|libre" % (cvar_value("ready_time") or "?"), True
+        rcon("set ready_time %d" % int(a))
+        return "[ADMIN] los proximos duelos duran %d min (desde que los capitanes ponen ready)" % int(a), True
 
     # moderación
     if verb in ("kick", "kickea", "echar", "kik"):
@@ -229,10 +306,15 @@ def run_cmd(text, by):
             if err: return err, True
         rcon('set stats_mode duel'); rcon("set ffa 0")
         if real: rcon("map %s" % real)
+        if (cvar_value("ready_mode") or "0") != "0":
+            return ("[ADMIN] modo DUELO en %s: el capitan de cada equipo escribe ready o listo para empezar "
+                    "(petición de %s)" % (real or "mapa actual", by)), True
         return ("[ADMIN] modo DUELO armado en %s — cuando estén listos: 'cuenta' "
                 "para tirar la cuenta atrás (petición de %s)" % (real or "mapa actual", by)), True
     if verb in ("publico", "publica"):
         rcon('set stats_mode public'); restore_rotation()
+        if server_role() == "duel":
+            return "[ADMIN] server de duelos en modo PUBLICO (stats public). Para volver a duelo: normal", True
         return "[ADMIN] modo PUBLICO/NORMAL: stats public, control apagado y rotación normal", True
     if verb in ("cuenta", "startcount", "tiracuenta", "tira", "tirar", "tiro", "lanza", "lanzar",
                 "iniciar", "inicia", "arrancar", "arranca", "empezar", "empeza", "empieza",
@@ -437,6 +519,12 @@ def run_cmd(text, by):
             estado += " (en el proximo mapa: %s)" % ("NUEVO" if lat.group(1) != "0" else "CLASICO")
         return "[ADMIN] Medic: %s (uso: medic on|off)" % estado, True
     if verb in ("normal", "clasico", "restaurar", "default", "resetmodo"):
+        if server_role() == "duel":
+            duel_defaults()
+            mapa = cfg_map()
+            rcon("map %s" % mapa)
+            return ("[ADMIN] server de DUELOS normal: %s · duelo · %s (petición de %s)" % (
+                mapa, "los capitanes escriben ready" if (cfg_value("ready_mode") or "0") != "0" else "cuenta para empezar", by)), True
         restore_rotation(); rcon("set stats_mode public")
         rcon("map dday2")
         return "[ADMIN] modo NORMAL listo: dday2 · DM · public · rotación normal (petición de %s)" % by, True
@@ -611,7 +699,7 @@ def run_cmd(text, by):
         log_action(by, text, "BLOQUEADO")
         return "[ADMIN] '%s' no está permitido desde el chat (protección del server)" % parts[0], True
 
-    return HELP, True
+    return help_text(), True
 
 RELAY_URL = "http://100.107.202.52:8099/ask"
 RELAY_TOKEN_FILE = "/home/ubuntu/dday/.relay-token"
@@ -621,7 +709,8 @@ def ask_relay(nick, text):
     import urllib.request, urllib.error
     try:
         token = open(RELAY_TOKEN_FILE).read().strip()
-        body = __import__("json").dumps({"token": token, "nick": nick, "text": text}).encode()
+        body = __import__("json").dumps({"token": token, "nick": nick, "text": text, "role": server_role(),
+                                         "server": cfg_value("hostname")}).encode()
         req = urllib.request.Request(RELAY_URL, data=body, method="POST",
                                      headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=10) as r:
@@ -937,8 +1026,7 @@ def vote_count():
     return yes, no, len(pl)
 
 def vote_blocked():
-    if re.search(r'is\s+"1', rcon("tournament")): return "no se puede votar durante un torneo"
-    if re.search(r'is\s+"duel', rcon("stats_mode")): return "no se puede votar durante un duelo"
+    # como la DLL: se vota tambien en duelo y torneo (un mapa votado a mitad deja la partida cortada)
     return None
 
 def vote_what():
@@ -1241,9 +1329,11 @@ def parse_chat(line):
 
 def looks_command(text):
     t = text.strip().lstrip("!").strip()
-    if text.strip().startswith("!"): return True
     v = norm(t.split(None, 1)[0] if t else "")
-    return v in {"ayuda","help","estado","status","jugadores","players","kick","kickea","echar",
+    if v in DUEL_WORDS: return False      # ready/listo/capitan del duelo: lo atiende la DLL
+    if text.strip().startswith("!"): return True
+    return v in {"capitanes","readystatus","estadoready","modoready","readymode","tiempoduelo","duracion","duracionduelo",
+                 "ayuda","help","estado","status","jugadores","players","kick","kickea","echar",
                  "kickban","ban","votacion","votaciones","alias","aliases","unban","delban","desban","lock","unlock","bloquear","abrir",
                  "mapa","map","cambiamapa","duelo","duel","publico","publica","cuenta","startcount",
                  "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","gungame","dm","kamikaze","kamikase","kamicase","tornado","grabar","graba","grabacion","grabacin","mvd","medic","medico","mdico","dardo","sleepdart","officer","oficial","officers","oficiales","tab","scoreboard","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
