@@ -30,6 +30,10 @@ mapas **preparados** para él:
   el original.
 - **Volver al juego normal:** `normal`, `mapa <x>` o `dm` en el bot (restauran `sv_maplist` y
   `mapvoting` de `server.cfg`).
+- **Votación de fin de mapa por secciones** (`mapvoting_modes 1`, 0 por defecto): el menú trae
+  3 mapas normales, 2 de control y 2 de Gun Game, y el ganador define el modo del mapa siguiente.
+  Cada sección se apaga con su cvar en 0 (`mapvoting_normal`, `mapvoting_control`,
+  `mapvoting_gungame`, `mapvoting_ffa`). Detalle en [`VOTACION.md`](VOTACION.md).
 
 ## Servidor: modo control de zona
 

@@ -856,6 +856,11 @@ extern cvar_t  *airstrikes;
 extern cvar_t  *nohud;
 extern cvar_t  *mapvoting;
 extern cvar_t  *mapvoting_avoid_nextmap; // kernel: to skip nextmap check when selecting maps to vote
+extern cvar_t  *mapvoting_modes;	// 1 = votacion final por secciones (normal / control / Gun Game / FFA)
+extern cvar_t  *mapvoting_normal;	// mapas de cada seccion (0 = la seccion no aparece)
+extern cvar_t  *mapvoting_control;
+extern cvar_t  *mapvoting_gungame;
+extern cvar_t  *mapvoting_ffa;
 extern cvar_t  *constant_play; //for testing
 extern cvar_t  *serverimg; 
 
@@ -1049,6 +1054,13 @@ qboolean G_IsFFA(void);
 const char *Mode_NextMap (const char *current);	// proximo mapa de la rotacion del modo, NULL fuera de esos modos
 qboolean Mode_MapFits (const char *map);		// el mapa sirve para el modo actual (true fuera de esos modos)
 const char *Mode_Label (void);					// "Gun Game", "Free For All" o "control de zona"
+int Mode_PreparedMaps (int vmode, const char **out, int max);	// mapas preparados para un modo (VMODE_*)
+qboolean Vote_MapPlayable (const char *map);	// el .bsp carga y tiene spawns de D-Day
+
+// votacion de fin de mapa por secciones (mapvoting_modes 1): cada opcion lleva el modo en que se juega
+int MapVote_CurrentMode (void);		// modo de la partida que se esta jugando (VMODE_*)
+int MapVote_Seconds (void);			// duracion de la votacion de fin de mapa
+void MapVote_ApplyMode (void);		// deja los cvars del modo ganador justo antes de cambiar de mapa (ExitLevel)
 // Free For All scoreboard pictures. The leading '/' makes them full paths: the client downloads the .png
 // itself (a plain name like "ffa_score" makes it ask for pics/ffa_score.pcx, which does not exist)
 #define FFA_PIC_SCORE	"/pics/ffa_score.png"
@@ -2468,8 +2480,12 @@ qboolean no_objectives_left;
 qboolean dropnodes;
 
 
-char	*votemaps[5];
-int		mapvotes[5];
+#define VOTE_OPTIONS	8
+enum { VMODE_NORMAL, VMODE_CONTROL, VMODE_GUNGAME, VMODE_FFA };
+char	*votemaps[VOTE_OPTIONS];
+int		mapvotes[VOTE_OPTIONS];
+int		votemodes[VOTE_OPTIONS];	// VMODE_* de cada opcion (todas normal en la votacion clasica)
+int		votemaps_count;				// opciones de la votacion actual (4 en la clasica, hasta 8 por secciones)
 
 #define MAX_TEAM_ITEMS 21
 #define NUM_CLASSES 10

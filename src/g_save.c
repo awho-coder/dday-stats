@@ -354,6 +354,11 @@ void InitGame (void)
 	airstrikes = gi.cvar ("airstrikes", "1", 0);
 	mapvoting = gi.cvar ("mapvoting", "0", 0);
 	mapvoting_avoid_nextmap = gi.cvar ("mapvoting_avoid_nextmap", "0", 0);// kernel: to skip nextmap when voting
+	mapvoting_modes = gi.cvar ("mapvoting_modes", "0", 0);
+	mapvoting_normal = gi.cvar ("mapvoting_normal", "3", 0);
+	mapvoting_control = gi.cvar ("mapvoting_control", "2", 0);
+	mapvoting_gungame = gi.cvar ("mapvoting_gungame", "2", 0);
+	mapvoting_ffa = gi.cvar ("mapvoting_ffa", "0", 0);
 	constant_play = gi.cvar ("constant_play", "0", 0);
 
 	ctc = gi.cvar ("ctc", "0", 0);
@@ -508,7 +513,7 @@ void InitGame (void)
 
 	AI_Init();//JABot
 
-    mapvotes[0]=mapvotes[1]=mapvotes[2]=mapvotes[3]=mapvotes[4]=0;
+    memset (mapvotes, 0, sizeof(mapvotes));
 
 }
 

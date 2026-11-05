@@ -545,6 +545,32 @@ const char *Mode_NextMap (const char *current)
 	return vote_maps[idx[0]];
 }
 
+// el mapa carga y es de D-Day (para la seccion normal de la votacion de fin de mapa)
+qboolean Vote_MapPlayable (const char *map)
+{
+	return Vote_CheckMap (map) == MAP_OK;
+}
+
+// mapas del servidor preparados para un modo cualquiera (no el actual): VMODE_CONTROL con .ctl,
+// VMODE_GUNGAME / VMODE_FFA con _ffa.ent. Lo usa la votacion de fin de mapa por secciones.
+int Mode_PreparedMaps (int vmode, const char **out, int max)
+{
+	const char	*fmt;
+	int			i, n = 0;
+
+	if (vmode == VMODE_CONTROL)
+		fmt = "ents/%s.ctl";
+	else if (vmode == VMODE_GUNGAME || vmode == VMODE_FFA)
+		fmt = "ents/%s_ffa.ent";
+	else
+		return 0;
+	Vote_LoadMaps ();
+	for (i = 0; i < vote_nummaps && n < max; i++)
+		if (Mode_FileExists (fmt, vote_maps[i]))
+			out[n++] = vote_maps[i];
+	return n;
+}
+
 static void Vote_PrintMaps (edict_t *ent, const char *filter)
 {
 	char	line[1024];

@@ -12,6 +12,57 @@ de torneos, duelos, modo control ni bots. Lo demás que ofrece q2admin ya lo
 trae Q2PRO (`addban`, `sv_iplimit`, `addfiltercmd`, `addcvarban`,
 `sv_lrcon_password`, `sv_enforcetime`) o el bot del chat.
 
+## Votación de fin de mapa por secciones (`mapvoting_modes`)
+
+Al terminar el mapa, el menú de votación puede traer mapas de varios modos, separados en
+secciones. El mapa siguiente se juega en el modo de la opción ganadora.
+
+```
+     VOTA EL PROXIMO MAPA
+
+  -- Normal --
+     * dday5
+     * dday1bh
+     * inland1
+
+  -- Control de zona --
+       eurovilla
+     * inland4
+
+  -- Gun Game --
+       gg_rats
+       tebessa2
+
+    * = tiene bots
+   Usa [ y ] para elegir
+```
+
+| Cvar | Por defecto | Qué hace |
+|---|---|---|
+| `mapvoting_modes` | `0` | `1` = votación por secciones. Necesita además `mapvoting 1`. |
+| `mapvoting_normal` | `3` | Mapas de la sección Normal (`votemaps.txt`; si no existe, `sv_maplist`). |
+| `mapvoting_control` | `2` | Mapas de Control de zona (los que tienen `ents/<mapa>.ctl`). |
+| `mapvoting_gungame` | `2` | Mapas de Gun Game (los que tienen `ents/<mapa>_ffa.ent`). |
+| `mapvoting_ffa` | `0` | Mapas de Free For All clásico (todos Sniper, `_ffa.ent`). |
+
+- **Apagar una sección:** su cvar en `0` (ej. `set mapvoting_control 0` para que no salga control).
+  Rige desde la próxima votación, sin reiniciar. En total entran hasta 8 opciones.
+- **Qué mapas salen:** al azar, primero los que hace más tiempo que no se juegan (`lastmaps.txt`).
+  Nunca el mismo mapa en el mismo modo que se acaba de jugar: después de dday2 en Gun Game, dday2
+  puede salir en Normal pero no en Gun Game. En Normal, si se viene de un mapa normal, la primera
+  opción es el próximo de la rotación. Los `.bsp` rotos o que no son de D-Day no se ofrecen.
+- **Al ganar:** la DLL deja `control_mode`, `ffa`, `ffa_gungame` y `ffa_roulette 0` según el modo y
+  cambia de mapa. Avisa en el chat: "Proximo mapa: gg_rats (Gun Game)."
+- **Nadie vota:** sigue el modo actual con el próximo mapa de su rotación.
+- **Empate:** gana la primera opción empatada, en el orden del menú.
+- **También al terminar un mapa de control o Gun Game** se abre esta votación, en vez de la rotación
+  fija del modo (que queda de respaldo si nadie vota).
+- La votación dura 20 s (15 s la clásica) o termina antes si votaron todos los humanos.
+- Con `mapvoting_modes 0` la votación de fin de mapa es la de siempre (4 mapas en inglés).
+- Las sesiones del bot (`gungame <mapa>`, `control <mapa>`, `ffa <mapa>`) ponen `mapvoting 0`:
+  siguen en ese modo sin votación hasta `normal`, que repone `mapvoting` de `server.cfg`.
+- No aplica en campaña, CTB ni con `DF_SAME_LEVEL`.
+
 ## Votación de la DLL (`src/g_vote.c`)
 
 Es distinta de la votación del final del mapa (`mapvoting`): la abre un
@@ -147,3 +198,17 @@ usó un cliente mínimo en Python (protocolo 34) que conecta, responde el
 `precache`, entra a un equipo con `team` + `invuse` y envía comandos y
 cambios de userinfo. Con más de 3 clientes desde la misma IP hace falta
 `sv_iplimit 0`.
+
+### Votación de fin de mapa
+
+El menú del final se abre en `ClientThink`, que solo corre con un cliente que mande movimientos
+(`clc_move`, con checksum): el cliente en Python de arriba no alcanza. Formas de probarla:
+
+- **Con un jugador real** en el server: `set timelimit 1` por rcon termina el mapa (si ya pasó
+  más de un minuto) por el camino normal, con votación. En cuanto empiece la intermisión, volver a
+  `set timelimit 0` (o al valor de `server.cfg`) para que el mapa siguiente no dure un minuto.
+  `sv nextmap` y `vote map` **no** sirven: cortan el mapa sin votación.
+- **Solo con bots** (server local): los bots corren `ClientThink`, así que la votación se abre,
+  pero no votan; sin humanos se cierra a los 6 s y gana "nadie vota". Para votar se compiló una
+  DLL local con un comando de prueba (`sv testvote <opción>` / `menu` / `end`, no está en el repo).
+  Ojo: `tebessa2` no tiene bots, así que sin humanos ese mapa nunca termina.
