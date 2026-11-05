@@ -15,7 +15,7 @@ mapas **preparados** para él:
 | Modo | Mapa preparado si existe | Mapas hoy |
 |---|---|---|
 | Control | `ents/<mapa>.ctl` | eurovilla, inland4, invade2, invade6, itadday3, townwar |
-| FFA / Gun Game | `ents/<mapa>_ffa.ent` | dday2, tebessa2 |
+| FFA / Gun Game | `ents/<mapa>_ffa.ent` | dday2, gg_rats, tebessa2 |
 
 - **Rotación:** al terminar un mapa, la DLL pasa al siguiente mapa preparado (orden alfabético,
   vuelve al primero) y no abre la votación de fin de mapa. Si el modo arrancó en un mapa sin
@@ -63,7 +63,8 @@ Rama `free-for-all-mod` de ddaychile. Apagado por defecto; con `ffa 0` el juego 
 Todos entran como Sniper (rifle + cuchillo), sin equipos ni fuego amigo, con spawns al azar lejos de los demás, puntaje individual,
 marcador propio y anuncios del líder. Termina por `fraglimit` (30 si el server usa 0) o
 `timelimit`. No funciona junto con `tournament` y las stats persistentes (`stats 1`) no lo
-distinguen. Desde el bot: `ffa <mapa>`. Mapas preparados (spawns extra): dday2 y tebessa2, ver
+distinguen. Desde el bot: `ffa <mapa>`. Mapas preparados: dday2, tebessa2 (spawns extra) y gg_rats (mapa
+hecho para Gun Game, con jump pad y sin daño de caída), ver
 [`ents/README.md`](../ents/README.md).
 
 **Ruleta de armas** (`ffa_roulette 1`, apagada por defecto; rama `ffa-gungame` de ddaychile, 2026-10-31): en vez del Sniper, al empezar cada mapa se sortea
@@ -99,6 +100,35 @@ partida sigue siendo `ffa`, con `"variant":"gungame"` en `match_start`, el ganad
 por escalón y `gg_level` en cada jugador. Desde el bot: `gungame <mapa>` (o en frase: "admin pon
 el gun game en dday2"). Archivos para los clientes: `pics/ffa_gungame.png`,
 `pics/ffa_gungame_win.png`, `pics/ffa_w_*.png` y `sound/ffa/gg_up*.wav` (se descargan del server).
+
+### Entidades para mapas: jump pad y sin daño de caída
+
+Dos agregados que se usan desde un `.ent` (por ejemplo un `_ffa.ent`), sin tocar el `.bsp`:
+
+- **`"nofalldamage" "1"` en el `worldspawn`:** en ese mapa la caída no hace daño, ni al que cae
+  ni al que está abajo (`level.nofalldamage`, `P_FallingDamage`). Los demás mapas no cambian.
+- **`trigger_jumppad`** (entidad de punto, `g_trigger.c`): una plataforma sólida de 256x256 y 10
+  de alto (se sube caminando) que lanza hacia arriba al que la pisa. Mantiene la velocidad
+  horizontal: el que entra corriendo sale en esa dirección. El anillo del centro pulsa, salen
+  partículas y suena `sound/misc/jumppad.wav`.
+
+  ```
+  {
+  "classname" "trigger_jumppad"
+  "origin" "48 -224 -640"   // centro, a ras de piso
+  "speed" "1300"            // velocidad hacia arriba (default 1000); sube unas speed²/1600 unidades
+  }
+  ```
+
+  `"angle"` gira el modelo (la caja de colisión no gira: usar 0 o múltiplos de 90). Antes de
+  ponerlo, revisar que el techo quede más arriba que el salto. Archivos para los clientes:
+  `models/objects/jumppad/` (generado con `tools/assets/gen_jumppad.py`) y
+  `sound/misc/jumppad.wav`.
+
+Los usa **gg_rats** ("Rats", una cocina gigante), que tiene `nofalldamage` y un jump pad al centro
+del piso (speed 1300, ~1050 unidades). El mapa trae su ascensor (`func_plat`), que usa
+`sound/plats/pt1_*.wav`: en el cliente y en Oracle esos archivos eran una página HTML guardada como
+`.wav`. Ahora el repo trae unos sintetizados con ffmpeg.
 
 ## Juego: cambios de clases y armas
 
@@ -451,7 +481,7 @@ comando.
   (la DLL elige el siguiente) y `vote map` / `!votemap` solo aceptan esos mapas.
 - `ffa <mapa>` (o `ffa` solo = el mapa actual; también en frase: "admin quiero probar
   el ffa en dust") arranca Free For All en ese mapa; como `control`, rota entre los mapas con
-  `ents/<mapa>_ffa.ent` (dday2 y tebessa2) y la votación de mapa solo acepta esos.
+  `ents/<mapa>_ffa.ent` (dday2, gg_rats y tebessa2) y la votación de mapa solo acepta esos.
 - `gungame <mapa>` igual que `ffa`, pero con el Gun Game (`ffa_gungame 1`); `ffa` lo apaga.
 - `ffa ruleta <mapa>` FFA con la ruleta de armas (`ffa_roulette 1`) en vez de todos Sniper.
 - `mapa`, `dm`, `normal` y `publico` apagan el modo control y el FFA, y restauran la
