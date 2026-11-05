@@ -937,6 +937,7 @@ extern cvar_t *sleepdart_cooldown; // segundos entre dos dardos del mismo Medic
 extern cvar_t *sleepdart_wake;     // 1 = el dano despierta al dormido
 extern cvar_t *bot_noshoot;        // 1 = los bots no disparan (para probar cosas con bots)
 extern cvar_t *sleepdart_anim;     // 1, 2 o 3: animacion de muerte con la que se queda dormido en el piso
+extern cvar_t *hitmarkers;         // 0 = nada, 1 = sonido al pegarle a un enemigo, 2 = sonido y X en el centro
 extern cvar_t *fast_bleeding;
 extern cvar_t *fast_sniper;
 
@@ -1049,6 +1050,12 @@ void Think_Arty (edict_t *ent);
 //qboolean FindOnTeam(edict_t *ent);
 
 qboolean OnSameTeam(edict_t *self,edict_t *target);
+void G_LocalSound (edict_t *ent, int soundindex);
+void G_SoundExcept (edict_t *ent, int channel, int soundindex, edict_t *except);
+#define HITMARK_HIT		0		// kinds of hit for Hitmarker
+#define HITMARK_KILL	1
+#define HITMARK_HEAD	2		// a headshot (it kills)
+void Hitmarker (edict_t *attacker, int kind);
 qboolean G_IsFFA(void);
 // g_vote.c: mapas de cada modo (FFA / Gun Game: ents/<mapa>_ffa.ent; control: ents/<mapa>.ctl)
 const char *Mode_NextMap (const char *current);	// proximo mapa de la rotacion del modo, NULL fuera de esos modos
@@ -1828,6 +1835,9 @@ struct gclient_s
 	float       sleep_head;				// how far ahead of his origin his head lies (behind if < 0), with his yaw
 	float       sleep_head_z;			// the height of his face, from his origin
 	float       sleep_center;			// how far ahead of his origin the middle of his body lies (he wakes up there)
+	float       hitmarker_until;		// hitmarkers: level.time until the X is shown
+	qboolean    hitmarker_kill;			// hitmarkers: the last hit killed (red X)
+	float       hitmarker_sound_time;	// hitmarkers: level.time of the last sound (one a frame, the pellets of a shotgun)
 	vec3_t      sleep_mins, sleep_maxs;	// his box while he sleeps: around his body, which lies away from his origin
 	qboolean    sleep_falling;			// put to sleep in the air: he falls with his speed until he lands
 	int         sleep_pose;				// the pose he sleeps in (sleep_poses in p_weapon.c)
@@ -2226,6 +2236,14 @@ extern int jpn_index;
 #define SLEEP_Z_MODEL			"sprites/zzz.sp2"	// the "Z" that rises over a sleeper: 3 frames, small to big
 #define SLEEPDART_ICON			"i_nextdart"	// "NEXT DART" by the seconds the Medic waits for his next dart
 #define SLEEPDART_CROSSHAIR		"dartcross"		// 320x240 as the scopes, with the cross of Quake in the middle
+
+// hitmarkers (cvar hitmarkers): a sound and an X in the middle of the screen when you hit an enemy
+#define HITMARK_PIC				"hitmark"		// white X, 320x240 as the scopes (it is drawn in STAT_CROSSHAIR)
+#define HITKILL_PIC				"hitkill"		// red X, a bit bigger, when the hit kills him
+#define HITMARK_SOUND			"misc/hitmark.wav"
+#define HITHEAD_SOUND			"misc/hitmark_head.wav"	// a headshot: in place of the voice "HEADSHOT" (misc/hithead.wav)
+#define HITMARK_TIME			0.2		// seconds the white X is shown
+#define HITKILL_TIME			0.4		// seconds the red X is shown
 #define SYRINGE_FIRE_FIRST		4		// first frame of the injection of v_morphine (see Weapon_Morphine)
 #define SYRINGE_AIM_FIRE_FIRST	53		// first frame of its throw, with aim
 #define SLEEP_Z_INTERVAL		0.7		// seconds between two Zs

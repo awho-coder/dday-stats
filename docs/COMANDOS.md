@@ -339,6 +339,34 @@ Constantes `SLEEPDART_*` y `SLEEP_*` en `src/g_local.h`.
 
 Para probarlo con bots: `bot_noshoot 1` (en `0` por defecto) hace que los bots no disparen.
 
+## Servidor: hitmarkers (`hitmarkers`)
+
+Apagado por defecto. Cuando le pegas a un enemigo, el server te manda un sonido solo a ti (y a los espectadores
+que te siguen). No se marcan los golpes a compañeros, ni el sangrado de las heridas, ni los golpes a cuerpos.
+Tampoco los ataques de los bots.
+
+| `hitmarkers` | Qué hace |
+|---|---|
+| `0` | Nada (el juego de siempre). |
+| `1` | Solo sonido: al pegar o matar (`sound/misc/hitmark.wav`), y otro en un headshot (`hitmark_head.wav`). |
+| `2` | Sonido y una X en el centro de la pantalla: blanca al pegar (`pics/hitmark.pcx`, 0,2 s) y roja al matar (`pics/hitkill.pcx`, 0,4 s). |
+
+En un headshot, `hitmark_head.wav` reemplaza la voz "HEADSHOT" del juego (`misc/hithead.wav`) para todos: los que
+están cerca lo oyen en la cabeza del muerto, como se oía la voz, y quien disparó (y quien lo sigue) lo oye además a
+todo volumen sin importar la distancia (una sola vez, aunque esté cerca). Los headshots de los bots o entre
+compañeros también suenan con `hitmark_head.wav`, solo en la cabeza del muerto. Con `hitmarkers 0` suena la voz de
+siempre.
+
+No hace falta cambiar de mapa: se puede prender y apagar en cualquier momento (los archivos se precargan siempre).
+La X usa el mismo lugar del HUD que las miras (`STAT_CROSSHAIR`), así que con la mira telescópica, los binoculares,
+la torreta o la mira del dardo solo suena. Suena una vez por cuadro (los perdigones de la escopeta o una granada
+que pega a varios suenan una vez). La LMG, la SMG y la Browning no hacen headshot mientras el enemigo tenga más
+de 30 de vida (cuenta como golpe en el pecho).
+
+`pics/hitmark.pcx` y `pics/hitkill.pcx` salen de `tools/assets/gen_hitmarker.py`. `hitmark.wav` y
+`hitmark_head.wav` son archivos aparte, pasados a 22050 Hz mono (al del headshot también se le quitó el silencio del
+final y se comprimió para que suene fuerte). Constantes `HITMARK_*` y `HITHEAD_SOUND` en `src/g_local.h`.
+
 ## Servidor: TAB de equipos nuevo (`tab_panel`)
 
 Apagado por defecto: con `tab_panel 0` el TAB de equipos es el de siempre. Con `tab_panel 1` usa el

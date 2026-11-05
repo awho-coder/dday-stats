@@ -2470,6 +2470,17 @@ void G_SetStats (edict_t *ent)
 	if (ent->client->chasetarget && ent->client->chasetarget->client->aim && ent->client->aim)
 		ent->client->ps.stats[STAT_CROSSHAIR] = ent->client->chasetarget->client->ps.stats[STAT_CROSSHAIR];
 
+	// hitmarkers 2: the X of the last hit (of the followed player for a spectator), if no scope uses the stat
+	if (hitmarkers->value >= 2 && !ent->client->ps.stats[STAT_CROSSHAIR])
+	{
+		gclient_t *hc = ent->client;
+
+		if (hc->chasetarget && hc->chasetarget->client)
+			hc = hc->chasetarget->client;
+		if (level.time < hc->hitmarker_until)
+			ent->client->ps.stats[STAT_CROSSHAIR] = gi.imageindex (hc->hitmarker_kill ? HITKILL_PIC : HITMARK_PIC);
+	}
+
 	//
 	// SELECTED ITEM
 	//
