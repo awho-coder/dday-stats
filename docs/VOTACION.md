@@ -198,3 +198,17 @@ usó un cliente mínimo en Python (protocolo 34) que conecta, responde el
 `precache`, entra a un equipo con `team` + `invuse` y envía comandos y
 cambios de userinfo. Con más de 3 clientes desde la misma IP hace falta
 `sv_iplimit 0`.
+
+### Votación de fin de mapa
+
+El menú del final se abre en `ClientThink`, que solo corre con un cliente que mande movimientos
+(`clc_move`, con checksum): el cliente en Python de arriba no alcanza. Formas de probarla:
+
+- **Con un jugador real** en el server: `set timelimit 1` por rcon termina el mapa (si ya pasó
+  más de un minuto) por el camino normal, con votación. En cuanto empiece la intermisión, volver a
+  `set timelimit 0` (o al valor de `server.cfg`) para que el mapa siguiente no dure un minuto.
+  `sv nextmap` y `vote map` **no** sirven: cortan el mapa sin votación.
+- **Solo con bots** (server local): los bots corren `ClientThink`, así que la votación se abre,
+  pero no votan; sin humanos se cierra a los 6 s y gana "nadie vota". Para votar se compiló una
+  DLL local con un comando de prueba (`sv testvote <opción>` / `menu` / `end`, no está en el repo).
+  Ojo: `tebessa2` no tiene bots, así que sin humanos ese mapa nunca termina.
