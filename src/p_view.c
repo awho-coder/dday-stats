@@ -1165,7 +1165,8 @@ void P_FallingDamage (edict_t *ent)
 		ent->client->fall_value = 40;
 	ent->client->fall_time = level.time + FALL_TIME;
 
-	if (ent->client->landed && delta > 30)
+	// "nofalldamage" en el worldspawn (p. ej. gg_rats): la caida no hace dano ni al de abajo
+	if (ent->client->landed && delta > 30 && !level.nofalldamage)
 	{
 		if (ent->health > 0)
 		{

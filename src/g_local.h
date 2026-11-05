@@ -507,6 +507,8 @@ typedef struct
 
 	float		tornado_next;	// g_tornado.c: cuando aparece el proximo tornado automatico
 
+	qboolean	nofalldamage;	// "nofalldamage" "1" en el worldspawn: en este mapa la caida no hace dano
+
 } level_locals_t;
 
 
@@ -523,6 +525,7 @@ typedef struct
 	vec3_t		skyaxis;
 	char		*nextmap;
 	char		*polygon;	// objective_control: "x y x y ..." del borde de la zona
+	int			nofalldamage;	// worldspawn: sin dano de caida en el mapa
 
 
 	int			lip;

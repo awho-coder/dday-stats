@@ -128,6 +128,7 @@ field_t fields[] = {
 	{"distance", STOFS(distance), F_INT, FFL_SPAWNTEMP},
 	{"height", STOFS(height), F_INT, FFL_SPAWNTEMP},
 	{"polygon", STOFS(polygon), F_LSTRING, FFL_SPAWNTEMP},
+	{"nofalldamage", STOFS(nofalldamage), F_INT, FFL_SPAWNTEMP},
 	{"noise", STOFS(noise), F_LSTRING, FFL_SPAWNTEMP},
 	{"pausetime", STOFS(pausetime), F_FLOAT, FFL_SPAWNTEMP},
 	{"item", STOFS(item), F_LSTRING, FFL_SPAWNTEMP},
