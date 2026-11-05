@@ -108,6 +108,7 @@ void SP_trigger_once (edict_t *ent);
 void SP_trigger_multiple (edict_t *ent);
 void SP_trigger_relay (edict_t *ent);
 void SP_trigger_push (edict_t *ent);
+void SP_trigger_jumppad (edict_t *ent);
 void SP_trigger_hurt (edict_t *ent);
 void SP_trigger_key (edict_t *ent);
 void SP_trigger_counter (edict_t *ent);
@@ -260,6 +261,7 @@ spawn_t spawns[MAX_EDICTS] = {
 	{"trigger_multiple", SP_trigger_multiple},
 	{"trigger_relay", SP_trigger_relay},
 	{"trigger_push", SP_trigger_push},
+	{"trigger_jumppad", SP_trigger_jumppad},
 	{"trigger_hurt", SP_trigger_hurt},
 	{"trigger_key", SP_trigger_key},
 	{"trigger_counter", SP_trigger_counter},
@@ -2498,6 +2500,8 @@ void SP_worldspawn (edict_t *ent)
 	gi.imageindex ("s_80");
 	gi.imageindex ("s_90");
 	gi.imageindex ("s_100");
+
+	level.nofalldamage = (st.nofalldamage != 0);
 
 	if (!st.gravity)
 		gi.cvar_set("sv_gravity", "800");
