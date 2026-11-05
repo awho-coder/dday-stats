@@ -477,15 +477,10 @@ void turret_off (edict_t *self);
 // his client alone: without attenuation, so it is not lost among the shots or when he is dead)
 static void FFA_GunGameSound (edict_t *ent, char *name)
 {
-	if (!ent->client || ent->ai || !name || !name[0])
+	if (!name || !name[0])
 		return;
 
-	gi.WriteByte (svc_sound);
-	gi.WriteByte (2 | 8);					// SND_ATTENUATION | SND_ENT
-	gi.WriteByte (gi.soundindex (name));
-	gi.WriteByte (0);						// attenuation 0 (ATTN_NONE)
-	gi.WriteShort (((ent - g_edicts) << 3) | CHAN_AUTO);
-	gi.unicast (ent, true);
+	G_LocalSound (ent, gi.soundindex (name));
 }
 
 // Free For All Gun Game: gives the weapon of the new step to the player who killed (ClientBeginServerFrame)

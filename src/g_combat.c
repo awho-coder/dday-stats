@@ -1239,6 +1239,17 @@ void T_Damage (edict_t *targ, edict_t *inflictor, edict_t *attacker, vec3_t dir,
 				if(!saved)
 				{
 					if (!targ->deadflag) {
+						// hitmarkers: HITHEAD_SOUND in place of the voice, on his head for the ones near, and for the
+						// shooter at full volume wherever he is (Hitmarker; not twice, he is left out here)
+						if (hitmarkers->value && attacker && attacker != targ && attacker->client && !attacker->ai &&
+							!OnSameTeam (targ, attacker))
+						{
+							G_SoundExcept (targ, CHAN_VOICE, gi.soundindex (HITHEAD_SOUND), attacker);
+							Hitmarker (attacker, HITMARK_HEAD);
+						}
+						else if (hitmarkers->value)
+							gi.sound (targ, CHAN_VOICE, gi.soundindex (HITHEAD_SOUND), 1, ATTN_NORM, 0);
+						else
 						gi.sound (targ, CHAN_VOICE, gi.soundindex ("misc/hithead.wav"), 1, ATTN_NORM, 0); // ZeRo - Era CHAN_BODY, pero así no se escuchaba completo el sonido del headshot.
 						safe_cprintf(targ,PRINT_HIGH,"Your head's been shot off!\n");
 					}
@@ -1447,6 +1458,16 @@ void T_Damage (edict_t *targ, edict_t *inflictor, edict_t *attacker, vec3_t dir,
 			targ->enemy=attacker;
 		else if (mod==MOD_WOUND) 
 			attacker=targ->enemy;
+
+		// hitmarkers: only hits of a player on a living enemy, not the bleeding of the wounds
+		if (hitmarkers->value && client && take > 0 && attacker && attacker != targ && attacker->client &&
+			targ->health > 0 && !targ->deadflag && mod != MOD_WOUND && !OnSameTeam (targ, attacker))
+		{
+			if (targ->health - take > 0)
+				Hitmarker (attacker, HITMARK_HIT);
+			else if (!((wound_location & HEAD_WOUND) && !saved))	// a headshot was marked with its wound above
+				Hitmarker (attacker, HITMARK_KILL);
+		}
 		
 		targ->health = targ->health - take;
 
@@ -1533,6 +1554,65 @@ void T_Damage (edict_t *targ, edict_t *inflictor, edict_t *attacker, vec3_t dir,
 
 		}
 	}
+}
+
+
+/*
+============
+Hitmarker
+
+hitmarkers 1: a sound only for the attacker (and the spectators who follow him) when he hits or kills an enemy, and
+another one for a headshot (that one is also heard by the ones near, in place of the voice "HEADSHOT", see
+T_Damage). hitmarkers 2: also an X in the middle of the screen, white or red when it kills (in STAT_CROSSHAIR, see
+G_SetStats: not over a scope)
+============
+*/
+// a sound for that player alone and the spectators who follow him
+static void Hitmarker_Sound (edict_t *ent, int sound)
+{
+	edict_t	*spec;
+	int		i;
+
+	G_LocalSound (ent, sound);
+
+	for (i = 1; i <= maxclients->value; i++)
+	{
+		spec = g_edicts + i;
+		if (spec->inuse && spec->client && spec != ent && spec->client->chasetarget == ent)
+			G_LocalSound (spec, sound);
+	}
+}
+
+void Hitmarker (edict_t *attacker, int kind)
+{
+	gclient_t	*cl = attacker->client;
+	int			sound;
+
+	if (!cl || attacker->ai)
+		return;
+
+	// the X: white for a hit (not over a red one still shown), red for a kill
+	if (kind == HITMARK_HIT)
+	{
+		if (!cl->hitmarker_kill || level.time >= cl->hitmarker_until)
+		{
+			cl->hitmarker_until = level.time + HITMARK_TIME;
+			cl->hitmarker_kill = false;
+		}
+	}
+	else
+	{
+		cl->hitmarker_until = level.time + HITKILL_TIME;
+		cl->hitmarker_kill = true;
+	}
+
+	// one sound a frame (the pellets of a shotgun, a grenade on several), but the headshot is always heard
+	if (kind != HITMARK_HEAD && cl->hitmarker_sound_time == level.time)
+		return;
+	cl->hitmarker_sound_time = level.time;
+
+	sound = gi.soundindex (kind == HITMARK_HEAD ? HITHEAD_SOUND : HITMARK_SOUND);
+	Hitmarker_Sound (attacker, sound);
 }
 
 

@@ -2737,6 +2737,11 @@ void SP_worldspawn (edict_t *ent)
 		gi.imageindex (SLEEPDART_ICON);
 		gi.imageindex (SLEEPDART_CROSSHAIR);
 	}
+	// hitmarkers: always, so they can be turned on in the middle of a map (the players download them at the start)
+	gi.soundindex (HITMARK_SOUND);
+	gi.soundindex (HITHEAD_SOUND);
+	gi.imageindex (HITMARK_PIC);
+	gi.imageindex (HITKILL_PIC);
 	PrecacheItem ( FindItem("Healthpack")	);
 	PrecacheItem ( FindItem("Helmet")		);
 	PrecacheItem ( FindItem("Fists")		);
