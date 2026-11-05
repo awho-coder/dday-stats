@@ -106,8 +106,11 @@ chat del bot, o `control_mode 1` por rcon). Con `control_mode 1`:
   (orden alfabético, vuelve al primero) y **no abre la votación de fin de mapa**.
   Sin ningún `.ctl` en `ents/` se usa `sv_maplist` como antes.
 - **Votación de los jugadores:** `vote map` y `!votemap` solo aceptan mapas con `.ctl`.
-- Si igual se llega a la votación de fin de mapa (`mapvoting 1` sin mapas con `.ctl`), el
+- Si igual se llega a la votación de fin de mapa clásica (`mapvoting 1` sin mapas con `.ctl`), el
   mapa votado arranca en deathmatch: la DLL pone `control_mode 0` al contar los votos.
+- Con la votación por secciones (`mapvoting_modes 1`) los mapas con `.ctl` salen en su propia
+  sección (`mapvoting_control`, 2 por defecto; 0 la oculta) y, si gana uno, se juega en control.
+  Ver [`../VOTACION.md`](../VOTACION.md).
 
 Ver la sección "modos especiales, rotación y nombre del server" de `docs/COMANDOS.md`.
 

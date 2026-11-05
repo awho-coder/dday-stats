@@ -161,6 +161,11 @@ cvar_t	*swords;
 cvar_t	*nohud;
 cvar_t	*mapvoting;
 cvar_t  *mapvoting_avoid_nextmap; // kernel: to skip nextmap check when selecting maps to vote
+cvar_t  *mapvoting_modes;
+cvar_t  *mapvoting_normal;
+cvar_t  *mapvoting_control;
+cvar_t  *mapvoting_gungame;
+cvar_t  *mapvoting_ffa;
 cvar_t	*constant_play;
 cvar_t	*serverimg;
 
@@ -770,10 +775,12 @@ void EndDMLevel (void)
 
 	// FFA / Gun Game y control de zona: la rotacion va solo entre los mapas preparados para el modo
 	// (ents/<mapa>_ffa.ent o ents/<mapa>.ctl, en orden alfabetico) y sin votacion de fin de mapa;
-	// sin ningun mapa preparado sigue con sv_maplist como siempre
+	// sin ningun mapa preparado sigue con sv_maplist como siempre. Con la votacion por secciones
+	// (mapvoting_modes) si se vota, y este mapa queda de respaldo si nadie vota.
 	if (!level.campaign && (nextmap = (char *)Mode_NextMap (level.mapname)) != NULL)
 	{
-		disable_mapvoting = true;
+		if (!mapvoting->value || !mapvoting_modes->value)
+			disable_mapvoting = true;
 		safe_bprintf (PRINT_HIGH, "Next map: %s (%s)\n", nextmap, Mode_Label ());
 		BeginIntermission (CreateTargetChangeLevel (nextmap));
 		return;
@@ -1665,6 +1672,8 @@ if (campaign_winner>-1)
 
 
  
+
+	MapVote_ApplyMode ();	// modo de la opcion ganadora de la votacion por secciones
 
 	Com_sprintf (command, sizeof(command), "map \"%s\"\n", level.changemap);
 //	Com_sprintf (command, sizeof(command), "gamemap \"%s\"\n", level.changemap);
