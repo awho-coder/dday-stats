@@ -1067,6 +1067,7 @@ qboolean Vote_MapPlayable (const char *map);	// el .bsp carga y tiene spawns de 
 // votacion de fin de mapa por secciones (mapvoting_modes 1): cada opcion lleva el modo en que se juega
 int MapVote_CurrentMode (void);		// modo de la partida que se esta jugando (VMODE_*)
 int MapVote_Seconds (void);			// duracion de la votacion de fin de mapa
+void MapVote_SetPendingMode (int vmode);	// el proximo mapa se juega en ese modo (VMODE_*)
 void MapVote_ApplyMode (void);		// deja los cvars del modo ganador justo antes de cambiar de mapa (ExitLevel)
 // Free For All scoreboard pictures. The leading '/' makes them full paths: the client downloads the .png
 // itself (a plain name like "ffa_score" makes it ask for pics/ffa_score.pcx, which does not exist)

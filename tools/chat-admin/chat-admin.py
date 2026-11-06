@@ -1030,7 +1030,9 @@ def vote_blocked():
     return None
 
 def vote_what():
-    return "echar a %s" % VOTE["target_nick"] if VOTE["kind"] == "kick" else "cambiar a %s" % VOTE["map"]
+    if VOTE["kind"] == "kick":
+        return "echar a %s" % VOTE["target_nick"]
+    return "cambiar a %s%s" % (VOTE["map"], " (vuelve al modo normal)" if VOTE.get("to_normal") else "")
 
 def vote_target_present():
     """En un kick: el acusado sigue en su slot (mismo nick)."""
@@ -1054,6 +1056,8 @@ def vote_finish(passed, why=""):
         if vote_target_present():
             rcon("kick %d" % VOTE["target"])
     else:
+        if VOTE.get("to_normal"):
+            restore_rotation()
         rcon("map %s" % VOTE["map"])
 
 def vote_check():
@@ -1094,6 +1098,7 @@ def find_target(who, pl):
 
 def vote_open(kind, nick, uid, **kw):
     now = time.time()
+    kw.setdefault("to_normal", False)
     VOTE.update(active=True, kind=kind, caller=nick, caller_nick=nick, end=now + VOTE_TIME,
                 remind=now + VOTE_REMIND, votes={uid: True}, **kw)
 
@@ -1176,11 +1181,11 @@ def vote_line(line, dry=False):
         if kind != "ok":
             out("[VOTO] '%s' %s" % (real, "esta en el servidor pero no es un mapa de D-Day" if kind == "nodday"
                                     else "tiene el archivo danado, no se puede votar")); return res
-        # FFA / Gun Game / control: solo los mapas preparados para el modo (igual que la votacion de la DLL)
-        label, allowed = mode_maps()
-        if allowed is not None and real.lower() not in {m.lower() for m in allowed}:
-            out("[VOTO] en modo %s solo se vota entre: %s" % (label, ", ".join(allowed) or "(ninguno)")); return res
-        vote_open("map", nick, uid, map=real, target=None, target_nick="")
+        # FFA / Gun Game / control: un mapa que no esta preparado para el modo vuelve al modo normal (igual que
+        # la votacion de la DLL)
+        _, allowed = mode_maps()
+        to_normal = allowed is not None and real.lower() not in {m.lower() for m in allowed}
+        vote_open("map", nick, uid, map=real, target=None, target_nick="", to_normal=to_normal)
     if dry:
         print("VOTE %s abre votacion: %s" % (nick, vote_what())); return res
     if not vote_check():

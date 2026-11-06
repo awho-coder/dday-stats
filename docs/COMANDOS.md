@@ -20,8 +20,10 @@ mapas **preparados** para él:
 - **Rotación:** al terminar un mapa, la DLL pasa al siguiente mapa preparado (orden alfabético,
   vuelve al primero) y no abre la votación de fin de mapa. Si el modo arrancó en un mapa sin
   preparar, sigue con el primero preparado. Sin ningún mapa preparado se usa `sv_maplist`.
-- **Votación de los jugadores:** `vote map` y `!votemap` solo aceptan mapas preparados para el
-  modo; `vote maps` muestra la lista.
+- **Votación de los jugadores:** con `vote map` y `!votemap` un mapa preparado sigue en el modo y
+  cualquier otro **vuelve al modo normal** (el aviso dice "(vuelve al modo normal)"; al aprobarse
+  vuelven también `mapvoting` y `sv_maplist` del `server.cfg`, como `normal` del bot). `vote maps`
+  muestra los mapas del modo.
 - **Agregar un mapa a un modo:** subir su `.ctl` o `_ffa.ent` a `ents/` del server (sin reinicio).
 - **Nombre del server** (`hostname_mode 1`, 0 por defecto; en Oracle va en `server.cfg`): al cargar
   cada mapa la palabra "Ladder" del `hostname` cambia por el modo: `D-Day Chile FFA Test`,
