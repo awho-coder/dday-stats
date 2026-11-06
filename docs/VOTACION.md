@@ -88,9 +88,13 @@ Reglas:
   `info_team_start` o `info_reinforcements_start` en el `.bsp` o en
   `ents/<mapa>.ent`), sin distinguir mayúsculas. Si no está, avisa y sugiere
   parecidos; si no es de D-Day o el archivo está dañado, también avisa.
-  En **FFA / Gun Game** solo se votan los mapas con `ents/<mapa>_ffa.ent` y en
-  **control de zona** los que tienen `ents/<mapa>.ctl` (los mismos de la rotación
-  del modo); `vote maps` muestra esa lista. Igual con `!votemap` del bot.
+  En **FFA / Gun Game** los mapas con `ents/<mapa>_ffa.ent` y en **control de
+  zona** los que tienen `ents/<mapa>.ctl` (los mismos de la rotación del modo)
+  siguen en el modo; **cualquier otro mapa vuelve al modo normal**: el aviso dice
+  "cambiar a dust (vuelve al modo normal)" y, al aprobarse, el mapa siguiente se
+  juega sin FFA / Gun Game / control y vuelven `mapvoting` y `sv_maplist` del
+  `server.cfg` (al entrar al modo, el bot los deja en 0 y en el mapa del modo).
+  `vote maps` muestra los mapas del modo. Igual con `!votemap` del bot.
   Aprobada, termina como `sv nextmap`: la partida queda en las stats como
   cortada (`reason: forced`), no sale la votación de fin de mapa y el mapa
   cambia al terminar la intermisión.

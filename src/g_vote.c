@@ -30,6 +30,8 @@
  *
  * Mapas: cualquier .bsp de dday/maps que sea de D-Day (tiene spawns de equipo
  * en el .bsp o en ents/<mapa>.ent). Sin distinguir mayusculas.
+ * En FFA / Gun Game / control, un mapa preparado para el modo sigue en el modo; cualquier
+ * otro vuelve al modo normal (con mapvoting y sv_maplist del server.cfg, ver Vote_ToNormal).
  * Kick: el acusado no vota ni cuenta; no se puede echar a un admin (nick
  * protegido, ver g_nicks.c) ni a bots; sin ban, puede volver a entrar.
  * Se vota tambien en duelo y torneo (un mapa votado a mitad de duelo lo deja guardado como
@@ -98,6 +100,7 @@ static struct
 	qboolean	active;
 	int			type;
 	char		map[MAX_QPATH];		// mapa propuesto (el actual si es restart)
+	qboolean	to_normal;			// el mapa no es del modo especial actual: vuelve al modo normal
 	int			target;				// slot del acusado (kick)
 	char		target_name[32];
 	char		caller[32];
@@ -580,8 +583,10 @@ static void Vote_PrintMaps (edict_t *ent, const char *filter)
 	if (Mode_FileFormat ())
 	{
 		Mode_MapList (line, sizeof(line));
-		safe_cprintf (ent, PRINT_HIGH, "En modo %s se vota entre: %s\n", Mode_Label (), line[0] ? line : "(ninguno)");
-		return;
+		safe_cprintf (ent, PRINT_HIGH, "En modo %s se juegan: %s. Cualquier otro mapa vuelve al modo normal.\n",
+			Mode_Label (), line[0] ? line : "(ninguno)");
+		if (!filter[0])
+			return;
 	}
 	if (!filter[0])
 	{
@@ -661,15 +666,87 @@ static int Vote_Needed (int total)
 
 static const char *Vote_What (void)
 {
-	static char buf[MAX_QPATH + 32];
+	static char buf[MAX_QPATH + 64];
 
 	if (vote.type == VTYPE_RESTART)
 		Com_sprintf (buf, sizeof(buf), "reiniciar %s", vote.map);
 	else if (vote.type == VTYPE_KICK)
 		Com_sprintf (buf, sizeof(buf), "echar a %s", vote.target_name);
+	else if (vote.to_normal)
+		Com_sprintf (buf, sizeof(buf), "cambiar a %s (vuelve al modo normal)", vote.map);
 	else
 		Com_sprintf (buf, sizeof(buf), "cambiar a %s", vote.map);
 	return buf;
+}
+
+// valor de "set <name> <valor>" en el server.cfg (el que ejecuta el server al arrancar); false si no esta
+static qboolean Vote_CfgValue (const char *name, char *out, int size)
+{
+	char		line[1024], key[64];
+	const char	*p;
+	FILE		*f;
+	qboolean	found = false;
+	int			n;
+
+	f = DDay_OpenFullPathFile (sys_homedir->string, GAMEVERSION, "server.cfg", "r");
+	if (!f)
+		f = DDay_OpenFullPathFile (sys_basedir->string, GAMEVERSION, "server.cfg", "r");
+	if (!f)
+		f = DDay_OpenFullPathFile (".", GAMEVERSION, "server.cfg", "r");
+	if (!f)
+		return false;
+
+	while (fgets (line, sizeof(line), f))
+	{
+		for (p = line; *p == ' ' || *p == '\t'; p++)
+			;
+		if (Q_strncasecmp ((char *)p, "set ", 4) && Q_strncasecmp ((char *)p, "set\t", 4))
+			continue;
+		for (p += 4; *p == ' ' || *p == '\t'; p++)
+			;
+		for (n = 0; *p && *p != ' ' && *p != '\t' && n < (int)sizeof(key) - 1; p++)
+			key[n++] = *p;
+		key[n] = 0;
+		if (Q_stricmp (key, (char *)name))
+			continue;
+		for (; *p == ' ' || *p == '\t'; p++)
+			;
+		n = 0;
+		if (*p == '"')		// entre comillas: hasta la otra comilla
+		{
+			for (p++; *p && *p != '"' && n < size - 1; p++)
+				out[n++] = *p;
+		}
+		else				// una palabra (sin el comentario // que sigue)
+		{
+			for (; *p && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n' && n < size - 1; p++)
+			{
+				if (p[0] == '/' && p[1] == '/')
+					break;
+				out[n++] = *p;
+			}
+		}
+		out[n] = 0;
+		found = true;		// sigue: vale la ultima linea, como al ejecutarlo
+	}
+	fclose (f);
+	return found;
+}
+
+// vote map de FFA / Gun Game / control a un mapa que no es del modo: el proximo mapa es normal (MapVote_ApplyMode)
+// y vuelven la votacion de fin de mapa y la rotacion del server.cfg, igual que "normal" del bot del chat (al entrar
+// al modo, el bot deja mapvoting 0 y en sv_maplist solo el mapa del modo)
+static void Vote_ToNormal (void)
+{
+	char	value[1024];
+
+	MapVote_SetPendingMode (VMODE_NORMAL);
+	if (Vote_CfgValue ("mapvoting", value, sizeof(value)) && value[0])
+		gi.cvar_set ("mapvoting", value);
+	if (Vote_CfgValue ("sv_maplist", value, sizeof(value)) && value[0])
+		gi.cvar_set ("sv_maplist", value);
+	gi.dprintf ("vote: %s vuelve al modo normal (mapvoting %s, sv_maplist \"%s\")\n", vote.map,
+		gi.cvar ("mapvoting", "0", 0)->string, gi.cvar ("sv_maplist", "", 0)->string);
 }
 
 // por que no se puede votar ahora (NULL = se puede)
@@ -750,6 +827,9 @@ static void Vote_End (qboolean passed, const char *why)
 		gi.AddCommandString (va ("kick %d\n", vote.target));
 		return;
 	}
+
+	if (vote.type == VTYPE_MAP && vote.to_normal)
+		Vote_ToNormal ();
 
 	// igual que "sv nextmap": la partida queda como cortada y sin votacion final
 	disable_mapvoting = true;
@@ -971,15 +1051,9 @@ static void Vote_StartMap (edict_t *ent, const char *arg)
 		return;
 	}
 
-	// FFA / Gun Game / control: solo los mapas preparados para el modo (para volver al juego normal, el admin)
-	if (!Mode_MapFits (vote_maps[idx]))
-	{
-		Mode_MapList (sug, sizeof(sug));
-		safe_cprintf (ent, PRINT_HIGH, "En modo %s solo se vota entre: %s\n", Mode_Label (), sug[0] ? sug : "(ninguno)");
-		return;
-	}
-
 	Com_sprintf (vote.map, sizeof(vote.map), "%s", vote_maps[idx]);	// nombre real del archivo
+	// FFA / Gun Game / control: un mapa que no esta preparado para el modo vuelve al modo normal
+	vote.to_normal = !Mode_MapFits (vote_maps[idx]);
 	Vote_Start (ent, VTYPE_MAP);
 }
 
@@ -1066,6 +1140,7 @@ void Cmd_Vote_f (edict_t *ent)
 	if (!Q_stricmp (arg, "restart"))
 	{
 		Com_sprintf (vote.map, sizeof(vote.map), "%s", level.mapname);
+		vote.to_normal = false;
 		Vote_Start (ent, VTYPE_RESTART);
 	}
 	else if (!Q_stricmp (arg, "kick"))

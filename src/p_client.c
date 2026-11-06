@@ -3561,6 +3561,12 @@ static const char *MapVote_ModeLabel (int vmode)
 	return "normal";
 }
 
+// el proximo mapa se juega en ese modo (VMODE_*): lo usa tambien vote map para volver al modo normal
+void MapVote_SetPendingMode (int vmode)
+{
+	vote_pending_mode = vmode;
+}
+
 void MapVote_ApplyMode (void)
 {
 	int mode = vote_pending_mode;
