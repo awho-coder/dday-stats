@@ -1363,8 +1363,6 @@ target_laser, asi que se ven siempre y no solo cuando salta una chispa.
 #define CONTROL_BEAM_SLOPE	0.75	// subida maxima por unidad que avanza el tramo
 #define CONTROL_BEAM_MAXSTEP	24	// tolerancia de desnivel extra (escalones)
 #define CONTROL_BEAM_SPLITS	3	// veces que un tramo malo se parte por la mitad
-#define CONTROL_PILLAR_HEIGHT	1200	// alto maximo del laser sobre la bandera
-#define CONTROL_PILLAR_WIDTH	6
 
 static int Control_BeamColor (void)
 {
@@ -1501,20 +1499,6 @@ static void Control_BuildBeams (edict_t *zone)
 		}
 	}
 
-	// pilar de luz sobre la bandera, para ubicar la zona de lejos
-	if (level.control_flag)
-	{
-		vec3_t	base, top;
-		trace_t	tr;
-
-		VectorCopy (level.control_flag->s.origin, base);
-		base[2] += CONTROL_BEAM_LIFT;
-		VectorCopy (base, top);
-		top[2] += CONTROL_PILLAR_HEIGHT;
-		tr = gi.trace (base, NULL, NULL, top, level.control_flag, MASK_SOLID);
-		Control_AddBeam (base, tr.endpos, CONTROL_PILLAR_WIDTH, true);
-	}
-
 	for (i = 0; i < n; i++)
 		Control_AddEdge (zone, pts[i], pts[(i + 1) % n]);
 
@@ -1555,6 +1539,44 @@ static void Control_UpdateBeams (edict_t *zone)
 	color = Control_BeamColor ();
 	for (i = 0; i < level.control_numbeams; i++)
 		level.control_beams[i]->s.skinnum = color;
+}
+
+/*
+Columna de particulas sobre la bandera (control_border 1): una linea vertical de
+chispas del color del dueno (TE_FORCEWALL), para ubicar la zona de lejos. Se repite
+cada pocos frames porque las particulas se apagan solas.
+*/
+#define CONTROL_COLUMN_HEIGHT	800		// alto maximo de la columna
+#define CONTROL_COLUMN_FRAMES	4		// cada cuantos frames se renueva
+
+static void Control_DrawColumn (void)
+{
+	vec3_t	base, top;
+	trace_t	tr;
+	int		color;
+
+	if (!level.control_flag)
+		return;
+
+	if (level.control_owner == 1)
+		color = 0xf3;	// azul
+	else if (level.control_owner == 2)
+		color = 0xf2;	// rojo
+	else
+		color = 0xdc;	// amarillo: neutral
+
+	VectorCopy (level.control_flag->s.origin, base);
+	base[2] += 8;
+	VectorCopy (base, top);
+	top[2] += CONTROL_COLUMN_HEIGHT;
+	tr = gi.trace (base, NULL, NULL, top, level.control_flag, MASK_SOLID);
+
+	gi.WriteByte (svc_temp_entity);
+	gi.WriteByte (TE_FORCEWALL);
+	gi.WritePosition (base);
+	gi.WritePosition (tr.endpos);
+	gi.WriteByte (color);
+	gi.multicast (base, MULTICAST_PVS);
 }
 
 // borde de chispas de la zona, con el color del dueno
@@ -1720,6 +1742,8 @@ void objective_control_think (edict_t *self)
 	Control_UpdateBeams (self);
 	if (level.framenum % 10 == 0 && !level.control_numbeams)
 		Control_DrawRing (self);
+	if (control_border && control_border->value > 0 && level.framenum % CONTROL_COLUMN_FRAMES == 0)
+		Control_DrawColumn ();
 
 	unlock_time = level.control_start + Control_Cvar (control_lock, 0.1);
 
