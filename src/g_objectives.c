@@ -1069,6 +1069,35 @@ static qboolean Control_InPolygon (float x, float y)
 	return inside;
 }
 
+// el origen del jugador es su centro: parado justo en la linea tiene medio cuerpo
+// adentro. Cuenta como dentro si esta a menos de CONTROL_EDGE_MARGIN de algun lado.
+#define CONTROL_EDGE_MARGIN	16	// mitad del ancho del jugador
+
+static qboolean Control_NearPolygonEdge (float x, float y)
+{
+	int		i, j;
+	float	(*p)[2] = level.control_poly;
+
+	for (i = 0, j = level.control_numpoints - 1; i < level.control_numpoints; j = i++)
+	{
+		float	dx = p[i][0] - p[j][0], dy = p[i][1] - p[j][1];
+		float	len2 = dx * dx + dy * dy, t = 0, cx, cy;
+
+		if (len2 > 0)
+		{
+			t = ((x - p[j][0]) * dx + (y - p[j][1]) * dy) / len2;
+			if (t < 0) t = 0;
+			if (t > 1) t = 1;
+		}
+		cx = p[j][0] + dx * t - x;
+		cy = p[j][1] + dy * t - y;
+		if (cx * cx + cy * cy <= CONTROL_EDGE_MARGIN * CONTROL_EDGE_MARGIN)
+			return true;
+	}
+
+	return false;
+}
+
 static qboolean Control_InZone (edict_t *zone, edict_t *ent)
 {
 	vec3_t	delta;
@@ -1081,10 +1110,11 @@ static qboolean Control_InZone (edict_t *zone, edict_t *ent)
 
 	// el poligono lo marco el mapper a mano: no hace falta linea de vista
 	if (level.control_numpoints)
-		return Control_InPolygon (ent->s.origin[0], ent->s.origin[1]);
+		return Control_InPolygon (ent->s.origin[0], ent->s.origin[1]) ||
+			Control_NearPolygonEdge (ent->s.origin[0], ent->s.origin[1]);
 
 	delta[2] = 0;
-	if (VectorLength (delta) > zone->obj_area)
+	if (VectorLength (delta) > zone->obj_area + CONTROL_EDGE_MARGIN)
 		return false;
 
 	// no se captura a traves de paredes
@@ -1265,24 +1295,43 @@ static void Control_Capture (edict_t *zone, int team)
 }
 
 // piso bajo (x, y), buscado desde arriba del rango de altura de la zona
+// altura del ultimo piso encontrado: sirve para elegir entre varios pisos (calle
+// y tunel debajo, balcon y suelo) el que sigue al punto anterior del borde
+static float control_floor_ref;
+
 static qboolean Control_FloorPoint (edict_t *zone, float x, float y, vec3_t out)
 {
 	vec3_t	start, end;
 	trace_t	tr;
+	float	lift, best = 0;
+	qboolean	found = false;
 
 	start[0] = end[0] = x;
 	start[1] = end[1] = y;
-	// el rayo parte casi a la altura del piso de la zona (no desde count arriba):
-	// asi no se apoya en balcones, techos o repisas que quedan sobre el borde
-	start[2] = zone->s.origin[2] + 8;
 	end[2] = zone->s.origin[2] - zone->count - 64;
 
-	tr = gi.trace (start, NULL, NULL, end, zone, MASK_SOLID);
-	if (tr.startsolid || tr.fraction == 1.0)
-		return false;
+	// se prueban varias alturas de partida y cada una que no arranca dentro de la
+	// tierra da un piso posible; se elige el mas cercano al del punto anterior
+	for (lift = zone->count; lift >= -zone->count; lift -= 24)
+	{
+		start[2] = zone->s.origin[2] + lift;
+		tr = gi.trace (start, NULL, NULL, end, zone, MASK_SOLID);
+		if (tr.startsolid || tr.allsolid || tr.fraction == 1.0)
+			continue;
 
-	VectorCopy (tr.endpos, out);
-	return true;
+		if (!found || fabs(tr.endpos[2] - control_floor_ref) < fabs(best - control_floor_ref))
+		{
+			best = tr.endpos[2];
+			VectorCopy (tr.endpos, out);
+			found = true;
+		}
+	}
+
+	if (found)
+	{
+		control_floor_ref = best;
+	}
+	return found;
 }
 
 static void Control_Spark (edict_t *zone, float x, float y, int color)
@@ -1311,6 +1360,9 @@ target_laser, asi que se ven siempre y no solo cuando salta una chispa.
 #define CONTROL_BEAM_STEP	160	// largo maximo de cada tramo de la linea
 #define CONTROL_BEAM_LIFT	8	// altura de la linea sobre el piso
 #define CONTROL_BEAM_WIDTH	6
+#define CONTROL_BEAM_SLOPE	0.75	// subida maxima por unidad que avanza el tramo
+#define CONTROL_BEAM_MAXSTEP	24	// tolerancia de desnivel extra (escalones)
+#define CONTROL_BEAM_SPLITS	3	// veces que un tramo malo se parte por la mitad
 #define CONTROL_PILLAR_HEIGHT	1200	// alto maximo del laser sobre la bandera
 #define CONTROL_PILLAR_WIDTH	6
 
@@ -1358,11 +1410,47 @@ static void Control_AddBeam (vec3_t start, vec3_t end, int width, qboolean solid
 	level.control_beams[level.control_numbeams++] = beam;
 }
 
+// tramo de (ax,ay) a (bx,by) con el piso de cada punta (h0/h1 = se encontro). Si el
+// tramo sirve se dibuja; si no (una punta dentro de una pared, o el piso salta como
+// en un techo de arco o balcon) se parte por la mitad y se prueba cada mitad, asi
+// solo se pierde lo que de verdad esta tapado y no el tramo entero
+static void Control_AddSpan (edict_t *zone, float ax, float ay, float bx, float by,
+	vec3_t p0, qboolean h0, vec3_t p1, qboolean h1, int depth)
+{
+	float	len = sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
+	vec3_t	pm = {0, 0, 0}, s0, s1;
+	qboolean	hm;
+	float	mx, my;
+
+	// un tramo no puede subir mas de lo que avanza (rampa o escalon si)
+	if (h0 && h1 && fabs(p1[2] - p0[2]) <= len * CONTROL_BEAM_SLOPE + CONTROL_BEAM_MAXSTEP)
+	{
+		VectorCopy (p0, s0);
+		VectorCopy (p1, s1);
+		s0[2] += CONTROL_BEAM_LIFT;
+		s1[2] += CONTROL_BEAM_LIFT;
+		Control_AddBeam (s0, s1, CONTROL_BEAM_WIDTH, false);
+		return;
+	}
+
+	if (depth >= CONTROL_BEAM_SPLITS || len < 24)
+		return;
+
+	mx = (ax + bx) / 2;
+	my = (ay + by) / 2;
+	if (h0)
+		control_floor_ref = p0[2];
+	hm = Control_FloorPoint (zone, mx, my, pm);
+
+	Control_AddSpan (zone, ax, ay, mx, my, p0, h0, pm, hm, depth + 1);
+	Control_AddSpan (zone, mx, my, bx, by, pm, hm, p1, h1, depth + 1);
+}
+
 // linea de a[] a b[] por el piso, en tramos de CONTROL_BEAM_STEP como mucho
 static void Control_AddEdge (edict_t *zone, float *a, float *b)
 {
 	vec3_t	p0 = {0, 0, 0}, p1 = {0, 0, 0};
-	float	len;
+	float	len, x0, y0, x1, y1;
 	int		j, steps;
 	qboolean	have0;
 
@@ -1371,22 +1459,23 @@ static void Control_AddEdge (edict_t *zone, float *a, float *b)
 	if (steps < 1)
 		steps = 1;
 
-	have0 = Control_FloorPoint (zone, a[0], a[1], p0);
+	x0 = a[0];
+	y0 = a[1];
+	have0 = Control_FloorPoint (zone, x0, y0, p0);
 	for (j = 1; j <= steps; j++)
 	{
-		qboolean have1 = Control_FloorPoint (zone, a[0] + (b[0] - a[0]) * j / steps,
-			a[1] + (b[1] - a[1]) * j / steps, p1);
+		qboolean have1;
 
-		if (have0 && have1)
-		{
-			p0[2] += CONTROL_BEAM_LIFT;
-			p1[2] += CONTROL_BEAM_LIFT;
-			Control_AddBeam (p0, p1, CONTROL_BEAM_WIDTH, false);
-			p1[2] -= CONTROL_BEAM_LIFT;
-		}
+		x1 = a[0] + (b[0] - a[0]) * j / steps;
+		y1 = a[1] + (b[1] - a[1]) * j / steps;
+		have1 = Control_FloorPoint (zone, x1, y1, p1);
+
+		Control_AddSpan (zone, x0, y0, x1, y1, p0, have0, p1, have1, 0);
 
 		VectorCopy (p1, p0);
 		have0 = have1;
+		x0 = x1;
+		y0 = y1;
 	}
 }
 
@@ -1828,6 +1917,7 @@ void SP_objective_control (edict_t *self)
 		VectorCopy (tr.endpos, flag->s.origin);
 	gi.linkentity (flag);
 	level.control_flag = flag;
+	control_floor_ref = flag->s.origin[2];
 	gi.dprintf ("objective_control: bandera en %s\n", vtos(flag->s.origin));
 
 	if (level.control_numpoints)

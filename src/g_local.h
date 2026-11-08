@@ -501,7 +501,7 @@ typedef struct
 	int			control_introsent[MAX_CLIENTS];	// veces que se mostro la explicacion del modo a cada jugador
 	float		control_intronext[MAX_CLIENTS];	// cuando repetirla, para que dure en pantalla
 	qboolean	control_engunlock[MAX_TEAMS];	// ingeniero desbloqueado para ese equipo (el rival llego a control_engineer_at)
-#define CONTROL_MAX_BEAMS	64
+#define CONTROL_MAX_BEAMS	128
 	edict_t		*control_beams[CONTROL_MAX_BEAMS];	// laseres del borde de la zona (control_border)
 	int			control_numbeams;
 
