@@ -1309,6 +1309,8 @@ target_laser, asi que se ven siempre y no solo cuando salta una chispa.
 #define CONTROL_BEAM_STEP	160	// largo maximo de cada tramo de la linea
 #define CONTROL_BEAM_LIFT	8	// altura de la linea sobre el piso
 #define CONTROL_BEAM_WIDTH	6
+#define CONTROL_PILLAR_HEIGHT	1200	// alto maximo del laser sobre la bandera
+#define CONTROL_PILLAR_WIDTH	6
 
 static int Control_BeamColor (void)
 {
@@ -1327,7 +1329,7 @@ static void Control_BeamThink (edict_t *beam)
 	beam->nextthink = level.time + FRAMETIME;
 }
 
-static void Control_AddBeam (vec3_t start, vec3_t end, int width)
+static void Control_AddBeam (vec3_t start, vec3_t end, int width, qboolean solid)
 {
 	edict_t	*beam;
 
@@ -1338,7 +1340,7 @@ static void Control_AddBeam (vec3_t start, vec3_t end, int width)
 	beam->classname = "control_beam";
 	beam->movetype = MOVETYPE_NONE;
 	beam->solid = SOLID_NOT;
-	beam->s.renderfx = RF_BEAM|RF_TRANSLUCENT;
+	beam->s.renderfx = solid ? RF_BEAM : (RF_BEAM|RF_TRANSLUCENT);
 	beam->s.modelindex = 1;		// tiene que ser distinto de 0 para que se mande
 	beam->s.frame = width;
 	beam->s.skinnum = Control_BeamColor ();
@@ -1377,7 +1379,7 @@ static void Control_AddEdge (edict_t *zone, float *a, float *b)
 		{
 			p0[2] += CONTROL_BEAM_LIFT;
 			p1[2] += CONTROL_BEAM_LIFT;
-			Control_AddBeam (p0, p1, CONTROL_BEAM_WIDTH);
+			Control_AddBeam (p0, p1, CONTROL_BEAM_WIDTH, false);
 			p1[2] -= CONTROL_BEAM_LIFT;
 		}
 
@@ -1406,6 +1408,20 @@ static void Control_BuildBeams (edict_t *zone)
 			pts[i][0] = zone->s.origin[0] + cos(angle) * zone->obj_area;
 			pts[i][1] = zone->s.origin[1] + sin(angle) * zone->obj_area;
 		}
+	}
+
+	// pilar de luz sobre la bandera, para ubicar la zona de lejos
+	if (level.control_flag)
+	{
+		vec3_t	base, top;
+		trace_t	tr;
+
+		VectorCopy (level.control_flag->s.origin, base);
+		base[2] += CONTROL_BEAM_LIFT;
+		VectorCopy (base, top);
+		top[2] += CONTROL_PILLAR_HEIGHT;
+		tr = gi.trace (base, NULL, NULL, top, level.control_flag, MASK_SOLID);
+		Control_AddBeam (base, tr.endpos, CONTROL_PILLAR_WIDTH, true);
 	}
 
 	for (i = 0; i < n; i++)
