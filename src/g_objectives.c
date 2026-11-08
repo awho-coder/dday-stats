@@ -1272,7 +1272,9 @@ static qboolean Control_FloorPoint (edict_t *zone, float x, float y, vec3_t out)
 
 	start[0] = end[0] = x;
 	start[1] = end[1] = y;
-	start[2] = zone->s.origin[2] + zone->count;
+	// el rayo parte casi a la altura del piso de la zona (no desde count arriba):
+	// asi no se apoya en balcones, techos o repisas que quedan sobre el borde
+	start[2] = zone->s.origin[2] + 8;
 	end[2] = zone->s.origin[2] - zone->count - 64;
 
 	tr = gi.trace (start, NULL, NULL, end, zone, MASK_SOLID);
