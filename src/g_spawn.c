@@ -1310,8 +1310,9 @@ void SpawnEntities2 (char *mapname, char *entities, char *spawnpoint)
 =================
 G_ModeHostname
 
-hostname_mode 1: en FFA, Gun Game o control de zona la palabra "Ladder" del nombre del server cambia por
-el modo ("D-Day Chile Ladder Test" -> "D-Day Chile Gungame Test"); en el juego normal vuelve al nombre
+hostname_mode 1: en FFA, Gun Game o control de zona la palabra hostname_word ("Ladder" por defecto) del
+nombre del server cambia por el texto del modo: hostname_ffa ("FFA"), hostname_gungame ("Gungame") y
+hostname_control ("Control"), todos configurables ("D-Day Chile Ladder Test" -> "D-Day Chile Gungame Test"); en el juego normal vuelve al nombre
 original. La DLL se recarga en cada mapa, asi que el nombre original y el ultimo aplicado se guardan en
 cvars (hostname_base, hostname_applied). Si un admin cambia hostname a mano, ese pasa a ser el original.
 =================
@@ -1321,8 +1322,9 @@ void G_ModeHostname (void)
 	cvar_t		*host = gi.cvar ("hostname", "", 0);
 	cvar_t		*base = gi.cvar ("hostname_base", "", 0);
 	cvar_t		*applied = gi.cvar ("hostname_applied", "", 0);
-	const char	*label = NULL;
+	const char	*label = NULL, *word;
 	char		name[128], *p;
+	int			wlen;
 
 	if (!hostname_mode || !hostname_mode->value)
 	{
@@ -1337,13 +1339,17 @@ void G_ModeHostname (void)
 		gi.cvar_set ("hostname_base", host->string);
 
 	if (G_IsFFA ())
-		label = (ffa_gungame && ffa_gungame->value) ? "Gungame" : "FFA";
+		label = (ffa_gungame && ffa_gungame->value) ? gi.cvar ("hostname_gungame", "Gungame", 0)->string
+			: gi.cvar ("hostname_ffa", "FFA", 0)->string;
 	else if (level.control_zone)
-		label = "Control";
+		label = gi.cvar ("hostname_control", "Control", 0)->string;
 
-	p = label ? strstr (base->string, "Ladder") : NULL;
+	// palabra del nombre que se reemplaza (hostname_word, por defecto "Ladder")
+	word = gi.cvar ("hostname_word", "Ladder", 0)->string;
+	wlen = strlen (word);
+	p = (label && wlen) ? strstr (base->string, word) : NULL;
 	if (p)
-		Com_sprintf (name, sizeof(name), "%.*s%s%s", (int)(p - base->string), base->string, label, p + 6);
+		Com_sprintf (name, sizeof(name), "%.*s%s%s", (int)(p - base->string), base->string, label, p + wlen);
 	else
 		Com_sprintf (name, sizeof(name), "%s", base->string);
 
