@@ -447,9 +447,13 @@ def convert(path, server, kind, event, end_ts, weapons):
             else:
                 live_frame, pauses = frame, []
             pause_at, resuming = None, False
-        m = re.match(r"Team (Allies|Axis) is victorious(?: \((\d+) / (\d+) kills\))?", text)
+        # el mensaje trae el nombre del equipo: "Allies"/"Axis" o el del ejército
+        # ("Company Bravo As", "Rommel's Skull"...); en ese caso el equipo ganador se
+        # deduce de la cuenta de kills (más abajo)
+        m = re.match(r"Team (.+?) is victorious(?: \((\d+) / (\d+) kills\))?", text)
         if k == "print" and m:
-            end_frame, winner = frame, (0 if m.group(1) == "Allies" else 1)
+            end_frame = frame
+            winner = {"Allies": 0, "Axis": 1}.get(m.group(1), -2)   # -2 = por deducir
             end_kills = int(m.group(2)) if m.group(2) else None
     if kind == "duel" and live_frame is None:
         raise SystemExit(f"{path}: duelo sin 'Que comience el juego!' (sin cuenta regresiva)")
@@ -624,6 +628,12 @@ def convert(path, server, kind, event, end_ts, weapons):
             team_kills[kl["team"]] += 1
         elif ev["suicide"] and vteam in (0, 1):
             team_kills[1 - vteam] += 1
+    if winner == -2:
+        winner = 0 if team_kills[0] > team_kills[1] else 1 if team_kills[1] > team_kills[0] else None
+    # el servidor anuncia "(N / límite kills)": es la cuenta oficial del ganador. Nuestra
+    # cuenta puede pasarse por 1 (castigos por matar a un compañero, suicidios dobles)
+    if end_kills is not None and winner in (0, 1):
+        team_kills[winner] = end_kills
     t_end = round(end_frame * FRAME_S, 1)
     for name in sorted(set(stats) | set(summary)):
         s = stats.get(name, {"time": [0, 0], "classes": {}})
