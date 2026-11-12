@@ -763,6 +763,7 @@ void FFA_GunGameDeath (edict_t *victim, qboolean suicide, int mod);	// p_classes
 extern	cvar_t	*ffa_gg_snd_up;		// Free For All Gun Game: sound (path in the sound folder) of the player who goes up a step
 extern	cvar_t	*ffa_gg_snd_down;	// Free For All Gun Game: sound of the player who goes down a step
 extern	cvar_t	*ffa_gg_victory_vol;	// Free For All Gun Game: volume (0-1) of each of the 3 copies of the victory anthem
+extern	cvar_t	*ffa_gg_leader_level;	// Free For All Gun Game: from this step on the leader(s) get a gold aura + light (0 = off)
 void FFA_RouletteSetup (int count, int *images, int winner, char *name);	// p_hud.c
 #define FFA_DEFAULT_FRAGLIMIT	30	// Free For All frags to win when the server fraglimit is 0
 #define FFA_LEVEL_WAIT			10	// Free For All seconds of lobby at the start of the level

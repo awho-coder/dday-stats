@@ -67,6 +67,7 @@ cvar_t	*ffa_gg_factions;
 cvar_t	*ffa_gg_snd_up;
 cvar_t	*ffa_gg_snd_down;
 cvar_t	*ffa_gg_victory_vol;
+cvar_t	*ffa_gg_leader_level;
 cvar_t	*dmflags;
 cvar_t	*skill;
 cvar_t	*fraglimit;
