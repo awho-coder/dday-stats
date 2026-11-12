@@ -99,6 +99,7 @@ y LEVEL, el TAB una columna `Lvl` y al final el banner del ganador.
 | `ffa_gg_snd_up` | `ffa/gg_up2.wav` | Sonido al subir (ruta bajo `sound/`). |
 | `ffa_gg_snd_down` | `misc/menu3.wav` | Sonido al bajar. |
 | `ffa_gg_victory_vol` | 0.4 | Volumen del himno de victoria (0-1; suena 3 veces encima, 0 = sin himno). |
+| `ffa_gg_leader_level` | 0 | Desde este escalón el líder (o los empatados arriba) brilla con un aura dorada que parpadea lento y una luz amarilla, visibles solo al mirarlo. 0 = apagado. En Oracle está en 25. |
 
 Si en un mapa no caben todos los modelos o sonidos (Quake 2 admite 256 de cada uno), la escalera
 queda más corta y el log del server lo dice (`Gun Game: N weapons left out`). En las stats la
