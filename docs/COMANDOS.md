@@ -127,6 +127,12 @@ Dos agregados que se usan desde un `.ent` (por ejemplo un `_ffa.ent`), sin tocar
   }
   ```
 
+  `"spawnflags"` cambia el tipo: `1` = plataforma chica (96x96, `models/objects/jumppad_small/`), `2` = **diagonal**:
+  una flecha plana no sólida (`models/objects/jumppad_arrow/`, franjas amarillas y negras) que apunta hacia
+  `"angle"` y lanza a 45° en esa dirección. `speed` es la velocidad total (default 800; el alcance en plano
+  es `speed²/800`, 894 = ~1000 unidades) y reemplaza la velocidad horizontal con la que se entra. El ángulo y la
+  posición salen de un `spot` marcado en el juego (`origin` = la z del `spot` menos 24).
+
   `"angle"` gira el modelo (la caja de colisión no gira: usar 0 o múltiplos de 90). Antes de
   ponerlo, revisar que el techo quede más arriba que el salto. Archivos para los clientes:
   `models/objects/jumppad/` (generado con `tools/assets/gen_jumppad.py`) y

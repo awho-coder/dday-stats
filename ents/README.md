@@ -23,7 +23,7 @@ Al cargar el mapa en FFA, la consola del servidor debe decir `dday2_ffa.ent Load
 | Archivo | Descripción |
 |---|---|
 | `dday2_ffa.ent` | Copia de `dday2.ent` más 19 puntos de spawn para FFA (`info_reinforcements_start`). |
-| `gg_rats_ffa.ent` | Las entidades del `.bsp` (47 spawns, 23 lugares) más `"nofalldamage" "1"` en el worldspawn y un `trigger_jumppad` al centro (ver `docs/COMANDOS.md`, "Entidades para mapas"). Sin `.nav`: los bots no navegan. |
+| `gg_rats_ffa.ent` | Las entidades del `.bsp` (47 spawns, 23 lugares) más `"nofalldamage" "1"` en el worldspawn y un `trigger_jumppad` al centro y 2 trampolines diagonales chicos (`spawnflags 3`) (ver `docs/COMANDOS.md`, "Entidades para mapas"). Sin `.nav`: los bots no navegan. |
 | `inferno_ffa.ent` | Las 122 entidades del `.bsp` de `inferno` más 31 `info_reinforcements_start` para FFA y Gun Game (los del mapa `gg_inferno`, que sirven tal cual). Sin `.nav`: los bots no navegan. |
 | `tebessa2_ffa.ent` | Las 6 entidades del `.bsp` (el mapa no tiene `.ent`) más 14 puntos de spawn (16 en total). Sin `.nav`: en tebessa2 no entran bots. |
 

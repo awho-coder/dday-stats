@@ -864,3 +864,17 @@
 "origin" "48 -224 -640"
 "speed" "1300"
 }
+{
+"classname" "trigger_jumppad"
+"spawnflags" "3"
+"origin" "263 191 -143"
+"angle" "270"
+"speed" "894"
+}
+{
+"classname" "trigger_jumppad"
+"spawnflags" "3"
+"origin" "30 -677 -175"
+"angle" "88"
+"speed" "894"
+}
