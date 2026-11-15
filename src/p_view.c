@@ -955,7 +955,10 @@ void SV_CalcBlend (edict_t *ent)
 		ent->client->resp.deathblend = 0;
 	}
 
-	if (contents & (CONTENTS_SOLID))//|CONTENTS_LAVA))
+	// el observador vuela en noclip: fuera del mapa no se tine de naranja
+	if ((contents & CONTENTS_SOLID) && ent->movetype == MOVETYPE_NOCLIP)
+		;
+	else if (contents & (CONTENTS_SOLID))//|CONTENTS_LAVA))
 		SV_AddBlend (1.0, 0.3, 0.0, 0.6, ent->client->ps.blend);
 	else if (contents & CONTENTS_SLIME)
 		SV_AddBlend (0.0, 0.1, 0.05, 0.6, ent->client->ps.blend);
