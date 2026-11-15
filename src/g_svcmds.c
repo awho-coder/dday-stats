@@ -617,7 +617,7 @@ void StartCount(int seconds)
 	int i;
 	edict_t* player;
 
-	if (tournament->value && freeze_remaining <= 0)
+	if ((tournament->value || Ready_MatchPending ()) && freeze_remaining <= 0)
 	{
 		// kernel: remove sandbags, live grenades and TNT
 		RemoveSandbags();
