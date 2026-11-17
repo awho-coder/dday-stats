@@ -68,6 +68,11 @@ cvar_t	*ffa_gg_snd_up;
 cvar_t	*ffa_gg_snd_down;
 cvar_t	*ffa_gg_victory_vol;
 cvar_t	*ffa_gg_leader_level;
+cvar_t	*ffa_anticamp;
+cvar_t	*ffa_camp_secs;
+cvar_t	*ffa_camp_dist;
+cvar_t	*slap_push;
+cvar_t	*slap_damage;
 cvar_t	*dmflags;
 cvar_t	*skill;
 cvar_t	*fraglimit;
@@ -1765,6 +1770,7 @@ void G_RunFrame (void)
 	Ready_RunFrame ();
 	Nick_RunFrame ();
 	Tornado_RunFrame ();
+	Anticamp_RunFrame ();
 
 	if ((level.framenum%40 == 1 && qbots && bots->value == 0) ||
 		(bots->value == 1 && 

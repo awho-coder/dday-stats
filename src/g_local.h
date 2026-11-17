@@ -2685,6 +2685,14 @@ void Svcmd_Nicks_f (void);
 edict_t *Tornado_Spawn (edict_t *anchor);
 void Tornado_RunFrame (void);
 void Svcmd_Tornado_f (void);
+// g_svcmds.c: cachetada anti-campeo del Gun Game
+extern	cvar_t	*ffa_anticamp;		// 1 (default) = quien se queda quieto ffa_camp_secs en el Gun Game recibe cachetadas (0 = off)
+extern	cvar_t	*ffa_camp_secs;
+extern	cvar_t	*ffa_camp_dist;
+extern	cvar_t	*slap_push;			// fuerza del empujon de la cachetada
+extern	cvar_t	*slap_damage;		// dano de la cachetada (0 = ninguno)
+void Svcmd_Slap_f (void);
+void Anticamp_RunFrame (void);
 // ai_navigation.c: nodos de los bots para el recorrido del tornado
 int AI_NumNodes (void);
 void AI_NodeOrigin (int n, vec3_t out);
