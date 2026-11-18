@@ -468,7 +468,7 @@ void InitGame (void)
 	ffa_gg_victory_vol = gi.cvar("ffa_gg_victory_vol", "0.4", 0);
 	ffa_gg_leader_level = gi.cvar("ffa_gg_leader_level", "0", 0);
 	ffa_anticamp = gi.cvar("ffa_anticamp", "1", 0);
-	ffa_camp_secs = gi.cvar("ffa_camp_secs", "4", 0);
+	ffa_camp_secs = gi.cvar("ffa_camp_secs", "6", 0);
 	ffa_camp_dist = gi.cvar("ffa_camp_dist", "150", 0);
 	slap_push = gi.cvar("slap_push", "320", 0);
 	slap_damage = gi.cvar("slap_damage", "0", 0);
