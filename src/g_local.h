@@ -749,6 +749,7 @@ void FFA_GunGameKill (edict_t *killer, int mod);	// p_classes.c: a kill of the p
 void FFA_GunGameDeath (edict_t *victim, qboolean suicide, int mod);	// p_classes.c: a death of the player, may demote
 extern	cvar_t	*ffa_gg_snd_up;		// Free For All Gun Game: sound (path in the sound folder) of the player who goes up a step
 extern	cvar_t	*ffa_gg_snd_down;	// Free For All Gun Game: sound of the player who goes down a step
+extern	cvar_t	*ffa_gg_victory_vol;	// Free For All Gun Game: volume (0 to 1, default 0.5) of the victory anthem of the end of the match
 void FFA_RouletteSetup (int count, int *images, int winner, char *name);	// p_hud.c
 #define FFA_DEFAULT_FRAGLIMIT	30	// Free For All frags to win when the server fraglimit is 0
 #define FFA_LEVEL_WAIT			10	// Free For All seconds of lobby at the start of the level
@@ -800,6 +801,7 @@ extern	cvar_t	*spawn_camp_time;
 extern	cvar_t	*invuln_medic;
 //extern	cvar_t	*teamgren;
 extern	cvar_t	*death_msg;
+extern	cvar_t	*killfeed_console;
 extern	cvar_t	*level_wait;
 extern	cvar_t	*invuln_spawn;
 
@@ -1007,6 +1009,10 @@ qboolean OnSameTeam(edict_t *self,edict_t *target);
 qboolean G_IsFFA(void);
 void FFA_JoinPlayer(edict_t *ent);
 void FFA_HudReset(void);
+// p_killfeed.c
+void Killfeed_SetBase(char *statusbar);
+qboolean Killfeed_Add(edict_t *killer, edict_t *victim, int mod, qboolean headshot);
+void Killfeed_Frame(void);
 void FFA_SpawnReset(void);
 void initialize_random_seed();	// p_classes.c
 void FFA_ForgetPlayer(edict_t *gone);
