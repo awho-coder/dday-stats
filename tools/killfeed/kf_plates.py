@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Genera las placas del killfeed: pics/kf_bg_<equipo>_<ancho>.png.
 
-Cada placa mide <ancho> x 14 px (ancho de 48 a 344 en pasos de 8), del color del
-equipo, con un borde de 1 px con las esquinas recortadas y una franja clara de
-3 px a la izquierda (en la placa de la víctima marca el corte con la del killer).
+Cada placa mide <ancho> x 14 px (ancho de 48 a 344 en pasos de 8): fondo oscuro
+semitransparente apenas teñido del color del equipo, esquinas recortadas y una
+franja de 3 px del color del equipo a la izquierda.
 
 Uso: python3 tools/killfeed/kf_plates.py [carpeta pics]
 """
@@ -16,29 +16,29 @@ H = 14
 STRIPE = 3
 WIDTHS = range(48, 344 + 1, 8)
 
-# equipo: (franja, fondo, borde), RGBA. Colores vivos y casi opacos: la fila se arma con la placa del equipo del
-# killer y encima, desde el arma, la del equipo de la victima (ver KF_Line en src/p_killfeed.c)
+# como el kill feed de VisorDemos: fondo negro semitransparente, apenas teñido del color del equipo, con una franja
+# de 3 px de ese color a la izquierda (en la placa de la víctima marca el corte con la del killer). Los nombres van
+# en el mismo color (KF_COLOR_A y KF_COLOR_X en src/p_killfeed.c)
 TEAMS = {
-    "a": ((170, 230, 80, 250), (70, 120, 32, 235), (120, 180, 60, 240)),     # equipo 0, verde
-    "x": ((250, 90, 70, 250), (160, 40, 32, 235), (220, 80, 60, 240)),       # equipo 1, rojo
-    "n": ((220, 200, 130, 250), (110, 100, 66, 230), (170, 155, 100, 240)),  # sin equipo / Free For All, caqui
+    "a": (120, 175, 255),  # equipo 0, azul (aliados del visor)
+    "x": (255, 115, 95),   # equipo 1, rojo anaranjado (eje del visor)
+    "n": (200, 190, 150),  # sin equipo / Free For All, caqui
 }
+TINT = 0.22    # cuánto color del equipo lleva el fondo
+BG_ALPHA = 160
 
 
 def plate(team, w):
-    stripe, body, border = TEAMS[team]
+    c = TEAMS[team]
+    body = tuple(round(v * TINT) for v in c) + (BG_ALPHA,)
+    stripe = c + (235,)
     im = Image.new("RGBA", (w, H), (0, 0, 0, 0))
     px = im.load()
     for x in range(w):
         for y in range(H):
             if x in (0, w - 1) and y in (0, H - 1):
                 continue  # esquinas recortadas
-            if x < STRIPE:
-                px[x, y] = stripe
-            elif y in (0, H - 1) or x == w - 1:
-                px[x, y] = border
-            else:
-                px[x, y] = body
+            px[x, y] = stripe if x < STRIPE else body
     return im
 
 

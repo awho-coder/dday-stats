@@ -324,11 +324,10 @@ static char *KF_ChooseFaction (edict_t *ent)
 }
 
 
-// one row: [faction] killer weapon [headshot] on a plate of the color of the team of the killer, and [faction]
-// victim on a plate of the color of the team of the victim, drawn over the end of the first one. Without killer
-// (suicide, environment) there is only the plate of the victim. The plates are the width of their part (in steps of
-// KF_PLATE_STEP) and the x of everything follows the length of the names. The names are white: the plates give the
-// color of the teams
+// one row: [faction] killer weapon [headshot] on a plate of the team of the killer, and [faction] victim on a plate
+// of the team of the victim, drawn over the end of the first one. Without killer (suicide, environment) there is only
+// the plate of the victim. The plates are the width of their part (in steps of KF_PLATE_STEP) and the x of everything
+// follows the length of the names. The names are in the color of their team (as in VisorDemos)
 static int KF_PlateWidth (int width)
 {
 	width = (width + KF_PLATE_STEP - 1) / KF_PLATE_STEP * KF_PLATE_STEP;
@@ -340,7 +339,13 @@ static int KF_PlateWidth (int width)
 }
 
 
-static void KF_Line (char *out, kf_entry_t *e, int row)
+static char KF_COLOR_A[] = "#8bf";	// names of the team 0 (blue, the allies of VisorDemos)
+static char KF_COLOR_X[] = "#f86";	// names of the team 1 (orange red, the axis of VisorDemos)
+
+
+// pass 0: the pictures of the row; pass 'a', 'x' or 'n': only the names of the players of that team, so that the
+// names of one color go together and the color command is written once per team for the whole feed
+static void KF_Line (char *out, kf_entry_t *e, int row, char pass)
 {
 	int		y = KF_Y + row * KF_ROW_H;
 	int		x = KF_X + KF_PAD_L;
@@ -384,6 +389,16 @@ static void KF_Line (char *out, kf_entry_t *e, int row)
 	vtx = x;
 	x += strlen (e->victim) * KF_CHAR_W;
 
+	*p = 0;
+	if (pass)
+	{
+		if (ktx && e->killer_team == pass)
+			p += sprintf (p, "yt %d xl %d string \"%s\" ", y + KF_TEXT_DY, ktx, e->killer);
+		if (e->victim_team == pass)
+			sprintf (p, "yt %d xl %d string \"%s\" ", y + KF_TEXT_DY, vtx, e->victim);
+		return;
+	}
+
 	p += sprintf (p, "yt %d ", y);
 	if (e->killer[0])
 		p += sprintf (p, "xl %d picn kf_bg_%c_%d ", KF_X, e->killer_team, KF_PlateWidth (split - KF_X));
@@ -394,12 +409,7 @@ static void KF_Line (char *out, kf_entry_t *e, int row)
 	if (hx)
 		p += sprintf (p, "xl %d picn kf_hs ", hx);
 	if (vfx)
-		p += sprintf (p, "xl %d picn kf_%s ", vfx, e->victim_fac);
-
-	p += sprintf (p, "yt %d ", y + KF_TEXT_DY);
-	if (ktx)
-		p += sprintf (p, "xl %d string \"%s\" ", ktx, e->killer);
-	sprintf (p, "xl %d string \"%s\" ", vtx, e->victim);
+		sprintf (p, "xl %d picn kf_%s ", vfx, e->victim_fac);
 }
 
 
@@ -410,18 +420,41 @@ static void KF_DropOldest (void)
 }
 
 
-// the feed of the kf_count rows; returns its length
+// the feed of the kf_count rows; returns its length. The pictures go first and the names after them: the color
+// command of the client (Q2PRO, other clients skip it and draw the names in white) also tints the pictures. The
+// white names go first (the statusbar starts in white), then the blue ones, the red ones and the color goes back to
+// white for the statusbar of the level
 static int KF_Build (char *out)
 {
-	char	line[512];
-	int		i, len = 0;
+	static char	pass[] = { 'n', 'a', 'x' };
+	static char	names[KF_MAX_LINES * 128];
+	char		line[512];
+	int			i, j, n, len = 0;
 
 	out[0] = 0;
 	for (i = 0; i < kf_count; i++)
 	{
-		KF_Line (line, &kf_entries[i], i);
+		KF_Line (line, &kf_entries[i], i, 0);
 		len += sprintf (out + len, "%s", line);
 	}
+
+	for (j = 0; j < 3; j++)
+	{
+		names[0] = 0;
+		for (i = 0, n = 0; i < kf_count; i++)
+		{
+			KF_Line (line, &kf_entries[i], i, pass[j]);
+			n += sprintf (names + n, "%s", line);
+		}
+		if (!n)
+			continue;
+		if (pass[j] != 'n')
+			len += sprintf (out + len, "color %s ", pass[j] == 'a' ? KF_COLOR_A : KF_COLOR_X);
+		len += sprintf (out + len, "%s", names);
+	}
+
+	if (strstr (out, "color "))
+		len += sprintf (out + len, "color #fff ");
 	return len;
 }
 
