@@ -24,7 +24,8 @@
 #define KF_X			2
 #define KF_Y			30		// under the lines of the console that the client prints at the top ("You've been hit...")
 #define KF_ROW_H		16		// plate (14 pixels) and a gap
-#define KF_PAD_L		9		// stripe of the team of the plate (7 pixels) and a gap
+#define KF_PAD_L		5		// stripe of the plate (3 pixels) and a gap
+#define KF_SPLIT_GAP	2		// between the weapon (or the headshot icon) and the plate of the victim
 #define KF_PAD_R		4
 #define KF_TEXT_DY		3		// text (8 pixels high) centered on the plate
 #define KF_CHAR_W		8
@@ -120,8 +121,7 @@ typedef struct
 	char		*killer_fac;				// faction (pics/kf_<faction>.png), NULL: no icon
 	char		*victim_fac;
 	qboolean	headshot;
-	char		team;						// color of the plate: 'a' team 0, 'x' team 1, 'n' none
-	char		killer_team;				// color of the names, the same letters
+	char		killer_team;				// color of the plates (pics/kf_bg_<team>_<width>.png): 'a' team 0, 'x' team 1, 'n' none
 	char		victim_team;
 	float		expire;
 } kf_entry_t;
@@ -295,34 +295,7 @@ static kf_icon_t *KF_ChooseIcon (edict_t *killer, edict_t *victim, int mod)
 }
 
 
-// color of the plate: the team of the killer (of the victim when nobody killed him); Free For All has no teams
-static char KF_ChooseTeam (edict_t *killer, edict_t *victim)
-{
-	edict_t		*who = victim;
-
-	if (G_IsFFA ())
-		return 'n';
-
-	if (killer && killer != victim && killer->client)
-		who = killer;
-
-	if (who->client && who->client->resp.team_on)
-	{
-		if (who->client->resp.team_on->index == 0)
-			return 'a';
-		if (who->client->resp.team_on->index == 1)
-			return 'x';
-	}
-	return 'n';
-}
-
-
-static char KF_COLOR_A[] = "#9d5";	// names of the team 0 (light green, like the plate)
-static char KF_COLOR_X[] = "#f88";	// names of the team 1 (light red)
-static char KF_COLOR_N[] = "#fff";	// no team and Free For All; also the color left for the statusbar of the level
-
-
-// team of one player for the color of his name: 'a' team 0, 'x' team 1, 'n' none or Free For All
+// team of one player for the color of his plate: 'a' team 0, 'x' team 1, 'n' none or Free For All
 static char KF_TeamOf (edict_t *ent)
 {
 	if (G_IsFFA () || !ent || !ent->client || !ent->client->resp.team_on)
@@ -332,16 +305,6 @@ static char KF_TeamOf (edict_t *ent)
 	if (ent->client->resp.team_on->index == 1)
 		return 'x';
 	return 'n';
-}
-
-
-static char *KF_NameColor (char team)
-{
-	if (team == 'a')
-		return KF_COLOR_A;
-	if (team == 'x')
-		return KF_COLOR_X;
-	return KF_COLOR_N;
 }
 
 
@@ -361,18 +324,28 @@ static char *KF_ChooseFaction (edict_t *ent)
 }
 
 
-// one row: plate, [faction killer] killer weapon [headshot] [faction] victim. The plate is the width of the row (in
-// steps of KF_PLATE_STEP) and the x of everything follows the length of the names.
-// The pictures of all the rows go first and then the names: the color command of the client (Q2PRO) also tints
-// the pictures, so the names are drawn last and the color goes back to white once, at the end of the feed
-// (*color is the color in use, a command is written only when it changes)
-static void KF_Line (char *out, kf_entry_t *e, int row, qboolean text, char **color)
+// one row: [faction] killer weapon [headshot] on a plate of the color of the team of the killer, and [faction]
+// victim on a plate of the color of the team of the victim, drawn over the end of the first one. Without killer
+// (suicide, environment) there is only the plate of the victim. The plates are the width of their part (in steps of
+// KF_PLATE_STEP) and the x of everything follows the length of the names. The names are white: the plates give the
+// color of the teams
+static int KF_PlateWidth (int width)
+{
+	width = (width + KF_PLATE_STEP - 1) / KF_PLATE_STEP * KF_PLATE_STEP;
+	if (width < KF_PLATE_MIN)
+		width = KF_PLATE_MIN;
+	if (width > KF_PLATE_MAX)
+		width = KF_PLATE_MAX;
+	return width;
+}
+
+
+static void KF_Line (char *out, kf_entry_t *e, int row)
 {
 	int		y = KF_Y + row * KF_ROW_H;
 	int		x = KF_X + KF_PAD_L;
-	int		kfx = 0, ktx = 0, wx, hx = 0, vfx = 0, vtx, width;
+	int		kfx = 0, ktx = 0, wx, hx = 0, split = KF_X, vfx = 0, vtx;
 	char	*p = out;
-	char	*c;
 
 	if (e->killer[0])
 	{
@@ -395,7 +368,14 @@ static void KF_Line (char *out, kf_entry_t *e, int row, qboolean text, char **co
 		x += KF_FindIcon ("hs")->width;
 	}
 
-	x += KF_GAP;
+	if (e->killer[0])
+	{
+		split = x + KF_SPLIT_GAP;
+		x = split + KF_PAD_L;
+	}
+	else
+		x += KF_GAP;
+
 	if (e->victim_fac)
 	{
 		vfx = x;
@@ -404,37 +384,21 @@ static void KF_Line (char *out, kf_entry_t *e, int row, qboolean text, char **co
 	vtx = x;
 	x += strlen (e->victim) * KF_CHAR_W;
 
-	if (!text)
-	{
-		width = x + KF_PAD_R - KF_X;
-		width = (width + KF_PLATE_STEP - 1) / KF_PLATE_STEP * KF_PLATE_STEP;
-		if (width < KF_PLATE_MIN)
-			width = KF_PLATE_MIN;
-		if (width > KF_PLATE_MAX)
-			width = KF_PLATE_MAX;
-
-		p += sprintf (p, "yt %d xl %d picn kf_bg_%c_%d ", y, KF_X, e->team, width);
-		if (kfx)
-			p += sprintf (p, "xl %d picn kf_%s ", kfx, e->killer_fac);
-		p += sprintf (p, "xl %d picn kf_%s ", wx, e->icon->name);
-		if (hx)
-			p += sprintf (p, "xl %d picn kf_hs ", hx);
-		if (vfx)
-			sprintf (p, "xl %d picn kf_%s ", vfx, e->victim_fac);
-		return;
-	}
+	p += sprintf (p, "yt %d ", y);
+	if (e->killer[0])
+		p += sprintf (p, "xl %d picn kf_bg_%c_%d ", KF_X, e->killer_team, KF_PlateWidth (split - KF_X));
+	p += sprintf (p, "xl %d picn kf_bg_%c_%d ", split, e->victim_team, KF_PlateWidth (x + KF_PAD_R - split));
+	if (kfx)
+		p += sprintf (p, "xl %d picn kf_%s ", kfx, e->killer_fac);
+	p += sprintf (p, "xl %d picn kf_%s ", wx, e->icon->name);
+	if (hx)
+		p += sprintf (p, "xl %d picn kf_hs ", hx);
+	if (vfx)
+		p += sprintf (p, "xl %d picn kf_%s ", vfx, e->victim_fac);
 
 	p += sprintf (p, "yt %d ", y + KF_TEXT_DY);
 	if (ktx)
-	{
-		c = KF_NameColor (e->killer_team);
-		if (c != *color)
-			p += sprintf (p, "color %s ", *color = c);
 		p += sprintf (p, "xl %d string \"%s\" ", ktx, e->killer);
-	}
-	c = KF_NameColor (e->victim_team);
-	if (c != *color)
-		p += sprintf (p, "color %s ", *color = c);
 	sprintf (p, "xl %d string \"%s\" ", vtx, e->victim);
 }
 
@@ -446,26 +410,18 @@ static void KF_DropOldest (void)
 }
 
 
-// the feed (pictures, names and the color back to white) of the kf_count rows; returns its length
+// the feed of the kf_count rows; returns its length
 static int KF_Build (char *out)
 {
-	char	line[256];
-	char	*color = KF_COLOR_N;	// the client starts the statusbar in white
+	char	line[512];
 	int		i, len = 0;
 
 	out[0] = 0;
 	for (i = 0; i < kf_count; i++)
 	{
-		KF_Line (line, &kf_entries[i], i, false, &color);
+		KF_Line (line, &kf_entries[i], i);
 		len += sprintf (out + len, "%s", line);
 	}
-	for (i = 0; i < kf_count; i++)
-	{
-		KF_Line (line, &kf_entries[i], i, true, &color);
-		len += sprintf (out + len, "%s", line);
-	}
-	if (color != KF_COLOR_N)
-		len += sprintf (out + len, "color %s ", KF_COLOR_N);
 	return len;
 }
 
@@ -551,7 +507,6 @@ qboolean Killfeed_Add (edict_t *killer, edict_t *victim, int mod, qboolean heads
 	e->killer_fac = e->killer[0] ? KF_ChooseFaction (killer) : NULL;
 	e->victim_fac = KF_ChooseFaction (victim);
 	e->headshot = headshot;
-	e->team = KF_ChooseTeam (killer, victim);
 	e->killer_team = KF_TeamOf (killer);
 	e->victim_team = KF_TeamOf (victim);
 	e->expire = level.time + KF_LIFETIME;

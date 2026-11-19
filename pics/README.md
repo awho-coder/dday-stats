@@ -30,11 +30,11 @@ Las posiciones del texto están en las constantes `FFA_PANEL_*`, `FFA_TEXT_X`, `
 
 El killfeed (`src/p_killfeed.c`) funciona en todos los modos de juego y se dibuja arriba a la izquierda, dentro del statusbar. Cada fila usa imágenes que carga el **cliente**: hay que copiarlas a `<carpeta del juego>/dday/pics/` del servidor y de los jugadores, o incluirlas en el pak. A diferencia de las de Free For All, el servidor **no** las registra con `gi.imageindex` (son 186 y el límite de imágenes del nivel es 256), así que el cliente no las descarga solo. Si faltan, el comportamiento depende del motor del cliente (sin verificar): lo esperable es que no dibuje ese fondo o ese icono y que el texto igual se vea.
 
-Una fila es `[bandera] killer  arma  [headshot]  [bandera] víctima`, sobre una placa. Sin killer (suicidio, entorno, granada propia) es `calavera  [bandera] víctima`.
+Una fila es `[bandera] killer  arma  [headshot]` sobre una placa del equipo del killer y `[bandera] víctima` sobre una del equipo de la víctima. Sin killer (suicidio, entorno, granada propia) es `calavera  [bandera] víctima`.
 
 | Archivo | Tamaño | Uso |
 |---|---|---|
-| `kf_bg_<equipo>_<ancho>.png` | `<ancho>` de 48 a 344 en pasos de 8, x 14 px, PNG 32 bits con transparencia | Placa de la fila: el juego usa la más angosta en la que cabe. Equipo `a` (equipo 0, verde), `x` (equipo 1, rojo), `n` (sin equipo y Free For All, caqui), del equipo del killer. Franja de 7 px del color del equipo y fondo teñido. Se generan con `tools/killfeed/kf_plates.py`. |
+| `kf_bg_<equipo>_<ancho>.png` | `<ancho>` de 48 a 344 en pasos de 8, x 14 px, PNG 32 bits con transparencia | Placas de la fila, en colores vivos: equipo `a` (equipo 0, verde), `x` (equipo 1, rojo), `n` (sin equipo y Free For All, caqui). La parte del killer (bandera, nombre, arma) va sobre la placa de su equipo y la de la víctima sobre la del suyo, dibujada encima desde el arma: el juego usa la más angosta en la que cabe cada parte. Se generan con `tools/killfeed/kf_plates.py`. |
 | `kf_w_<icono>.png` | ancho variable x 14 px | Icono del arma a la mitad del tamaño del original (alto máximo 12 px, centrado en 14), en tono hueso. `<icono>` es el `item->icon` del arma. Hay uno por cada `w_*` salvo `w_sabre`, que mide 256 x 256. |
 | `kf_skull`, `kf_nade`, `kf_plane`, `kf_boom`, `kf_tank` | 12, 12, 30, 12 y 30 x 14 px | Calavera (suicidios, entorno y muertes sin icono propio), granadas, airstrike, explosivos/barriles/bombas y tanque. Dibujados a mano (formas vectoriales). |
 | `kf_hs.png` | 14 x 14 px | Marca de headshot, a la derecha del arma (la misma condición que el cue "Headshot!"). |
@@ -44,7 +44,7 @@ El ancho de cada icono está en la tabla `kf_icons` de `src/p_killfeed.c`: el st
 
 Los iconos de armas se generan a partir de los `pics/w_*.pcx` del juego (reducidos con promedio de área y pasados a tono hueso). El statusbar del engine tiene un límite de 1535 bytes: el killfeed va delante del statusbar del nivel y, si no cabe, se descartan las filas más viejas. Con nombres normales caben 3 filas.
 
-Cada nombre va en el color de su equipo (`#9d5` equipo 0, `#f88` equipo 1, blanco sin equipo y en Free For All), con el comando `color` del statusbar de Q2PRO (otros clientes lo ignoran y los dibujan en blanco). Como `color` también tiñe las imágenes, primero se dibujan las imágenes de todas las filas, después los nombres, y al final se vuelve a blanco para el statusbar del nivel.
+Los nombres van en blanco (`string`): el color de los equipos lo dan las placas.
 
 ## Notas
 
