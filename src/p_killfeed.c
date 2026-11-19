@@ -24,8 +24,6 @@
 #define KF_X			2
 #define KF_Y			30		// under the lines of the console that the client prints at the top ("You've been hit...")
 #define KF_ROW_H		16		// plate (14 pixels) and a gap
-#define KF_PAD_L		5		// stripe of the plate (3 pixels) and a gap
-#define KF_VISOR_PAD	3		// killfeed_style 1: space at both ends of the plate
 #define KF_SPLIT_GAP	2		// between the weapon (or the headshot icon) and the plate of the victim
 #define KF_PAD_R		4
 #define KF_TEXT_DY		3		// text (8 pixels high) centered on the plate
@@ -325,14 +323,50 @@ static char *KF_ChooseFaction (edict_t *ent)
 }
 
 
-// The texts of the feed are drawn after all the pictures, grouped by color: the color command of the client (Q2PRO,
-// other clients skip it and draw the texts in white) also tints the pictures, and one command per color is shorter
-static char KF_COLOR_A[] = "#8bf";	// names of the team 0 (blue, the allies of VisorDemos)
-static char KF_COLOR_X[] = "#f86";	// names of the team 1 (orange red, the axis of VisorDemos)
-static char KF_COLOR_HS[] = "#fb2";	// "HS" (killfeed_style 1)
-static char KF_COLOR_TK[] = "#f44";	// "TK" (killfeed_style 1)
+// Each player chooses the style of his feed (command "killfeed <style>" or "set killfeed <style> u" in his config,
+// default killfeed_style): the statusbar with the feed is sent to every player by himself (svc_configstring by
+// unicast); the configstring of the server keeps the statusbar of the level without the feed (new clients, MVD)
+//   0  off: no feed, the obituary in text
+//   1  like the kill feed of VisorDemos with the weapon: "killer  weapon[ HS][ TK]  victim" on a black plate
+//   2  like 1 with the flags, the headshot icon and one plate of the color of each team (killer and victim)
+//   3  solid plates of two colors (green and red), white names
+//   4  one plate of the team of the killer (dark, tinted), names of the color of their team
+//   5  the original of Snako: one dark plate of the team of the killer, white names
+#define KF_STYLES		6
+#define KF_STYLE_OFF	0
+#define KF_MAX_CLIENTS	256
+#define KF_SVC_CONFIGSTRING	13
 
-// color groups, in the order they are written: 'n' white (the statusbar starts in white), 'a' and 'x' the teams,
+typedef struct
+{
+	char		*name;		// for the command
+	char		*plates;	// pics/kf_bg_<plates><team>_<width>.png ("v": pics/kf_bg_v_<width>.png, without team)
+	qboolean	visor;		// the layout of VisorDemos (style 1)
+	qboolean	split;		// one plate for the killer and another one for the victim
+	int			pad_l;		// left of the plate to the first picture or text (stripe of the plate)
+	char		*color_a;	// names of the team 0 and 1, NULL: white
+	char		*color_x;
+} kf_style_t;
+
+static kf_style_t kf_styles[KF_STYLES] =
+{
+	{ "apagado (obituario en texto)", NULL, false, false, 0, NULL, NULL },
+	{ "visor con arma", "v", true, false, 3, "#8bf", "#f86" },
+	{ "visor con placas de color y banderas", "", false, true, 5, "#8bf", "#f86" },
+	{ "placas de dos colores solidas", "s", false, true, 5, NULL, NULL },
+	{ "placa del killer con nombres de color", "t", false, false, 9, "#9d5", "#f88" },
+	{ "original de Snako", "o", false, false, 5, NULL, NULL }
+};
+
+static char KF_COLOR_HS[] = "#fb2";	// "HS" (style 1)
+static char KF_COLOR_TK[] = "#f44";	// "TK" (style 1)
+
+static int			kf_client_style[KF_MAX_CLIENTS];	// -1: killfeed_style of the server
+static qboolean		kf_client_feed[KF_MAX_CLIENTS];		// the client has a statusbar with the feed (sent by unicast)
+
+// The texts of the feed are drawn after all the pictures, grouped by color: the color command of the client (Q2PRO,
+// other clients skip it and draw the texts in white) also tints the pictures, and one command per color is shorter.
+// Groups in the order they are written: 'n' white (the statusbar starts in white), 'a' and 'x' the teams,
 // 'h' headshot, 't' teamkill
 static char kf_passes[] = "naxht";
 
@@ -348,10 +382,25 @@ static kf_text_t	kf_texts[KF_MAX_TEXTS];
 static int			kf_ntexts;
 
 
-static void KF_AddText (char pass, int x, int y, char *text)
+static char *KF_PassColor (kf_style_t *st, char pass)
+{
+	switch (pass)
+	{
+	case 'a':	return st->color_a;
+	case 'x':	return st->color_x;
+	case 'h':	return KF_COLOR_HS;
+	case 't':	return KF_COLOR_TK;
+	}
+	return NULL;
+}
+
+
+static void KF_AddText (kf_style_t *st, char pass, int x, int y, char *text)
 {
 	if (kf_ntexts == KF_MAX_TEXTS)
 		return;
+	if (!KF_PassColor (st, pass))
+		pass = 'n';
 	kf_texts[kf_ntexts].pass = pass;
 	kf_texts[kf_ntexts].x = x;
 	kf_texts[kf_ntexts].y = y;
@@ -371,14 +420,15 @@ static int KF_PlateWidth (int width)
 }
 
 
-// killfeed_style 0: [faction] killer weapon [headshot] on a plate of the team of the killer, and [faction] victim on a
-// plate of the team of the victim, drawn over the end of the first one. Without killer (suicide, environment) there is
-// only the plate of the victim. The plates are the width of their part (in steps of KF_PLATE_STEP) and the x of
-// everything follows the length of the names. Writes the pictures to out and adds the names to kf_texts
-static void KF_LinePlates (char *out, kf_entry_t *e, int row)
+// styles 2 to 5: [faction] killer weapon [headshot] [faction] victim. With split, the part of the killer is on a plate
+// of his team and the one of the victim on a plate of hers, drawn over the end of the first one; without split, one
+// plate of the team of the killer (of the victim when there is no killer). The plates are the width of their part
+// (in steps of KF_PLATE_STEP) and the x of everything follows the length of the names. Writes the pictures to out and
+// adds the names to kf_texts
+static void KF_LinePlates (char *out, kf_style_t *st, kf_entry_t *e, int row)
 {
 	int		y = KF_Y + row * KF_ROW_H;
-	int		x = KF_X + KF_PAD_L;
+	int		x = KF_X + st->pad_l;
 	int		kfx = 0, wx, hx = 0, split = KF_X, vfx = 0;
 	char	*p = out;
 
@@ -389,7 +439,7 @@ static void KF_LinePlates (char *out, kf_entry_t *e, int row)
 			kfx = x;
 			x += KF_FLAG_W + KF_FLAG_GAP;
 		}
-		KF_AddText (e->killer_team, x, y + KF_TEXT_DY, e->killer);
+		KF_AddText (st, e->killer_team, x, y + KF_TEXT_DY, e->killer);
 		x += strlen (e->killer) * KF_CHAR_W + KF_GAP;
 	}
 
@@ -403,10 +453,10 @@ static void KF_LinePlates (char *out, kf_entry_t *e, int row)
 		x += KF_FindIcon ("hs")->width;
 	}
 
-	if (e->killer[0])
+	if (st->split && e->killer[0])
 	{
 		split = x + KF_SPLIT_GAP;
-		x = split + KF_PAD_L;
+		x = split + st->pad_l;
 	}
 	else
 		x += KF_GAP;
@@ -416,13 +466,19 @@ static void KF_LinePlates (char *out, kf_entry_t *e, int row)
 		vfx = x;
 		x += KF_FLAG_W + KF_FLAG_GAP;
 	}
-	KF_AddText (e->victim_team, x, y + KF_TEXT_DY, e->victim);
+	KF_AddText (st, e->victim_team, x, y + KF_TEXT_DY, e->victim);
 	x += strlen (e->victim) * KF_CHAR_W;
 
 	p += sprintf (p, "yt %d ", y);
-	if (e->killer[0])
-		p += sprintf (p, "xl %d picn kf_bg_%c_%d ", KF_X, e->killer_team, KF_PlateWidth (split - KF_X));
-	p += sprintf (p, "xl %d picn kf_bg_%c_%d ", split, e->victim_team, KF_PlateWidth (x + KF_PAD_R - split));
+	if (!st->split)
+		p += sprintf (p, "xl %d picn kf_bg_%s%c_%d ", KF_X, st->plates, e->killer[0] ? e->killer_team : e->victim_team,
+			KF_PlateWidth (x + KF_PAD_R - KF_X));
+	else
+	{
+		if (e->killer[0])
+			p += sprintf (p, "xl %d picn kf_bg_%s%c_%d ", KF_X, st->plates, e->killer_team, KF_PlateWidth (split - KF_X));
+		p += sprintf (p, "xl %d picn kf_bg_%s%c_%d ", split, st->plates, e->victim_team, KF_PlateWidth (x + KF_PAD_R - split));
+	}
 	if (kfx)
 		p += sprintf (p, "xl %d picn kf_%s ", kfx, e->killer_fac);
 	p += sprintf (p, "xl %d picn kf_%s ", wx, e->icon->name);
@@ -433,18 +489,18 @@ static void KF_LinePlates (char *out, kf_entry_t *e, int row)
 }
 
 
-// killfeed_style 1, the kill feed of VisorDemos with the weapon instead of the verb: "killer  weapon[ HS][ TK]  victim"
-// on one dark plate (pics/kf_bg_v_<width>.png), the names in the color of their team, HS orange and TK red
-static void KF_LineVisor (char *out, kf_entry_t *e, int row)
+// style 1, the kill feed of VisorDemos with the weapon instead of the verb: "killer  weapon[ HS][ TK]  victim" on one
+// dark plate (pics/kf_bg_v_<width>.png), the names in the color of their team, HS orange and TK red
+static void KF_LineVisor (char *out, kf_style_t *st, kf_entry_t *e, int row)
 {
 	int		y = KF_Y + row * KF_ROW_H;
 	int		ty = y + KF_TEXT_DY;
-	int		x = KF_X + KF_VISOR_PAD;
+	int		x = KF_X + st->pad_l;
 	int		wx;
 
 	if (e->killer[0])
 	{
-		KF_AddText (e->killer_team, x, ty, e->killer);
+		KF_AddText (st, e->killer_team, x, ty, e->killer);
 		x += (strlen (e->killer) + 2) * KF_CHAR_W;
 	}
 
@@ -453,21 +509,21 @@ static void KF_LineVisor (char *out, kf_entry_t *e, int row)
 
 	if (e->headshot)
 	{
-		KF_AddText ('h', x + KF_CHAR_W, ty, "HS");
+		KF_AddText (st, 'h', x + KF_CHAR_W, ty, "HS");
 		x += 3 * KF_CHAR_W;
 	}
 	if (e->killer[0] && e->killer_team == e->victim_team && e->killer_team != 'n')
 	{
-		KF_AddText ('t', x + KF_CHAR_W, ty, "TK");
+		KF_AddText (st, 't', x + KF_CHAR_W, ty, "TK");
 		x += 3 * KF_CHAR_W;
 	}
 
 	x += 2 * KF_CHAR_W;
-	KF_AddText (e->victim_team, x, ty, e->victim);
+	KF_AddText (st, e->victim_team, x, ty, e->victim);
 	x += strlen (e->victim) * KF_CHAR_W;
 
 	sprintf (out, "yt %d xl %d picn kf_bg_v_%d xl %d picn kf_%s ", y, KF_X,
-		KF_PlateWidth (x + KF_VISOR_PAD - KF_X), wx, e->icon->name);
+		KF_PlateWidth (x + st->pad_l - KF_X), wx, e->icon->name);
 }
 
 
@@ -478,22 +534,22 @@ static void KF_DropOldest (void)
 }
 
 
-// the feed of the kf_count rows; returns its length: the pictures of all the rows, the texts grouped by color and
-// the color back to white for the statusbar of the level
-static int KF_Build (char *out)
+// the feed of the rows first .. kf_count - 1 in a style; returns its length: the pictures of all the rows, the texts
+// grouped by color and the color back to white for the statusbar of the level
+static int KF_Build (char *out, kf_style_t *st, int first)
 {
 	char	line[512];
-	char	*color = NULL;
+	char	*color = NULL, *c;
 	int		i, j, len = 0;
 
 	out[0] = 0;
 	kf_ntexts = 0;
-	for (i = 0; i < kf_count; i++)
+	for (i = first; i < kf_count; i++)
 	{
-		if (killfeed_style && killfeed_style->value)
-			KF_LineVisor (line, &kf_entries[i], i);
+		if (st->visor)
+			KF_LineVisor (line, st, &kf_entries[i], i - first);
 		else
-			KF_LinePlates (line, &kf_entries[i], i);
+			KF_LinePlates (line, st, &kf_entries[i], i - first);
 		len += sprintf (out + len, "%s", line);
 	}
 
@@ -503,13 +559,9 @@ static int KF_Build (char *out)
 		{
 			if (kf_texts[i].pass != kf_passes[j])
 				continue;
-			if (kf_passes[j] != 'n')
-			{
-				char *c = kf_passes[j] == 'a' ? KF_COLOR_A : kf_passes[j] == 'x' ? KF_COLOR_X :
-					kf_passes[j] == 'h' ? KF_COLOR_HS : KF_COLOR_TK;
-				if (c != color)
-					len += sprintf (out + len, "color %s ", color = c);
-			}
+			c = KF_PassColor (st, kf_passes[j]);
+			if (c && c != color)
+				len += sprintf (out + len, "color %s ", color = c);
 			len += sprintf (out + len, "yt %d xl %d string \"%s\" ", kf_texts[i].y, kf_texts[i].x, kf_texts[i].text);
 		}
 	}
@@ -520,30 +572,82 @@ static int KF_Build (char *out)
 }
 
 
-static void KF_Send (void)
+static int KF_ClientNum (edict_t *ent)
+{
+	int		n = ent - g_edicts - 1;
+
+	if (n < 0 || n >= KF_MAX_CLIENTS || n >= game.maxclients)
+		return -1;
+	return n;
+}
+
+
+static int KF_StyleOf (edict_t *ent)
+{
+	int		n = KF_ClientNum (ent);
+	int		style = (n >= 0) ? kf_client_style[n] : -1;
+
+	if (style < 0)
+		style = killfeed_style ? (int)killfeed_style->value : 1;
+	if (style < 0 || style >= KF_STYLES)
+		style = 1;
+	return style;
+}
+
+
+static void KF_Unicast (edict_t *ent, char *bar)
+{
+	gi.WriteByte (KF_SVC_CONFIGSTRING);
+	gi.WriteShort (CS_STATUSBAR);
+	gi.WriteString (bar);
+	gi.unicast (ent, true);
+}
+
+
+// the statusbar of one player: the base with his feed, or the base alone (only when he had a feed: the
+// configstring of the server is the base, he already has it)
+static void KF_SendTo (edict_t *ent)
 {
 	static char	bar[KF_BAR_MAX + 1];
 	static char	feed[KF_MAX_LINES * 512];
-	int			baselen;
+	int			n = KF_ClientNum (ent);
+	int			style, first = 0, baselen;
 
-	if (!kf_base_set)
+	if (n < 0 || !kf_base_set || !ent->inuse || !ent->client || ent->ai)
 		return;
 
+	style = KF_StyleOf (ent);
 	baselen = strlen (kf_base);
 
-	// the lines go first and the base keeps its place: drop the oldest lines until everything fits
-	while (kf_count && KF_Build (feed) + baselen > KF_BAR_MAX)
-		KF_DropOldest ();
+	// the base keeps its place: the oldest rows are left out until everything fits
+	if (style != KF_STYLE_OFF)
+		while (first < kf_count && KF_Build (feed, &kf_styles[style], first) + baselen > KF_BAR_MAX)
+			first++;
 
-	if (kf_count == 0)
+	if (style == KF_STYLE_OFF || first >= kf_count)
 	{
-		gi.configstring (CS_STATUSBAR, kf_base);
+		if (kf_client_feed[n])
+			KF_Unicast (ent, kf_base);
+		kf_client_feed[n] = false;
 		return;
 	}
 
 	strcpy (bar, feed);
 	strcat (bar, kf_base);
-	gi.configstring (CS_STATUSBAR, bar);
+	KF_Unicast (ent, bar);
+	kf_client_feed[n] = true;
+}
+
+
+static void KF_Send (void)
+{
+	int		i;
+
+	if (!kf_base_set)
+		return;
+
+	for (i = 1; i <= game.maxclients; i++)
+		KF_SendTo (&g_edicts[i]);
 }
 
 
@@ -554,6 +658,7 @@ void Killfeed_SetBase (char *statusbar)
 	kf_base_set = true;
 	kf_count = 0;
 	kf_dirty = false;
+	gi.configstring (CS_STATUSBAR, kf_base);
 	KF_Send ();
 }
 
@@ -564,14 +669,86 @@ void Killfeed_UpdateBase (char *statusbar)
 	KF_Compact (kf_base, sizeof (kf_base), statusbar);
 	kf_base_set = true;
 	kf_dirty = false;
+	gi.configstring (CS_STATUSBAR, kf_base);
 	KF_Send ();
 }
 
 
+// a new client: the style of the server until his userinfo or the command say another one
+void Killfeed_ClientConnect (edict_t *ent)
+{
+	int		n = KF_ClientNum (ent);
+
+	if (n < 0)
+		return;
+	kf_client_style[n] = -1;
+	kf_client_feed[n] = false;
+}
+
+
+static void KF_SetStyle (edict_t *ent, int style)
+{
+	int		n = KF_ClientNum (ent);
+
+	if (n < 0 || kf_client_style[n] == style)
+		return;
+	kf_client_style[n] = style;
+	KF_SendTo (ent);
+}
+
+
+// userinfo "killfeed" ("set killfeed <style> u" in the config of the client)
+void Killfeed_Userinfo (edict_t *ent, char *userinfo)
+{
+	char	*s = Info_ValueForKey (userinfo, "killfeed");
+	int		style;
+
+	if (!s[0])
+		return;
+	style = atoi (s);
+	if (style >= 0 && style < KF_STYLES)
+		KF_SetStyle (ent, style);
+}
+
+
+// command "killfeed [style]"
+void Killfeed_Cmd (edict_t *ent)
+{
+	int		i, style, current = KF_StyleOf (ent);
+
+	if (gi.argc () < 2)
+	{
+		safe_cprintf (ent, PRINT_HIGH, "Estilos del killfeed (killfeed <numero>):\n");
+		for (i = 0; i < KF_STYLES; i++)
+			safe_cprintf (ent, PRINT_HIGH, "%s %d  %s\n", (i == current) ? "->" : "  ", i, kf_styles[i].name);
+		safe_cprintf (ent, PRINT_HIGH, "Para dejarlo fijo, pon en tu autoexec.cfg: set killfeed <numero> u\n");
+		return;
+	}
+
+	style = atoi (gi.argv (1));
+	if (style < 0 || style >= KF_STYLES)
+	{
+		safe_cprintf (ent, PRINT_HIGH, "killfeed: el estilo va de 0 a %d (killfeed sin numero muestra la lista)\n", KF_STYLES - 1);
+		return;
+	}
+
+	KF_SetStyle (ent, style);
+	safe_cprintf (ent, PRINT_HIGH, "Killfeed: %d %s\n", style, kf_styles[style].name);
+}
+
+
+// the text obituary is not printed to a player who sees the feed (killfeed_console 1 prints it anyway: the console
+// keeps the history of the deaths; 0 by default, the client cannot keep the text out of the notify area, it would
+// show up on top of the feed)
+qboolean Killfeed_Shows (edict_t *ent)
+{
+	return !killfeed_console->value && KF_StyleOf (ent) != KF_STYLE_OFF;
+}
+
+
 // a death: killer is NULL (or not a client) for suicides and the environment
-// returns true when the death is on the feed and its text obituary must not be printed to the clients: with
-// killfeed_console 1 it returns false and the console keeps the history of the deaths (0 by default: the client
-// cannot keep the text out of the notify area, it would show up on top of the feed)
+// returns true when the death is on the feed: the text obituary is printed only to the players without it
+// (see Killfeed_Shows)
 qboolean Killfeed_Add (edict_t *killer, edict_t *victim, int mod, qboolean headshot)
 {
 	kf_entry_t	*e;
@@ -606,7 +783,7 @@ qboolean Killfeed_Add (edict_t *killer, edict_t *victim, int mod, qboolean heads
 	e->expire = level.time + KF_LIFETIME;
 
 	kf_dirty = true;
-	return !killfeed_console->value;
+	return true;
 }
 
 

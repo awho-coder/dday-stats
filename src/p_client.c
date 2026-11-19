@@ -456,7 +456,7 @@ void ClientObituary (edict_t *self, edict_t *inflictor, edict_t *attacker)
 	char		*message3;
 
 	qboolean	ff;
-	qboolean	kf;		// the death is on the killfeed: it is not printed to the clients
+	qboolean	kf = false;	// the death is on the killfeed: it is not printed to the clients that see it
 	edict_t *Tent;
 
 
@@ -604,10 +604,10 @@ void ClientObituary (edict_t *self, edict_t *inflictor, edict_t *attacker)
 					safe_cprintf(self, PRINT_HIGH, "%s %s %s %s).\n", self->client->pers.netname, message, message2, self->client->last_wound_inflictor->client->pers.netname);
 				else if (death_msg->value == 1 || death_msg->value == 3) // print to everybody
 				{
-					for (i = 1; i <= game.maxclients && !kf; i++)
+					for (i = 1; i <= game.maxclients; i++)
 					{
 						Tent = &g_edicts[i];
-						if (!Tent->inuse || !Tent->client)
+						if (!Tent->inuse || !Tent->client || (kf && Killfeed_Shows (Tent)))
 							continue;
 
 //						if (self->client->resp.team_on->index == Tent->client->resp.team_on->index)
@@ -654,10 +654,10 @@ void ClientObituary (edict_t *self, edict_t *inflictor, edict_t *attacker)
 					safe_cprintf(self, PRINT_HIGH, "%s %s.\n", self->client->pers.netname, message);
 				else if (death_msg->value == 1 || death_msg->value == 3) // print to everybody
 				{
-					for (i = 1; i <= game.maxclients && !kf; i++)
+					for (i = 1; i <= game.maxclients; i++)
 					{
 						Tent = &g_edicts[i];
-						if (!Tent->inuse || !Tent->client)
+						if (!Tent->inuse || !Tent->client || (kf && Killfeed_Shows (Tent)))
 							continue;
 
 						if (OnSameTeam(Tent,self)){
@@ -857,10 +857,10 @@ void ClientObituary (edict_t *self, edict_t *inflictor, edict_t *attacker)
 					safe_cprintf(self, PRINT_HIGH, "%s %s %s%s%s\n", self->client->pers.netname, message, attacker->client->pers.netname, message2, message3);
 				else if (death_msg->value == 1 || death_msg->value == 3) // print to everybody
 				{
-					for (i = 1; i <= game.maxclients && !kf; i++)
+					for (i = 1; i <= game.maxclients; i++)
 					{
 						Tent = &g_edicts[i];
-						if (!Tent->inuse || !Tent->client)
+						if (!Tent->inuse || !Tent->client || (kf && Killfeed_Shows (Tent)))
 							continue;
 
 //						if (self->client->resp.team_on->index == Tent->client->resp.team_on->index)
@@ -2950,6 +2950,8 @@ void ClientUserinfoChanged (edict_t *ent, char *userinfo)
 	s = Info_ValueForKey (userinfo, "name");
 	strncpy (ent->client->pers.netname, s, sizeof(ent->client->pers.netname)-1);
 
+	Killfeed_Userinfo (ent, userinfo);	// "set killfeed <style> u" in the config of the client
+
 	// set skin
 	s = Info_ValueForKey (userinfo, "skin");
 
@@ -3086,6 +3088,8 @@ qboolean ClientConnect (edict_t *ent, char *userinfo)
 {
 	static int Already_Done=0;
 	char	*value, *f, *ip;
+
+	Killfeed_ClientConnect (ent);
 
 	// check to see if they are on the banned IP list
 	value = Info_ValueForKey (userinfo, "ip");
