@@ -42,12 +42,21 @@ def plate(team, w):
     return im
 
 
+# killfeed_style 1 (como VisorDemos): kf_bg_v_<ancho>.png, un rectángulo negro con alfa 120, sin franja
+VISOR = (0, 0, 0, 120)
+
+
+def plate_visor(w):
+    return Image.new("RGBA", (w, H), VISOR)
+
+
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), "..", "..", "pics")
-    for team in TEAMS:
-        for w in WIDTHS:
+    for w in WIDTHS:
+        for team in TEAMS:
             plate(team, w).save(os.path.join(out, f"kf_bg_{team}_{w}.png"), optimize=True)
-    print(f"{len(TEAMS) * len(WIDTHS)} placas en {os.path.abspath(out)}")
+        plate_visor(w).save(os.path.join(out, f"kf_bg_v_{w}.png"), optimize=True)
+    print(f"{(len(TEAMS) + 1) * len(WIDTHS)} placas en {os.path.abspath(out)}")
 
 
 if __name__ == "__main__":

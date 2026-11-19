@@ -802,6 +802,7 @@ extern	cvar_t	*invuln_medic;
 //extern	cvar_t	*teamgren;
 extern	cvar_t	*death_msg;
 extern	cvar_t	*killfeed_console;
+extern	cvar_t	*killfeed_style;
 extern	cvar_t	*level_wait;
 extern	cvar_t	*invuln_spawn;
 

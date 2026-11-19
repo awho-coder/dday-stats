@@ -25,6 +25,7 @@
 #define KF_Y			30		// under the lines of the console that the client prints at the top ("You've been hit...")
 #define KF_ROW_H		16		// plate (14 pixels) and a gap
 #define KF_PAD_L		5		// stripe of the plate (3 pixels) and a gap
+#define KF_VISOR_PAD	3		// killfeed_style 1: space at both ends of the plate
 #define KF_SPLIT_GAP	2		// between the weapon (or the headshot icon) and the plate of the victim
 #define KF_PAD_R		4
 #define KF_TEXT_DY		3		// text (8 pixels high) centered on the plate
@@ -324,10 +325,41 @@ static char *KF_ChooseFaction (edict_t *ent)
 }
 
 
-// one row: [faction] killer weapon [headshot] on a plate of the team of the killer, and [faction] victim on a plate
-// of the team of the victim, drawn over the end of the first one. Without killer (suicide, environment) there is only
-// the plate of the victim. The plates are the width of their part (in steps of KF_PLATE_STEP) and the x of everything
-// follows the length of the names. The names are in the color of their team (as in VisorDemos)
+// The texts of the feed are drawn after all the pictures, grouped by color: the color command of the client (Q2PRO,
+// other clients skip it and draw the texts in white) also tints the pictures, and one command per color is shorter
+static char KF_COLOR_A[] = "#8bf";	// names of the team 0 (blue, the allies of VisorDemos)
+static char KF_COLOR_X[] = "#f86";	// names of the team 1 (orange red, the axis of VisorDemos)
+static char KF_COLOR_HS[] = "#fb2";	// "HS" (killfeed_style 1)
+static char KF_COLOR_TK[] = "#f44";	// "TK" (killfeed_style 1)
+
+// color groups, in the order they are written: 'n' white (the statusbar starts in white), 'a' and 'x' the teams,
+// 'h' headshot, 't' teamkill
+static char kf_passes[] = "naxht";
+
+typedef struct
+{
+	char	pass;
+	int		x, y;
+	char	*text;
+} kf_text_t;
+
+#define KF_MAX_TEXTS	(KF_MAX_LINES * 4)
+static kf_text_t	kf_texts[KF_MAX_TEXTS];
+static int			kf_ntexts;
+
+
+static void KF_AddText (char pass, int x, int y, char *text)
+{
+	if (kf_ntexts == KF_MAX_TEXTS)
+		return;
+	kf_texts[kf_ntexts].pass = pass;
+	kf_texts[kf_ntexts].x = x;
+	kf_texts[kf_ntexts].y = y;
+	kf_texts[kf_ntexts].text = text;
+	kf_ntexts++;
+}
+
+
 static int KF_PlateWidth (int width)
 {
 	width = (width + KF_PLATE_STEP - 1) / KF_PLATE_STEP * KF_PLATE_STEP;
@@ -339,17 +371,15 @@ static int KF_PlateWidth (int width)
 }
 
 
-static char KF_COLOR_A[] = "#8bf";	// names of the team 0 (blue, the allies of VisorDemos)
-static char KF_COLOR_X[] = "#f86";	// names of the team 1 (orange red, the axis of VisorDemos)
-
-
-// pass 0: the pictures of the row; pass 'a', 'x' or 'n': only the names of the players of that team, so that the
-// names of one color go together and the color command is written once per team for the whole feed
-static void KF_Line (char *out, kf_entry_t *e, int row, char pass)
+// killfeed_style 0: [faction] killer weapon [headshot] on a plate of the team of the killer, and [faction] victim on a
+// plate of the team of the victim, drawn over the end of the first one. Without killer (suicide, environment) there is
+// only the plate of the victim. The plates are the width of their part (in steps of KF_PLATE_STEP) and the x of
+// everything follows the length of the names. Writes the pictures to out and adds the names to kf_texts
+static void KF_LinePlates (char *out, kf_entry_t *e, int row)
 {
 	int		y = KF_Y + row * KF_ROW_H;
 	int		x = KF_X + KF_PAD_L;
-	int		kfx = 0, ktx = 0, wx, hx = 0, split = KF_X, vfx = 0, vtx;
+	int		kfx = 0, wx, hx = 0, split = KF_X, vfx = 0;
 	char	*p = out;
 
 	if (e->killer[0])
@@ -359,7 +389,7 @@ static void KF_Line (char *out, kf_entry_t *e, int row, char pass)
 			kfx = x;
 			x += KF_FLAG_W + KF_FLAG_GAP;
 		}
-		ktx = x;
+		KF_AddText (e->killer_team, x, y + KF_TEXT_DY, e->killer);
 		x += strlen (e->killer) * KF_CHAR_W + KF_GAP;
 	}
 
@@ -386,18 +416,8 @@ static void KF_Line (char *out, kf_entry_t *e, int row, char pass)
 		vfx = x;
 		x += KF_FLAG_W + KF_FLAG_GAP;
 	}
-	vtx = x;
+	KF_AddText (e->victim_team, x, y + KF_TEXT_DY, e->victim);
 	x += strlen (e->victim) * KF_CHAR_W;
-
-	*p = 0;
-	if (pass)
-	{
-		if (ktx && e->killer_team == pass)
-			p += sprintf (p, "yt %d xl %d string \"%s\" ", y + KF_TEXT_DY, ktx, e->killer);
-		if (e->victim_team == pass)
-			sprintf (p, "yt %d xl %d string \"%s\" ", y + KF_TEXT_DY, vtx, e->victim);
-		return;
-	}
 
 	p += sprintf (p, "yt %d ", y);
 	if (e->killer[0])
@@ -413,6 +433,44 @@ static void KF_Line (char *out, kf_entry_t *e, int row, char pass)
 }
 
 
+// killfeed_style 1, the kill feed of VisorDemos with the weapon instead of the verb: "killer  weapon[ HS][ TK]  victim"
+// on one dark plate (pics/kf_bg_v_<width>.png), the names in the color of their team, HS orange and TK red
+static void KF_LineVisor (char *out, kf_entry_t *e, int row)
+{
+	int		y = KF_Y + row * KF_ROW_H;
+	int		ty = y + KF_TEXT_DY;
+	int		x = KF_X + KF_VISOR_PAD;
+	int		wx;
+
+	if (e->killer[0])
+	{
+		KF_AddText (e->killer_team, x, ty, e->killer);
+		x += (strlen (e->killer) + 2) * KF_CHAR_W;
+	}
+
+	wx = x;
+	x += e->icon->width;
+
+	if (e->headshot)
+	{
+		KF_AddText ('h', x + KF_CHAR_W, ty, "HS");
+		x += 3 * KF_CHAR_W;
+	}
+	if (e->killer[0] && e->killer_team == e->victim_team && e->killer_team != 'n')
+	{
+		KF_AddText ('t', x + KF_CHAR_W, ty, "TK");
+		x += 3 * KF_CHAR_W;
+	}
+
+	x += 2 * KF_CHAR_W;
+	KF_AddText (e->victim_team, x, ty, e->victim);
+	x += strlen (e->victim) * KF_CHAR_W;
+
+	sprintf (out, "yt %d xl %d picn kf_bg_v_%d xl %d picn kf_%s ", y, KF_X,
+		KF_PlateWidth (x + KF_VISOR_PAD - KF_X), wx, e->icon->name);
+}
+
+
 static void KF_DropOldest (void)
 {
 	kf_count--;
@@ -420,40 +478,43 @@ static void KF_DropOldest (void)
 }
 
 
-// the feed of the kf_count rows; returns its length. The pictures go first and the names after them: the color
-// command of the client (Q2PRO, other clients skip it and draw the names in white) also tints the pictures. The
-// white names go first (the statusbar starts in white), then the blue ones, the red ones and the color goes back to
-// white for the statusbar of the level
+// the feed of the kf_count rows; returns its length: the pictures of all the rows, the texts grouped by color and
+// the color back to white for the statusbar of the level
 static int KF_Build (char *out)
 {
-	static char	pass[] = { 'n', 'a', 'x' };
-	static char	names[KF_MAX_LINES * 128];
-	char		line[512];
-	int			i, j, n, len = 0;
+	char	line[512];
+	char	*color = NULL;
+	int		i, j, len = 0;
 
 	out[0] = 0;
+	kf_ntexts = 0;
 	for (i = 0; i < kf_count; i++)
 	{
-		KF_Line (line, &kf_entries[i], i, 0);
+		if (killfeed_style && killfeed_style->value)
+			KF_LineVisor (line, &kf_entries[i], i);
+		else
+			KF_LinePlates (line, &kf_entries[i], i);
 		len += sprintf (out + len, "%s", line);
 	}
 
-	for (j = 0; j < 3; j++)
+	for (j = 0; kf_passes[j]; j++)
 	{
-		names[0] = 0;
-		for (i = 0, n = 0; i < kf_count; i++)
+		for (i = 0; i < kf_ntexts; i++)
 		{
-			KF_Line (line, &kf_entries[i], i, pass[j]);
-			n += sprintf (names + n, "%s", line);
+			if (kf_texts[i].pass != kf_passes[j])
+				continue;
+			if (kf_passes[j] != 'n')
+			{
+				char *c = kf_passes[j] == 'a' ? KF_COLOR_A : kf_passes[j] == 'x' ? KF_COLOR_X :
+					kf_passes[j] == 'h' ? KF_COLOR_HS : KF_COLOR_TK;
+				if (c != color)
+					len += sprintf (out + len, "color %s ", color = c);
+			}
+			len += sprintf (out + len, "yt %d xl %d string \"%s\" ", kf_texts[i].y, kf_texts[i].x, kf_texts[i].text);
 		}
-		if (!n)
-			continue;
-		if (pass[j] != 'n')
-			len += sprintf (out + len, "color %s ", pass[j] == 'a' ? KF_COLOR_A : KF_COLOR_X);
-		len += sprintf (out + len, "%s", names);
 	}
 
-	if (strstr (out, "color "))
+	if (color)
 		len += sprintf (out + len, "color #fff ");
 	return len;
 }
