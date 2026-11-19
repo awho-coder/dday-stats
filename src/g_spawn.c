@@ -2232,7 +2232,7 @@ void SP_worldspawn (edict_t *ent)
 	ffa_statusbar_active = false;
 	// los titulos de zona solo si el mapa tiene .ctl (sin .ctl se juega normal)
 	if (deathmatch->value && control_mode->value && TestEntFile(level.mapname, "ctl"))
-		gi.configstring (CS_STATUSBAR, Control_StatusBar(dday_statusbar));
+		Killfeed_SetBase (Control_StatusBar (dday_statusbar));
 	else if (G_IsFFA())
 	{
 		// Free For All: the team KILLS/POINTS block is replaced by the top scorer and your own frags

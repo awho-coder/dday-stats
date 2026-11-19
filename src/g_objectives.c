@@ -1714,7 +1714,7 @@ char *Control_StatusBar (char *statusbar)
 // reenvia el HUD a todos cuando la zona cambia de dueno
 static void Control_UpdateHud (void)
 {
-	gi.configstring (CS_STATUSBAR, Control_StatusBar (dday_statusbar));
+	Killfeed_UpdateBase (Control_StatusBar (dday_statusbar));
 }
 
 // ingeniero que solo esta permitido porque el rival llego a control_engineer_at:

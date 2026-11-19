@@ -1011,6 +1011,7 @@ void FFA_JoinPlayer(edict_t *ent);
 void FFA_HudReset(void);
 // p_killfeed.c
 void Killfeed_SetBase(char *statusbar);
+void Killfeed_UpdateBase(char *statusbar);
 qboolean Killfeed_Add(edict_t *killer, edict_t *victim, int mod, qboolean headshot);
 void Killfeed_Frame(void);
 void FFA_SpawnReset(void);

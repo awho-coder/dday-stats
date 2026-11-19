@@ -131,6 +131,7 @@ static kf_entry_t	kf_entries[KF_MAX_LINES];	// [0] is the oldest, it is drawn on
 static int			kf_count;
 static char			kf_base[4096];
 static qboolean		kf_base_set;
+static qboolean		kf_dirty;		// the feed changed this frame: Killfeed_Frame sends it once (several deaths in a frame, one configstring)
 
 
 // copy of the statusbar program without the extra white space (the quoted text is kept as it is)
@@ -448,6 +449,17 @@ void Killfeed_SetBase (char *statusbar)
 	KF_Compact (kf_base, sizeof (kf_base), statusbar);
 	kf_base_set = true;
 	kf_count = 0;
+	kf_dirty = false;
+	KF_Send ();
+}
+
+
+// the statusbar of the level changed during the map (control mode: the owner of the zone): the feed is kept
+void Killfeed_UpdateBase (char *statusbar)
+{
+	KF_Compact (kf_base, sizeof (kf_base), statusbar);
+	kf_base_set = true;
+	kf_dirty = false;
 	KF_Send ();
 }
 
@@ -475,29 +487,36 @@ qboolean Killfeed_Add (edict_t *killer, edict_t *victim, int mod, qboolean heads
 
 	e = &kf_entries[kf_count++];
 	KF_CopyName (e->victim, victim->client->pers.netname);
-	if (killer && killer->client && killer != victim)
+	if (killer && (!killer->inuse || !killer->client))
+		killer = NULL;	// last_wound_inflictor can be a player who left
+	if (killer && killer != victim)
 		KF_CopyName (e->killer, killer->client->pers.netname);
 	else
 		e->killer[0] = 0;
 	e->icon = KF_ChooseIcon (killer, victim, mod);
 	e->killer_fac = e->killer[0] ? KF_ChooseFaction (killer) : NULL;
 	e->victim_fac = KF_ChooseFaction (victim);
-	e->headshot = headshot;	e->team = KF_ChooseTeam (killer, victim);
+	e->headshot = headshot;
+	e->team = KF_ChooseTeam (killer, victim);
 	e->expire = level.time + KF_LIFETIME;
 
-	KF_Send ();
+	kf_dirty = true;
 	return !killfeed_console->value;
 }
 
 
-// once per server frame: removes the lines that expired
+// once per server frame: removes the lines that expired and sends the feed when it changed
 void Killfeed_Frame (void)
 {
-	if (!kf_count || level.time < kf_entries[0].expire)
+	while (kf_count && level.time >= kf_entries[0].expire)
+	{
+		KF_DropOldest ();
+		kf_dirty = true;
+	}
+
+	if (!kf_dirty)
 		return;
 
-	while (kf_count && level.time >= kf_entries[0].expire)
-		KF_DropOldest ();
-
+	kf_dirty = false;
 	KF_Send ();
 }
