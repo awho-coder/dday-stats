@@ -122,8 +122,10 @@ typedef struct
 	char		*victim_fac;
 	qboolean	headshot;
 	char		label[KF_LABEL_LEN + 1];	// the verb of VisorDemos (style 6): "sniped", "grenade", "suicide"...
-	char		killer_team;				// color of the plates (pics/kf_bg_<team>_<width>.png): 'a' team 0, 'x' team 1, 'n' none
+	char		killer_team;				// real team: 'a' team 0 (allies), 'x' team 1 (axis), 'n' none (see KF_ViewTeam)
 	char		victim_team;
+	int			killer_num;					// client number, -1: nobody (his own name is highlighted, KF_NamePass)
+	int			victim_num;
 	float		expire;
 } kf_entry_t;
 
@@ -366,6 +368,11 @@ static kf_style_t kf_styles[KF_STYLES] =
 static char KF_COLOR_HS[] = "#fb2";	// "HS" (style 1)
 static char KF_COLOR_TK[] = "#f44";	// "TK" and the verb of a teamkill (styles 1 and 6)
 static char KF_COLOR_LABEL[] = "#bbb";	// the verb (style 6)
+static char KF_COLOR_ME[] = "#fe9";		// the name of the player who looks at the feed, a bit highlighted
+
+// who the feed being built is for (KF_SendTo): his team ('n' spectator or Free For All) and client number
+static char			kf_view_team = 'n';
+static int			kf_view_num = -1;
 
 static int			kf_client_style[KF_MAX_CLIENTS];	// -1: killfeed_style of the server
 // the style is kept in his client (seta kf, userinfo kfu) and by name in dday/killfeed.txt (0 too: the server may
@@ -373,12 +380,13 @@ static int			kf_client_style[KF_MAX_CLIENTS];	// -1: killfeed_style of the serve
 #define KF_FILE		"killfeed.txt"
 static char			kf_lookup[KF_MAX_CLIENTS][sizeof(((client_persistant_t *)0)->netname)];
 static qboolean		kf_client_feed[KF_MAX_CLIENTS];		// the client has a statusbar with the feed (sent by unicast)
+static char			kf_client_view[KF_MAX_CLIENTS];		// his team when it was sent: it is sent again when it changes
 
 // The texts of the feed are drawn after all the pictures, grouped by color: the color command of the client (Q2PRO,
 // other clients skip it and draw the texts in white) also tints the pictures, and one command per color is shorter.
-// Groups in the order they are written: 'n' white (the statusbar starts in white), 'a' and 'x' the teams,
-// 'h' headshot, 'l' the verb, 't' teamkill
-static char kf_passes[] = "naxhlt";
+// Groups in the order they are written: 'n' white (the statusbar starts in white), 'a' and 'x' allies and enemies of
+// who looks, 'm' his own name, 'h' headshot, 'l' the verb, 't' teamkill
+static char kf_passes[] = "naxmhlt";
 
 typedef struct
 {
@@ -401,8 +409,28 @@ static char *KF_PassColor (kf_style_t *st, char pass)
 	case 'h':	return KF_COLOR_HS;
 	case 'l':	return KF_COLOR_LABEL;
 	case 't':	return KF_COLOR_TK;
+	case 'm':	return KF_COLOR_ME;
 	}
 	return NULL;
+}
+
+
+// the color of a team for who looks at the feed: a player sees his team as 'a' (green or blue) and the other one as
+// 'x' (red), whatever team he is on; a spectator (and Free For All, 'n') sees the real teams: allies 'a', axis 'x'
+static char KF_ViewTeam (char team)
+{
+	if (kf_view_team == 'n' || team == 'n')
+		return team;
+	return (team == kf_view_team) ? 'a' : 'x';
+}
+
+
+// the color group of a name: his own name highlighted, the rest the color of their team for who looks
+static char KF_NamePass (char team, int num)
+{
+	if (num >= 0 && num == kf_view_num)
+		return 'm';
+	return KF_ViewTeam (team);
 }
 
 
@@ -450,7 +478,7 @@ static void KF_LinePlates (char *out, kf_style_t *st, kf_entry_t *e, int row)
 			kfx = x;
 			x += KF_FLAG_W + KF_FLAG_GAP;
 		}
-		KF_AddText (st, e->killer_team, x, y + KF_TEXT_DY, e->killer);
+		KF_AddText (st, KF_NamePass (e->killer_team, e->killer_num), x, y + KF_TEXT_DY, e->killer);
 		x += strlen (e->killer) * KF_CHAR_W + KF_GAP;
 	}
 
@@ -477,18 +505,18 @@ static void KF_LinePlates (char *out, kf_style_t *st, kf_entry_t *e, int row)
 		vfx = x;
 		x += KF_FLAG_W + KF_FLAG_GAP;
 	}
-	KF_AddText (st, e->victim_team, x, y + KF_TEXT_DY, e->victim);
+	KF_AddText (st, KF_NamePass (e->victim_team, e->victim_num), x, y + KF_TEXT_DY, e->victim);
 	x += strlen (e->victim) * KF_CHAR_W;
 
 	p += sprintf (p, "yt %d ", y);
 	if (!st->split)
-		p += sprintf (p, "xl %d picn kf_bg_%s%c_%d ", KF_X, st->plates, e->killer[0] ? e->killer_team : e->victim_team,
+		p += sprintf (p, "xl %d picn kf_bg_%s%c_%d ", KF_X, st->plates, KF_ViewTeam (e->killer[0] ? e->killer_team : e->victim_team),
 			KF_PlateWidth (x + KF_PAD_R - KF_X));
 	else
 	{
 		if (e->killer[0])
-			p += sprintf (p, "xl %d picn kf_bg_%s%c_%d ", KF_X, st->plates, e->killer_team, KF_PlateWidth (split - KF_X));
-		p += sprintf (p, "xl %d picn kf_bg_%s%c_%d ", split, st->plates, e->victim_team, KF_PlateWidth (x + KF_PAD_R - split));
+			p += sprintf (p, "xl %d picn kf_bg_%s%c_%d ", KF_X, st->plates, KF_ViewTeam (e->killer_team), KF_PlateWidth (split - KF_X));
+		p += sprintf (p, "xl %d picn kf_bg_%s%c_%d ", split, st->plates, KF_ViewTeam (e->victim_team), KF_PlateWidth (x + KF_PAD_R - split));
 	}
 	if (kfx)
 		p += sprintf (p, "xl %d picn kf_%s ", kfx, e->killer_fac);
@@ -513,7 +541,7 @@ static void KF_LineVisor (char *out, kf_style_t *st, kf_entry_t *e, int row)
 
 	if (e->killer[0])
 	{
-		KF_AddText (st, e->killer_team, x, ty, e->killer);
+		KF_AddText (st, KF_NamePass (e->killer_team, e->killer_num), x, ty, e->killer);
 		x += (strlen (e->killer) + 2) * KF_CHAR_W;
 	}
 
@@ -538,7 +566,7 @@ static void KF_LineVisor (char *out, kf_style_t *st, kf_entry_t *e, int row)
 	}
 
 	x += 2 * KF_CHAR_W;
-	KF_AddText (st, e->victim_team, x, ty, e->victim);
+	KF_AddText (st, KF_NamePass (e->victim_team, e->victim_num), x, ty, e->victim);
 	x += strlen (e->victim) * KF_CHAR_W;
 
 	out += sprintf (out, "yt %d xl %d picn kf_bg_v_%d ", y, KF_X, KF_PlateWidth (x + st->pad_l - KF_X));
@@ -658,6 +686,8 @@ static void KF_SendTo (edict_t *ent)
 
 	style = KF_StyleOf (ent);
 	baselen = strlen (kf_base);
+	kf_view_team = kf_client_view[n] = KF_TeamOf (ent);
+	kf_view_num = n;
 
 	// the base keeps its place: the oldest rows are left out until everything fits
 	if (style != KF_STYLE_OFF)
@@ -731,6 +761,7 @@ void Killfeed_ClientConnect (edict_t *ent)
 		return;
 	kf_client_style[n] = -1;
 	kf_client_feed[n] = false;
+	kf_client_view[n] = 'n';
 	kf_lookup[n][0] = 0;
 }
 
@@ -949,6 +980,8 @@ qboolean Killfeed_Add (edict_t *killer, edict_t *victim, int mod, qboolean heads
 	KF_MakeLabel (e->label, sizeof (e->label), e->killer[0] != 0, mid, tail);
 	e->killer_team = KF_TeamOf (killer);
 	e->victim_team = KF_TeamOf (victim);
+	e->killer_num = e->killer[0] ? KF_ClientNum (killer) : -1;
+	e->victim_num = KF_ClientNum (victim);
 	e->expire = level.time + KF_LIFETIME;
 
 	kf_dirty = true;
@@ -959,15 +992,28 @@ qboolean Killfeed_Add (edict_t *killer, edict_t *victim, int mod, qboolean heads
 // once per server frame: removes the lines that expired and sends the feed when it changed
 void Killfeed_Frame (void)
 {
+	edict_t	*ent;
+	int		i, n;
+
 	while (kf_count && level.time >= kf_entries[0].expire)
 	{
 		KF_DropOldest ();
 		kf_dirty = true;
 	}
 
-	if (!kf_dirty)
+	if (kf_dirty)
+	{
+		kf_dirty = false;
+		KF_Send ();
 		return;
+	}
 
-	kf_dirty = false;
-	KF_Send ();
+	// a player who changed team (or went to spectate) while he sees a feed: its colors are of his old team
+	for (i = 1; i <= game.maxclients; i++)
+	{
+		ent = &g_edicts[i];
+		n = KF_ClientNum (ent);
+		if (n >= 0 && kf_client_feed[n] && ent->inuse && ent->client && KF_TeamOf (ent) != kf_client_view[n])
+			KF_SendTo (ent);
+	}
 }
