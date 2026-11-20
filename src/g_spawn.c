@@ -2390,7 +2390,7 @@ void SP_worldspawn (edict_t *ent)
 	ffa_statusbar_active = false;
 	// los titulos de zona solo si el mapa tiene .ctl (sin .ctl se juega normal)
 	if (deathmatch->value && control_mode->value && TestEntFile(level.mapname, "ctl"))
-		gi.configstring (CS_STATUSBAR, Control_StatusBar(dday_statusbar));
+		Killfeed_SetBase (Control_StatusBar (dday_statusbar));
 	else if (G_IsFFA())
 	{
 		// Free For All: the team KILLS/POINTS block is replaced by the top scorer and your own frags
@@ -2446,18 +2446,18 @@ void SP_worldspawn (edict_t *ent)
 				"	xv 64 yv 78 stat_string 27 "
 				"endif ");
 			strcat (ffa_statusbar, stats_end);
-			gi.configstring (CS_STATUSBAR, ffa_statusbar);
+			Killfeed_SetBase (ffa_statusbar);
 			ffa_statusbar_active = true;
 		}
 		else
 		{
 			// the original team statusbar is used, FFA_HudStats must not write its stats (see TeamStats)
 			gi.dprintf ("WARNING: the Free For All statusbar could not be built (markers not found in dday_statusbar), using the team one\n");
-			gi.configstring (CS_STATUSBAR, dday_statusbar);
+			Killfeed_SetBase (dday_statusbar);
 		}
 	}
 	else
-		gi.configstring (CS_STATUSBAR, dday_statusbar);
+		Killfeed_SetBase (dday_statusbar);
 
 	//---------------
 

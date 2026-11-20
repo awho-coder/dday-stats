@@ -118,6 +118,8 @@ cvar_t	*spawn_camp_time;			// the amount of time after spawn to check for spawn 
 cvar_t	*invuln_medic;				// if medics are invulnerable
 //cvar_t	*teamgren;					// enables "team grenade mode" where the grenades are team-conscience, a soldier can not pick up his own team's grenade
 cvar_t	*death_msg;					// when and how the death msgs are displayed
+cvar_t	*killfeed_style;				// style of the killfeed of the players who did not choose one (command killfeed, see p_killfeed.c); default 0 (off)
+cvar_t	*killfeed_console;			// 1: the deaths on the killfeed are also printed to the console of the clients (history); default 0
 cvar_t	*level_wait;				// pause time at beginning and end of games
 cvar_t	*invuln_spawn;				// how long player is invulnerable after spawn
 
@@ -1974,6 +1976,8 @@ void G_RunFrame (void)
 
 	// build the playerstate_t structures for all players
 	ClientEndServerFrames ();
+
+	Killfeed_Frame ();
 
 	//JABot[start]
 	AITools_Frame();	//give think time to AI debug tools

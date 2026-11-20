@@ -3555,6 +3555,11 @@ void ClientCommand (edict_t *ent)
 		Ready_ClaimCaptain(ent);
 		return;
 	}
+	else if (Q_stricmp(cmd, "killfeed") == 0)	// style of the killfeed of the player (p_killfeed.c)
+	{
+		Killfeed_Cmd(ent);
+		return;
+	}
 
     cmdptr = FindCommand(cmd);
 	if (cmdptr && Sleep_BlocksCommand (ent, cmd))

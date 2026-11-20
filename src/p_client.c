@@ -474,6 +474,7 @@ void ClientObituary (edict_t *self, edict_t *inflictor, edict_t *attacker)
 	const char	*message4;
 
 	qboolean	ff;
+	qboolean	kf = false;	// the death is on the killfeed: it is not printed to the clients that see it
 	edict_t *Tent;
 
 
@@ -606,6 +607,8 @@ void ClientObituary (edict_t *self, edict_t *inflictor, edict_t *attacker)
 		}
 		if (message)
 		{
+			kf = Killfeed_Add (self->client->last_wound_inflictor, self, mod, false, message, NULL);
+
 			//faf: if they were wounded before they got themselves killed, name who wounded them.
 			if (self->client->last_wound_inflictor)
 			{
@@ -622,7 +625,7 @@ void ClientObituary (edict_t *self, edict_t *inflictor, edict_t *attacker)
 					for (i = 1; i <= game.maxclients; i++)
 					{
 						Tent = &g_edicts[i];
-						if (!Tent->inuse || !Tent->client)
+						if (!Tent->inuse || !Tent->client || (kf && Killfeed_Shows (Tent)))
 							continue;
 
 //						if (self->client->resp.team_on->index == Tent->client->resp.team_on->index)
@@ -672,7 +675,7 @@ void ClientObituary (edict_t *self, edict_t *inflictor, edict_t *attacker)
 					for (i = 1; i <= game.maxclients; i++)
 					{
 						Tent = &g_edicts[i];
-						if (!Tent->inuse || !Tent->client)
+						if (!Tent->inuse || !Tent->client || (kf && Killfeed_Shows (Tent)))
 							continue;
 
 						if (OnSameTeam(Tent,self)){
@@ -871,6 +874,8 @@ void ClientObituary (edict_t *self, edict_t *inflictor, edict_t *attacker)
 				message4 = "";
 				if (officer_bonus->value == 1 && attacker->client && attacker->client->resp.mos == OFFICER)
 					message4 = OfficerBonus(attacker, self);
+				kf = Killfeed_Add (attacker, self, mod, self->client->resp.deathblend == 1, message, message2);	// 1: the head shot that plays the "Headshot!" cue
+
 				// Means of Death msgs now server customizable
 				if (death_msg->value == 0) // print to self only
 					safe_cprintf(self, PRINT_HIGH, "%s %s %s%s%s%s\n", self->client->pers.netname, message, attacker->client->pers.netname, message2, message3, message4);
@@ -879,7 +884,7 @@ void ClientObituary (edict_t *self, edict_t *inflictor, edict_t *attacker)
 					for (i = 1; i <= game.maxclients; i++)
 					{
 						Tent = &g_edicts[i];
-						if (!Tent->inuse || !Tent->client)
+						if (!Tent->inuse || !Tent->client || (kf && Killfeed_Shows (Tent)))
 							continue;
 
 //						if (self->client->resp.team_on->index == Tent->client->resp.team_on->index)
@@ -2983,6 +2988,8 @@ void ClientUserinfoChanged (edict_t *ent, char *userinfo)
 	s = Info_ValueForKey (userinfo, "name");
 	strncpy (ent->client->pers.netname, s, sizeof(ent->client->pers.netname)-1);
 
+	Killfeed_Userinfo (ent, userinfo);	// "set killfeed <style> u" in the config of the client
+
 	// set skin
 	s = Info_ValueForKey (userinfo, "skin");
 
@@ -3119,6 +3126,8 @@ qboolean ClientConnect (edict_t *ent, char *userinfo)
 {
 	static int Already_Done=0;
 	char	*value, *f, *ip;
+
+	Killfeed_ClientConnect (ent);
 
 	// check to see if they are on the banned IP list
 	value = Info_ValueForKey (userinfo, "ip");
