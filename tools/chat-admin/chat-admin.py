@@ -7,9 +7,9 @@ CFG    = "/home/ubuntu/dday/dday/server.cfg"
 INBOX  = "/home/ubuntu/dday/chat-inbox"           # chat conversacional -> Hermes
 RUNLOG = "/home/ubuntu/dday/chat-admin.actions"   # auditoría de acciones
 DEBUG  = "/home/ubuntu/dday/chat-admin.debug"     # calibración de formato
-ALLOW  = {"chlsnako", "peruano", "mrroman", "mitsui"}            # solo para heurística de debug
+ALLOW  = {"chlsnako", "peruano", "mrroman", "mitsui", "edde"}            # solo para heurística de debug
 ALLOW_RAW = (">ChL<Snako", "[MR]+Peruano+", "[MR]+roman")  # match EXACTO anti-squatting
-ALLOW_SUB = ("mitsui", "peruano")   # pedido del dueño: cualquier nick que contenga esto (cambia de clan/tag)
+ALLOW_SUB = ("mitsui", "peruano", "edde")   # pedido del dueño: cualquier nick que contenga esto (cambia de clan/tag); "edde" = EDD!E
 MAPS   = {"dday2","invade1","invade2","invade6","itadday3","townwar","eurovilla","eurovilla3",
           "inland2","inland3","inland4","inland5","inland6","market1","mp1dday1","mp1dday2",
           "mp1dday3","nav2","nuenen","outpost","townwar1","war3","itadday1","itadday2",
