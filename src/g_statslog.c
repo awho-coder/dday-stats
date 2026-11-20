@@ -151,6 +151,7 @@ static const char *StatsLog_ModName (int mod)
 	switch (mod)
 	{
 	case MOD_PISTOL:			return "pistol";
+	case MOD_BROWNING:			return "pistol";	// Browning Hi-Power, la pistola automatica del Medic nuevo
 	case MOD_SHOTGUN:			return "shotgun";
 	case MOD_SHOTGUN2:			return "shotgun";
 	case MOD_RIFLE:				return "rifle";
@@ -203,6 +204,8 @@ static const char *StatsLog_ModName (int mod)
 	case MOD_FIRE_SPLASH:		return "fire";
 	case MOD_ON_FIRE:			return "fire";
 	case MOD_FIREBALL:			return "fire";
+	case MOD_CHANGETEAM:		return "changeteam";	// no van a las stats (StatsLog_Kill), si al registro
+	case MOD_CHANGETEAM_WOUNDED:	return "changeteam";
 	default:					return "unknown";
 	}
 }
@@ -213,6 +216,7 @@ static qboolean StatsLog_ModUsesHeldWeapon (int mod)
 	switch (mod)
 	{
 	case MOD_PISTOL:
+	case MOD_BROWNING:
 	case MOD_SHOTGUN:
 	case MOD_SHOTGUN2:
 	case MOD_RIFLE:
@@ -964,6 +968,29 @@ static void StatsLog_Streak (edict_t *targ, edict_t *attacker, stats_player_t *v
 	victim->streak = 0;
 }
 
+// quien se lleva la muerte, igual que Killed(): el atacante, o si murio solo (el mismo, nadie o el mundo: se
+// desangro o se mato despues de que lo hirieron) quien lo hirio por ultima vez. NULL si no hay o ya no es un
+// jugador. by_wound (si no es NULL): el credito vino de la herida
+static edict_t *StatsLog_Killer (edict_t *targ, edict_t *attacker, qboolean *by_wound)
+{
+	edict_t		*killer = attacker;
+	qboolean	wound = false;
+
+	if (killer == targ || killer == NULL || killer == world)
+	{
+		killer = targ->client->last_wound_inflictor;
+		if (killer == targ)
+			killer = NULL;
+		wound = true;
+	}
+	if (killer && (!killer->inuse || !killer->client))
+		killer = NULL;
+
+	if (by_wound)
+		*by_wound = wound && killer;
+	return killer;
+}
+
 // llamado desde Killed() cuando muere un jugador (targ->deadflag aun en 0)
 void StatsLog_Kill (edict_t *targ, edict_t *inflictor, edict_t *attacker)
 {
@@ -988,16 +1015,7 @@ void StatsLog_Kill (edict_t *targ, edict_t *inflictor, edict_t *attacker)
 		return;
 	}
 
-	// igual que Killed(): si murio desangrado, el credito es de quien lo hirio
-	killer = attacker;
-	if (killer == targ || killer == NULL || killer == world)
-	{
-		killer = targ->client->last_wound_inflictor;
-		if (killer == targ)
-			killer = NULL;
-	}
-	if (killer && (!killer->inuse || !killer->client))
-		killer = NULL;
+	killer = StatsLog_Killer (targ, attacker, NULL);
 
 	victim = StatsLog_GetPlayer (targ);
 	if (!victim)
@@ -1054,6 +1072,111 @@ void StatsLog_Kill (edict_t *targ, edict_t *inflictor, edict_t *attacker)
 		fprintf (sl.file, ",\"dist\":%d", (int)VectorLength (d));
 	}
 	StatsLog_EndEvent ();
+}
+
+
+/*
+ * Registro de muertes (planes/killfeed-registro-muertes.md)
+ *
+ * Quien usa el killfeed grafico no recibe el obituario en texto, y una MVD o una demo solo guardan lo que
+ * recibieron los jugadores: sin esto, si todos usan el killfeed, la grabacion queda sin muertes (VisorDemos,
+ * stats/mvd2jsonl.py). Cada muerte se escribe en un configstring global que ningun HUD usa: le llega a todos,
+ * no se ve y queda en cualquier grabacion. Formato v1 (cambiarlo es "K2", nunca tocar "K1"):
+ *
+ *   K1|<seq>|<mod>|<flags>|<kslot>|<vslot>|<kteam><vteam>|<killer>|<victim>
+ *
+ * seq 0..999 (Q2PRO no reenvia un configstring igual al anterior), mod de StatsLog_ModName, flags h headshot,
+ * t teamkill, w credito por herida, b victima bot, c killer bot ("-" ninguna), slots = numero de cliente,
+ * equipos 0/1, "-" sin killer / sin equipo / FFA. El killer se calcula igual que en las stats.
+ */
+#define KILL_LOG_CS		(CS_PLAYERIDS - 4)	// -1..-3 son del FFA (p_hud.c)
+#define KILL_LOG_MAX	63					// un configstring general mas largo se derrama sobre los siguientes
+
+static void KillLog_Name (char *dst, int size, const char *name)
+{
+	int		n = 0;
+
+	for (; *name && n + 1 < size; name++)
+		if ((unsigned char)*name >= 32 && *name != '|' && *name != '"')
+			dst[n++] = *name;
+	dst[n] = 0;
+}
+
+static char KillLog_Team (int team)
+{
+	return (team >= 0 && team <= 9) ? '0' + team : '-';
+}
+
+// llamado desde player_die() antes de ClientObituary: todas las muertes, tambien las que no pasan por Killed()
+// (kill, cambio de equipo, sv killplayer), las sin obituario (penalizaciones) y las de fuera de la partida contada
+// (el lector filtra). Con death_msg 0 o 2 el server oculta a proposito quien mato a
+// quien: no se escribe
+void KillLog_Death (edict_t *targ, edict_t *attacker)
+{
+	static int	seq;
+	char		line[256], flags[8], kname[16], vname[16], kslot[8];
+	edict_t		*killer;
+	qboolean	by_wound, ffa = G_IsFFA ();
+	int			kteam, vteam, n = 0;
+	size_t		len;
+
+	if (!targ || !targ->client)
+		return;
+	if (death_msg->value != 1 && death_msg->value != 3)
+		return;
+
+	killer = StatsLog_Killer (targ, attacker, &by_wound);
+	vteam = ffa ? -1 : StatsLog_TeamOf (targ);
+	kteam = (killer && !ffa) ? StatsLog_TeamOf (killer) : -1;
+
+	if (killer && targ->client->resp.deathblend == 1)
+		flags[n++] = 'h';
+	if (killer && kteam >= 0 && kteam == vteam)
+		flags[n++] = 't';
+	if (by_wound)
+		flags[n++] = 'w';
+	if (targ->ai)
+		flags[n++] = 'b';
+	if (killer && killer->ai)
+		flags[n++] = 'c';
+	if (!n)
+		flags[n++] = '-';
+	flags[n] = 0;
+
+	KillLog_Name (vname, sizeof (vname), targ->client->pers.netname);
+	if (killer)
+	{
+		KillLog_Name (kname, sizeof (kname), killer->client->pers.netname);
+		Com_sprintf (kslot, sizeof (kslot), "%d", (int)(killer - g_edicts - 1));
+	}
+	else
+	{
+		kname[0] = 0;
+		strcpy (kslot, "-");
+	}
+
+	// si no cabe se recortan los nombres (primero el del killer), nunca el resto: los slots ya identifican
+	for (;;)
+	{
+		Com_sprintf (line, sizeof (line), "K1|%d|%s|%s|%s|%d|%c%c|%s|%s", seq,
+			StatsLog_ModName (meansOfDeath & ~MOD_FRIENDLY_FIRE), flags, kslot, (int)(targ - g_edicts - 1),
+			KillLog_Team (kteam), KillLog_Team (vteam), kname, vname);
+		len = strlen (line);
+		if (len <= KILL_LOG_MAX)
+			break;
+		if (kname[0])
+			kname[strlen (kname) - 1] = 0;
+		else if (vname[0])
+			vname[strlen (vname) - 1] = 0;
+		else
+		{
+			line[KILL_LOG_MAX] = 0;
+			break;
+		}
+	}
+
+	gi.configstring (KILL_LOG_CS, line);
+	seq = (seq + 1) % 1000;
 }
 
 void StatsLog_Objective (const char *type, const char *name, int team, edict_t *player)
