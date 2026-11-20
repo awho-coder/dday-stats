@@ -669,7 +669,7 @@ static void KF_Send (void)
 
 // sets the statusbar of the level (once per map) and clears the feed
 // The pictures of the feed are in a pak (killfeed<N>.pkz, tools/killfeed/make_pkz.sh) that Q2PRO downloads by HTTP:
-// the .filelist of the download server lists it, but the client reads that list only when it has to download some
+// <sv_downloadserver>dday.filelist lists it, but the client reads that list only when it has to download some
 // file. KF_WITNESS is a tiny picture that is only in the pak: a client without the pak misses it, downloads it and
 // with it the .filelist and the pak. A new pak goes with a new witness (kf_v2...)
 #define KF_WITNESS	"/pics/kf_v1.png"

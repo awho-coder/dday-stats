@@ -5,7 +5,8 @@
 #
 # Deja en la carpeta:
 #   killfeed<N>.pkz  todas las pics/kf_*.png del repo y el testigo pics/kf_v<N>.png
-#   .filelist        la lista que el cliente pide a sv_downloadserver (dday/.filelist): "killfeed<N>.pkz"
+#   dday.filelist    la lista que el cliente pide a <sv_downloadserver>dday.filelist (en la raiz, no en dday/):
+#                    "killfeed<N>.pkz", que el cliente baja de <sv_downloadserver>dday/killfeed<N>.pkz
 #
 # El testigo (una imagen de 1x1 transparente) va solo dentro del pak, nunca suelto en pics/ del server: el DLL lo
 # registra (KF_WITNESS en src/p_killfeed.c) y al cliente que no tiene el pak le falta, asi que baja el .filelist y el
@@ -25,5 +26,5 @@ cp "$repo"/pics/kf_*.png "$tmp/pics/"
 python3 -c "from PIL import Image; Image.new('RGBA', (1, 1), (0, 0, 0, 0)).save('$tmp/pics/kf_v$n.png')"
 rm -f "$out/killfeed$n.pkz"
 (cd "$tmp" && zip -q -X -D -9 "$out/killfeed$n.pkz" pics/*.png)
-printf 'killfeed%s.pkz\n' "$n" > "$out/.filelist"
+printf 'killfeed%s.pkz\n' "$n" > "$out/dday.filelist"
 echo "$out/killfeed$n.pkz: $(ls "$tmp/pics" | wc -l) archivos, $(stat -c %s "$out/killfeed$n.pkz") bytes"
