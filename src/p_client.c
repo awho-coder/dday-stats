@@ -3550,7 +3550,7 @@ int MapVote_Seconds (void)
 	return vote_by_modes ? VOTE_SECONDS_MODES : VOTE_SECONDS;
 }
 
-static const char *MapVote_ModeLabel (int vmode)
+const char *MapVote_ModeLabel (int vmode)
 {
 	switch (vmode)
 	{

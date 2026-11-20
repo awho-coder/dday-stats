@@ -1060,7 +1060,6 @@ void Hitmarker (edict_t *attacker, int kind);
 qboolean G_IsFFA(void);
 // g_vote.c: mapas de cada modo (FFA / Gun Game: ents/<mapa>_ffa.ent; control: ents/<mapa>.ctl)
 const char *Mode_NextMap (const char *current);	// proximo mapa de la rotacion del modo, NULL fuera de esos modos
-qboolean Mode_MapFits (const char *map);		// el mapa sirve para el modo actual (true fuera de esos modos)
 const char *Mode_Label (void);					// "Gun Game", "Free For All" o "control de zona"
 int Mode_PreparedMaps (int vmode, const char **out, int max);	// mapas preparados para un modo (VMODE_*)
 qboolean Vote_MapPlayable (const char *map);	// el .bsp carga y tiene spawns de D-Day
@@ -1069,6 +1068,7 @@ qboolean Vote_MapPlayable (const char *map);	// el .bsp carga y tiene spawns de 
 int MapVote_CurrentMode (void);		// modo de la partida que se esta jugando (VMODE_*)
 int MapVote_Seconds (void);			// duracion de la votacion de fin de mapa
 void MapVote_SetPendingMode (int vmode);	// el proximo mapa se juega en ese modo (VMODE_*)
+const char *MapVote_ModeLabel (int vmode);	// "normal", "Gun Game", "control de zona", "Free For All"
 void MapVote_ApplyMode (void);		// deja los cvars del modo ganador justo antes de cambiar de mapa (ExitLevel)
 // Free For All scoreboard pictures. The leading '/' makes them full paths: the client downloads the .png
 // itself (a plain name like "ffa_score" makes it ask for pics/ffa_score.pcx, which does not exist)

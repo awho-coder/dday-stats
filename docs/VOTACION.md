@@ -70,11 +70,15 @@ jugador cuando quiere, con la sintaxis que usaba q2admin.
 
 | Comando (consola) | Qué hace |
 |---|---|
-| `vote map <mapa>` | Propone cambiar a ese mapa. El que propone vota sí. |
+| `vote map <mapa>` | Propone cambiar a ese mapa en **modo normal**. El que propone vota sí. |
+| `vote normal <mapa>` | Lo mismo que `vote map`. |
+| `vote gungame <mapa>` | Propone cambiar a ese mapa en **Gun Game** (solo mapas con `_ffa.ent`). Si `vote_modes` lo permite. |
+| `vote control <mapa>` | Idem en **control de zona** (solo mapas con `.ctl`). Si `vote_modes` lo permite. |
+| `vote ffa <mapa>` | Idem en **Free For All** clásico (todos Sniper, `_ffa.ent`). Si `vote_modes` lo permite. |
 | `vote restart` | Propone reiniciar el mapa actual. |
 | `vote kick <nombre o número>` | Propone echar a un jugador. |
 | `vote yes` / `vote no` (o `vote si`) | Vota la propuesta en curso. |
-| `vote maps <texto>` | Busca entre los mapas del server. |
+| `vote maps <texto>` | Busca entre los mapas del server. `vote maps gungame` (o `control`, `ffa`) lista los de ese modo. |
 | `vote players` | Número y nombre de cada jugador (para `vote kick`). |
 | `vote` | Muestra la votación en curso o la ayuda. |
 | `sv votecancel` | (admin) Corta la votación en curso. |
@@ -88,13 +92,21 @@ Reglas:
   `info_team_start` o `info_reinforcements_start` en el `.bsp` o en
   `ents/<mapa>.ent`), sin distinguir mayúsculas. Si no está, avisa y sugiere
   parecidos; si no es de D-Day o el archivo está dañado, también avisa.
-  En **FFA / Gun Game** los mapas con `ents/<mapa>_ffa.ent` y en **control de
-  zona** los que tienen `ents/<mapa>.ctl` (los mismos de la rotación del modo)
-  siguen en el modo; **cualquier otro mapa vuelve al modo normal**: el aviso dice
-  "cambiar a dust (vuelve al modo normal)" y, al aprobarse, el mapa siguiente se
-  juega sin FFA / Gun Game / control y vuelven `mapvoting` y `sv_maplist` del
-  `server.cfg` (al entrar al modo, el bot los deja en 0 y en el mapa del modo).
-  `vote maps` muestra los mapas del modo. Igual con `!votemap` del bot.
+  `vote map` (y `vote normal`) **siempre juega el mapa en modo normal**, también
+  estando en FFA / Gun Game / control y aunque el mapa sea de ese modo: el aviso
+  dice "cambiar a dday2 (vuelve al modo normal)" y, al aprobarse, el mapa siguiente
+  se juega sin FFA / Gun Game / control y vuelven `mapvoting` y `sv_maplist` del
+  `server.cfg`. Para seguir en el modo (o entrar a uno) se vota con su comando.
+  (`!votemap` del bot todavía deja seguir en el modo con un mapa del modo.)
+- **Modos:** `vote gungame <mapa>`, `vote control <mapa>` y `vote ffa <mapa>` solo
+  aceptan mapas preparados para ese modo (`ents/<mapa>_ffa.ent` o `ents/<mapa>.ctl`);
+  con otro mapa, o sin mapa, responden con la lista de los que sirven. El aviso dice
+  "cambiar a gg_rats en Gun Game". Al aprobarse corta el mapa igual que `vote map` y
+  el siguiente se juega en ese modo; **después todo sigue como siempre**: votación del
+  final por secciones (si `mapvoting_modes 1`) o la rotación del modo si nadie vota.
+  Qué modos se votan lo dice `vote_modes` (por defecto ninguno: solo `vote map`); un
+  modo apagado responde "En este servidor no se vota control de zona.". En duelo y
+  torneo no se votan modos (sí `vote map`).
   Aprobada, termina como `sv nextmap`: la partida queda en las stats como
   cortada (`reason: forced`), no sale la votación de fin de mapa y el mapa
   cambia al terminar la intermisión.
@@ -130,6 +142,7 @@ la votación por chat, el aviso suma `!votemap` / `!votekick`.
 | `vote_kick_min` | `3` | Humanos en equipo necesarios para un kick. |
 | `vote_announce` | `600` | Segundos entre avisos de cómo votar (`0` = sin avisos). |
 | `vote_chat` | `0` | Lo pone el bot: `1` = el aviso incluye los comandos del chat. |
+| `vote_modes` | `""` | Modos que se votan además del normal, separados por espacio: `gungame`, `control`, `ffa` (ej. `set vote_modes "gungame"`). La ayuda y los avisos muestran solo los que están. |
 
 Ninguno es *latched*: rigen al instante. Lo que se cambia por rcon se pierde al
 reiniciar el server; lo permanente va en `server.cfg` (en el server de
