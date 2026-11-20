@@ -584,6 +584,15 @@ static int KF_Build (char *out, kf_style_t *st, int first)
 
 	if (color)
 		len += sprintf (out + len, "color #fff ");
+	// the feed between two words that the clients do not know (they skip them): a demo viewer with its own kill
+	// feed (VisorDemos) leaves out what is between them
+	if (len)
+	{
+		memmove (out + 9, out, len + 1);
+		memcpy (out, "kf_begin ", 9);
+		len += 9;
+		len += sprintf (out + len, "kf_end ");
+	}
 	return len;
 }
 

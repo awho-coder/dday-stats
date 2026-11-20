@@ -1303,6 +1303,7 @@ void player_die (edict_t *self, edict_t *inflictor, edict_t *attacker, int damag
 		//self->client->deathfade = 1;
 		self->client->killer_yaw = self->s.angles[YAW]; //pbowens: always look forward
 		self->client->ps.pmove.pm_type = PM_DEAD;
+		KillLog_Death (self, attacker);	// every death, also the ones that skip Killed () (kill, team change, sv killplayer)
 		ClientObituary (self, inflictor, attacker);
 
 		//gi.sound(self, CHAN_WEAPON, gi.soundindex("misc/null.wav"), 1, ATTN_NORM, 0);

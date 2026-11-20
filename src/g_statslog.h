@@ -33,6 +33,7 @@ void StatsLog_MatchEnd (void);
 
 void StatsLog_ClientDisconnect (edict_t *ent);
 void StatsLog_Kill (edict_t *targ, edict_t *inflictor, edict_t *attacker);
+void KillLog_Death (edict_t *targ, edict_t *attacker);	// registro de muertes para MVD y demos (configstring)
 void StatsLog_Objective (const char *type, const char *name, int team, edict_t *player);
 
 // FFA Gun Game: el jugador cambio de escalon. why: "kill" (subio), "suicide", "knifed", "streak" (bajo),
