@@ -85,7 +85,11 @@ del mapa anterior. En el mapa solo quedan esa arma, su munición y el cuchillo.
 ### Gun Game (`ffa_gungame`)
 
 Con `ffa 1` y `ffa_gungame 1`, cada kill te da la siguiente arma de una escalera; gana el
-primero que mata con el cuchillo en el último escalón (no hay fraglimit). La escalera se arma al
+primero que mata en el último escalón, con lo que sea: cuchillo, puños, casco o
+desangrado (no hay fraglimit). No cuentan las kills con un arma de un escalón anterior: una
+granada que seguía en el aire al subir, o el desangrado de una herida hecha antes de llegar
+al último escalón. Cada kill que te sube de arma te cura el sangrado y la cojera
+(no la vida). La escalera se arma al
 azar en cada mapa con armas de las 8 facciones (sin lanzallamas ni molotov), sin repetir el tipo
 de arma ni el ejército de un escalón al siguiente. Bajas un escalón si te suicidas, si te matan
 con cuchillo o tras varias muertes seguidas sin matar. Quien entra tarde parte en el escalón

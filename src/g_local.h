@@ -758,7 +758,7 @@ extern	edict_t	*ffa_gg_winner;		// Free For All Gun Game: the player who killed 
 void FFA_GunGameGive (edict_t *ent);	// p_classes.c: gives the weapon of the step of the player
 gitem_t *FFA_GunGameWeapon (edict_t *ent);	// p_classes.c: weapon of the step of the player
 void FFA_GunGameThink (edict_t *ent);	// p_classes.c: gives the weapon of a new step, once per frame and outside the weapon code
-void FFA_GunGameKill (edict_t *killer, int mod);	// p_classes.c: a kill of the player, promotes or wins
+void FFA_GunGameKill (edict_t *killer, edict_t *victim, int mod);	// p_classes.c: a kill of the player, promotes or wins
 void FFA_GunGameDeath (edict_t *victim, qboolean suicide, int mod);	// p_classes.c: a death of the player, may demote
 extern	cvar_t	*ffa_gg_snd_up;		// Free For All Gun Game: sound (path in the sound folder) of the player who goes up a step
 extern	cvar_t	*ffa_gg_snd_down;	// Free For All Gun Game: sound of the player who goes down a step
@@ -1805,6 +1805,7 @@ struct gclient_s
 	float		jump_pause_time;
 
 	edict_t     *last_wound_inflictor;
+	int			last_wound_ffa_level;	// Gun Game: step of last_wound_inflictor when he hurt him (a bleed-out wins only from the last step)
 
 	int			sidestep_anim;
 	int			last_sidestep_anim;

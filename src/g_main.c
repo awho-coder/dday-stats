@@ -1105,7 +1105,7 @@ static void FFA_AnnounceWinner (void)
 	qboolean	tie;
 	edict_t		*top = FFA_TopPlayer(&tie);
 
-	// Gun Game: the one who killed with the knife on the last step wins
+	// Gun Game: the one who killed on the last step wins
 	if (ffa_gg_on && ffa_gg_winner)
 	{
 		safe_bprintf (PRINT_HIGH, "%s wins the Gun Game!\n", ffa_gg_winner->client->pers.netname);
