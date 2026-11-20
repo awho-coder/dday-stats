@@ -354,13 +354,13 @@ typedef struct
 
 static kf_style_t kf_styles[KF_STYLES] =
 {
-	{ "apagado (obituario en texto)", NULL, false, false, false, 0, NULL, NULL },
-	{ "visor con arma", "v", true, false, false, 3, "#8bf", "#f86" },
-	{ "visor con placas de color y banderas", "", false, false, true, 5, "#8bf", "#f86" },
-	{ "placas de dos colores solidas", "s", false, false, true, 5, NULL, NULL },
-	{ "placa del killer con nombres de color", "t", false, false, false, 9, "#9d5", "#f88" },
-	{ "original de Snako", "o", false, false, false, 5, NULL, NULL },
-	{ "visor (texto, sin arma)", "v", true, true, false, 3, "#8bf", "#f86" }
+	{ "apagado: las muertes en texto, como antes", NULL, false, false, false, 0, NULL, NULL },
+	{ "placa negra, nombres de color y el arma", "v", true, false, false, 3, "#8bf", "#f86" },
+	{ "placas de color por equipo y banderas", "", false, false, true, 5, "#8bf", "#f86" },
+	{ "placas verde y roja, nombres blancos", "s", false, false, true, 5, NULL, NULL },
+	{ "placa del que mata, nombres de color", "t", false, false, false, 9, "#9d5", "#f88" },
+	{ "placa oscura del que mata, nombres blancos", "o", false, false, false, 5, NULL, NULL },
+	{ "placa negra, nombres de color y como murio", "v", true, true, false, 3, "#8bf", "#f86" }
 };
 
 static char KF_COLOR_HS[] = "#fb2";	// "HS" (style 1)
