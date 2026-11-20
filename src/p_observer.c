@@ -84,6 +84,10 @@ void SwitchToObserver(edict_t *ent)
 //	ent->client->deathfade = 0;
 	ent->client->ps.fov = STANDARD_FOV;
 
+	// fuera del mapa no se dibuja nada y el frame anterior queda pegado ("hall of mirrors");
+	// gl_clear borra la pantalla en cada frame (no se guarda en el config del cliente)
+	stuffcmd(ent, "gl_clear 1\n");
+
 	if (!ent->client->display_info && ent->client->layout_type != SHOW_CAMPAIGN)
 	{
 		if(team_list[0] && !G_IsFFA())

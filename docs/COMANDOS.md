@@ -15,15 +15,18 @@ mapas **preparados** para él:
 | Modo | Mapa preparado si existe | Mapas hoy |
 |---|---|---|
 | Control | `ents/<mapa>.ctl` | eurovilla, inland4, invade2, invade6, itadday3, townwar |
-| FFA / Gun Game | `ents/<mapa>_ffa.ent` | dday2, gg_rats, tebessa2 |
+| FFA / Gun Game | `ents/<mapa>_ffa.ent` | dday2, gg_rats, inferno, tebessa2 |
 
 - **Rotación:** al terminar un mapa, la DLL pasa al siguiente mapa preparado (orden alfabético,
   vuelve al primero) y no abre la votación de fin de mapa. Si el modo arrancó en un mapa sin
   preparar, sigue con el primero preparado. Sin ningún mapa preparado se usa `sv_maplist`.
-- **Votación de los jugadores:** con `vote map` y `!votemap` un mapa preparado sigue en el modo y
-  cualquier otro **vuelve al modo normal** (el aviso dice "(vuelve al modo normal)"; al aprobarse
-  vuelven también `mapvoting` y `sv_maplist` del `server.cfg`, como `normal` del bot). `vote maps`
-  muestra los mapas del modo.
+- **Votación de los jugadores:** `vote map <mapa>` (igual que `vote normal <mapa>`) **siempre** juega el
+  mapa en modo normal, aunque sea un mapa del modo (el aviso dice "(vuelve al modo normal)"; al
+  aprobarse vuelven también `mapvoting` y `sv_maplist` del `server.cfg`, como `normal` del bot).
+  Para jugar un modo se vota con su comando: `vote gungame <mapa>`, `vote control <mapa>` o
+  `vote ffa <mapa>`, solo con mapas preparados para ese modo y si el modo está en `vote_modes`
+  (por defecto ninguno; S1 tiene `"gungame"`). Al aprobarse corta el mapa al tiro y después todo
+  sigue como siempre. `vote maps gungame` lista los mapas de ese modo.
 - **Agregar un mapa a un modo:** subir su `.ctl` o `_ffa.ent` a `ents/` del server (sin reinicio).
 - **Nombre del server** (`hostname_mode 1`, 0 por defecto; en Oracle va en `server.cfg`): al cargar
   cada mapa la palabra "Ladder" del `hostname` cambia por el modo: `D-Day Chile FFA Test`,
@@ -82,7 +85,11 @@ del mapa anterior. En el mapa solo quedan esa arma, su munición y el cuchillo.
 ### Gun Game (`ffa_gungame`)
 
 Con `ffa 1` y `ffa_gungame 1`, cada kill te da la siguiente arma de una escalera; gana el
-primero que mata con el cuchillo en el último escalón (no hay fraglimit). La escalera se arma al
+primero que mata en el último escalón, con lo que sea: cuchillo, puños, casco o
+desangrado (no hay fraglimit). No cuentan las kills con un arma de un escalón anterior: una
+granada que seguía en el aire al subir, o el desangrado de una herida hecha antes de llegar
+al último escalón. Cada kill que te sube de arma te cura el sangrado y la cojera
+(no la vida). La escalera se arma al
 azar en cada mapa con armas de las 8 facciones (sin lanzallamas ni molotov), sin repetir el tipo
 de arma ni el ejército de un escalón al siguiente. Bajas un escalón si te suicidas, si te matan
 con cuchillo o tras varias muertes seguidas sin matar. Quien entra tarde parte en el escalón
@@ -350,26 +357,40 @@ Para probarlo con bots: `bot_noshoot 1` (en `0` por defecto) hace que los bots n
 
 ## Servidor: hitmarkers (`hitmarkers`)
 
-Apagado por defecto. Cuando le pegas a un enemigo, el server te manda un sonido solo a ti (y a los espectadores
-que te siguen). No se marcan los golpes a compañeros, ni el sangrado de las heridas, ni los golpes a cuerpos.
+Apagado por defecto. Con `hitmarkers 0` no hay hitmarkers para nadie. Con cualquier otro valor, **cada jugador
+elige** lo que quiere con el comando `hitmarker <numero>` (también `hitmarkers`); quien no elige no recibe nada.
+Cuando le pegas a un enemigo, el server te manda un sonido solo a ti (y a los espectadores que te siguen, cada uno
+con lo que eligió). No se marcan los golpes a compañeros, ni el sangrado de las heridas, ni los golpes a cuerpos.
 Tampoco los ataques de los bots.
 
-| `hitmarkers` | Qué hace |
+| `hitmarker` (jugador) | Qué recibe |
 |---|---|
-| `0` | Nada (el juego de siempre). |
-| `1` | Solo sonido: al pegar o matar (`sound/misc/hitmark.wav`), y otro en un headshot (`hitmark_head.wav`). |
-| `2` | Sonido y una X en el centro de la pantalla: blanca al pegar (`pics/hitmark.pcx`, 0,2 s) y roja al matar (`pics/hitkill.pcx`, 0,4 s). |
+| `0` | Nada (por defecto). |
+| `1` | Todo: sonido al pegar o matar (`sound/misc/hitmark.wav`), otro en un headshot (`hitmark_head.wav`) y una X en el centro: blanca al pegar (`pics/hitmark.pcx`, 0,2 s) y roja al matar (`pics/hitkill.pcx`, 0,4 s). |
+| `2` | Solo los sonidos. |
+| `3` | Solo la X. |
+| `4` | Solo al matar: el sonido y la X roja en las kills y los headshots; los golpes que no matan no marcan nada. |
 
-En un headshot, `hitmark_head.wav` reemplaza la voz "HEADSHOT" del juego (`misc/hithead.wav`) para todos: los que
-están cerca lo oyen en la cabeza del muerto, como se oía la voz, y quien disparó (y quien lo sigue) lo oye además a
-todo volumen sin importar la distancia (una sola vez, aunque esté cerca). Los headshots de los bots o entre
-compañeros también suenan con `hitmark_head.wav`, solo en la cabeza del muerto. Con `hitmarkers 0` suena la voz de
-siempre.
+`hitmarker` sin número muestra la lista y cuál tiene. La elección se guarda en **dos lugares**:
 
-No hace falta cambiar de mapa: se puede prender y apagar en cualquier momento (los archivos se precargan siempre).
-La X usa el mismo lugar del HUD que las miras (`STAT_CROSSHAIR`), así que con la mira telescópica, los binoculares,
+- **En el juego del jugador**: el server le manda `set hmu x<n> u` y `seta hm <n>`. Con Q2PRO, `hm` queda en su
+  `config.cfg` al cerrar el juego. Al entrar a un server, este le pide `set hmu x$hm u`: el cliente pone su `hm` en
+  lugar de `$hm` y lo manda en el userinfo (`hmu`). Así la elección pasa de S1 a S2 y sigue aunque cambie de nombre.
+- **En el server, por nombre** (sin distinguir mayúsculas), en `dday/hitmarkers.txt`: una línea `<opción> <nombre>`
+  por jugador (el `0` no se escribe). Sirve para clientes que no guardan `hm` (r1q2, 3.20) o si juega desde otro PC.
+
+Al entrar manda lo del cliente (y se copia al archivo de ese server); si el cliente no trae nada, se usa el archivo.
+La "x" de `hmu` es para que nunca llegue vacío (Q2PRO no reemplaza `$hm` entre comillas y deja vacío lo que no existe).
+
+En un headshot, `hitmark_head.wav` reemplaza la voz "HEADSHOT" del juego (`misc/hithead.wav`) para quienes eligieron
+sonido (`1`, `2` o `4`): los que están cerca lo oyen en la cabeza del muerto, como se oía la voz, y quien disparó (y
+quien lo sigue) lo oye además a todo volumen sin importar la distancia (una sola vez, aunque esté cerca). Los demás
+oyen la voz de siempre. Los headshots de los bots o entre compañeros también van así, solo en la cabeza del muerto.
+
+No hace falta cambiar de mapa: el server los puede prender y apagar en cualquier momento (los archivos se
+precargan siempre). La X usa el mismo lugar del HUD que las miras (`STAT_CROSSHAIR`), así que con la mira telescópica, los binoculares,
 la torreta o la mira del dardo solo suena. Suena una vez por cuadro (los perdigones de la escopeta o una granada
-que pega a varios suenan una vez). La LMG, la SMG y la Browning no hacen headshot mientras el enemigo tenga más
+que pega a varios suenan una vez; si en ese cuadro un perdigón pega y otro mata, quien eligió `4` oye la kill). La LMG, la SMG y la Browning no hacen headshot mientras el enemigo tenga más
 de 30 de vida (cuenta como golpe en el pecho).
 
 `pics/hitmark.pcx` y `pics/hitkill.pcx` salen de `tools/assets/gen_hitmarker.py`. `hitmark.wav` y
@@ -465,14 +486,15 @@ Detalle: [`VOTACION.md`](VOTACION.md).
 | `vote_kick_percent` | `75` | % de sí en un kick (sin contar al acusado). |
 | `vote_kick_min` | `3` | Humanos en equipo necesarios para un kick. |
 | `vote_announce` | `600` | Segundos entre avisos de cómo votar (`0` = sin avisos). |
-| `vote_chat` | `0` | Lo pone el bot: el aviso incluye `!votemap`. |
+| `vote_modes` | `""` | Modos que se votan con `vote <modo> <mapa>` además del normal: `gungame`, `control`, `ffa` (separados por espacio). En S1: `"gungame"`. |
 | `sv votecancel` | — | Corta la votación en curso. |
 | `nick_protect` | `1` | Nicks y tags de `dday/nicks.txt` solo con clave (`set nickpw <clave> u`, `set tagpw <clave> u`). |
 | `sv nicks [reload]` | — | Lista las reglas (sin claves) / relee el archivo. |
 
-Comandos de los jugadores (consola): `vote map <mapa>`, `vote restart`,
-`vote kick <nombre|número>`, `vote yes`, `vote no`, `vote maps <texto>`,
-`vote players`.
+Comandos de los jugadores (consola): `vote map <mapa>` (= `vote normal <mapa>`, siempre modo normal),
+`vote gungame <mapa>` / `vote control <mapa>` / `vote ffa <mapa>` (según `vote_modes`, no en duelo
+ni torneo), `vote restart`, `vote kick <nombre|número>`, `vote yes`, `vote no`,
+`vote maps <texto>` (`vote maps gungame`: los mapas de ese modo), `vote players`.
 
 ## Servidor: valores por defecto cambiados
 
@@ -519,10 +541,13 @@ comando.
   `say <texto>`
 - `control <mapa>` (o `modo control <mapa>`) arranca el modo control en ese mapa y **apaga la
   votación de fin de mapa** mientras dure la sesión; después **rota entre los mapas con `.ctl`**
-  (la DLL elige el siguiente) y `vote map` / `!votemap` solo aceptan esos mapas.
+  (la DLL elige el siguiente). Ahí `vote map` vuelve al modo normal y `vote control <mapa>` (si
+  `vote_modes` lo permite) sigue en control.
 - `ffa <mapa>` (o `ffa` solo = el mapa actual; también en frase: "admin quiero probar
   el ffa en dust") arranca Free For All en ese mapa; como `control`, rota entre los mapas con
-  `ents/<mapa>_ffa.ent` (dday2, gg_rats y tebessa2) y la votación de mapa solo acepta esos.
+  `ents/<mapa>_ffa.ent` (dday2, gg_rats, inferno y tebessa2). La votación de fin de mapa queda como en
+  `server.cfg` (en S1 se vota entre Normal y Gun Game). `vote map` vuelve al modo normal y
+  `vote gungame <mapa>` sigue en Gun Game.
 - `gungame <mapa>` igual que `ffa`, pero con el Gun Game (`ffa_gungame 1`); `ffa` lo apaga.
 - `ffa ruleta <mapa>` FFA con la ruleta de armas (`ffa_roulette 1`) en vez de todos Sniper.
 - `mapa`, `dm`, `normal` y `publico` apagan el modo control y el FFA, y restauran la
@@ -543,9 +568,9 @@ comando.
 - **q2pro:** `screenshot` `stuff <cmd>` `stuffid <id> <cmd>` `autostuff <cmd>`
   `autostuffoff` `liststuff`
 - **Password:** `pass <nueva>` `passoff`
-- **Votación y alias:** `votacion on|off|cancelar` prende la votación por chat para todos
-  (`!votemap <mapa>`, `!votekick <nick>`, `!si`, `!no`, `!voto`); `alias <nick>` muestra los
-  otros nicks de la misma IP, solo en la consola del admin. Ver [`VOTACION.md`](VOTACION.md).
+- **Alias:** `alias <nick>` muestra los otros nicks de la misma IP, solo en la consola del admin.
+  La votación por chat (`!votemap`, `!votekick`, `!si`, `!no`) se sacó el 2026-11-20: se vota con
+  `vote` en la consola. Ver [`VOTACION.md`](VOTACION.md).
 - **Con LLM:** `elo <nick>`
 
 ## Comandos del juego que ya existían y usamos

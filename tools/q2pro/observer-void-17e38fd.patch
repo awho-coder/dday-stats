@@ -1,0 +1,64 @@
+diff --git a/src/server/entities.c b/src/server/entities.c
+index e4780e19..5b49d128 100644
+--- a/src/server/entities.c
++++ b/src/server/entities.c
+@@ -620,6 +620,10 @@ void SV_BuildClientFrame(client_t *client)
+     }
+ 
+     CM_FatPVS(client->cm, clientpvs, org);
++
++    // free-fly spectator outside the map (solid leaf): there is no PVS there, so send everything
++    bool spectator_in_void = clientcluster == -1 && frame->ps.pmove.pm_type == PM_SPECTATOR;
++    client->spectator_in_void = spectator_in_void;
+     BSP_ClusterVis(client->cm->cache, clientphs, clientcluster, DVIS_PHS);
+ 
+     // build up the list of visible entities
+@@ -649,7 +653,7 @@ void SV_BuildClientFrame(client_t *client)
+             continue;
+ 
+         // ignore if not touching a PV leaf
+-        if (ent != clent && !sv_novis->integer && !(client->csr->extended && ent->svflags & SVF_NOCULL)) {
++        if (ent != clent && !sv_novis->integer && !spectator_in_void && !(client->csr->extended && ent->svflags & SVF_NOCULL)) {
+             // check area
+             if (!CM_AreasConnected(client->cm, clientarea, ent->areanum)) {
+                 // doors can legally straddle two areas, so
+diff --git a/src/server/game.c b/src/server/game.c
+index 204c19bf..27a7eaff 100644
+--- a/src/server/game.c
++++ b/src/server/game.c
+@@ -622,8 +622,8 @@ static void SV_StartSound(const vec3_t origin, edict_t *edict,
+             continue;
+         }
+ 
+-        // PHS cull this sound
+-        if (!(channel & CHAN_NO_PHS_ADD)) {
++        // PHS cull this sound (free-fly spectator outside the map hears everything)
++        if (!(channel & CHAN_NO_PHS_ADD) && !client->spectator_in_void) {
+             leaf2 = CM_PointLeaf(&sv.cm, client->edict->s.origin);
+             if (!CM_AreasConnected(&sv.cm, leaf1->area, leaf2->area))
+                 continue;
+diff --git a/src/server/send.c b/src/server/send.c
+index 0afb0e63..c3597e1e 100644
+--- a/src/server/send.c
++++ b/src/server/send.c
+@@ -291,7 +291,7 @@ void SV_Multicast(const vec3_t origin, multicast_t to)
+             continue;
+         }
+ 
+-        if (to) {
++        if (to && !client->spectator_in_void) {
+             const mleaf_t *leaf2 = CM_PointLeaf(&sv.cm, client->edict->s.origin);
+             if (!CM_AreasConnected(&sv.cm, leaf1->area, leaf2->area))
+                 continue;
+diff --git a/src/server/server.h b/src/server/server.h
+index 819c420f..f49a0c83 100644
+--- a/src/server/server.h
++++ b/src/server/server.h
+@@ -311,6 +311,7 @@ typedef struct client_s {
+     int             framediv;
+ #endif
+     unsigned        frameflags;
++    bool            spectator_in_void;  // free-fly spectator outside the map: gets all ents, sounds and effects
+ 
+     // rate dropping
+     unsigned        message_size[RATE_MESSAGES];    // used to rate drop normal packets

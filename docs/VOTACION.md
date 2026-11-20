@@ -59,8 +59,9 @@ secciones. El mapa siguiente se juega en el modo de la opción ganadora.
   fija del modo (que queda de respaldo si nadie vota).
 - La votación dura 20 s (15 s la clásica) o termina antes si votaron todos los humanos.
 - Con `mapvoting_modes 0` la votación de fin de mapa es la de siempre (4 mapas en inglés).
-- Las sesiones del bot (`gungame <mapa>`, `control <mapa>`, `ffa <mapa>`) ponen `mapvoting 0`:
-  siguen en ese modo sin votación hasta `normal`, que repone `mapvoting` de `server.cfg`.
+- Las sesiones del bot `gungame <mapa>` y `ffa <mapa>` dejan `mapvoting` como en `server.cfg` (en S1
+  se vota al final también en Gun Game; sin `mapvoting_modes`, como en S2, rotan entre los mapas del
+  modo). `control <mapa>` pone `mapvoting 0`: sigue en control sin votación hasta `normal`.
 - No aplica en campaña, CTB ni con `DF_SAME_LEVEL`.
 
 ## Votación de la DLL (`src/g_vote.c`)
@@ -70,11 +71,15 @@ jugador cuando quiere, con la sintaxis que usaba q2admin.
 
 | Comando (consola) | Qué hace |
 |---|---|
-| `vote map <mapa>` | Propone cambiar a ese mapa. El que propone vota sí. |
+| `vote map <mapa>` | Propone cambiar a ese mapa en **modo normal**. El que propone vota sí. |
+| `vote normal <mapa>` | Lo mismo que `vote map`. |
+| `vote gungame <mapa>` | Propone cambiar a ese mapa en **Gun Game** (solo mapas con `_ffa.ent`). Si `vote_modes` lo permite. |
+| `vote control <mapa>` | Idem en **control de zona** (solo mapas con `.ctl`). Si `vote_modes` lo permite. |
+| `vote ffa <mapa>` | Idem en **Free For All** clásico (todos Sniper, `_ffa.ent`). Si `vote_modes` lo permite. |
 | `vote restart` | Propone reiniciar el mapa actual. |
 | `vote kick <nombre o número>` | Propone echar a un jugador. |
 | `vote yes` / `vote no` (o `vote si`) | Vota la propuesta en curso. |
-| `vote maps <texto>` | Busca entre los mapas del server. |
+| `vote maps <texto>` | Busca entre los mapas del server. `vote maps gungame` (o `control`, `ffa`) lista los de ese modo. |
 | `vote players` | Número y nombre de cada jugador (para `vote kick`). |
 | `vote` | Muestra la votación en curso o la ayuda. |
 | `sv votecancel` | (admin) Corta la votación en curso. |
@@ -88,13 +93,20 @@ Reglas:
   `info_team_start` o `info_reinforcements_start` en el `.bsp` o en
   `ents/<mapa>.ent`), sin distinguir mayúsculas. Si no está, avisa y sugiere
   parecidos; si no es de D-Day o el archivo está dañado, también avisa.
-  En **FFA / Gun Game** los mapas con `ents/<mapa>_ffa.ent` y en **control de
-  zona** los que tienen `ents/<mapa>.ctl` (los mismos de la rotación del modo)
-  siguen en el modo; **cualquier otro mapa vuelve al modo normal**: el aviso dice
-  "cambiar a dust (vuelve al modo normal)" y, al aprobarse, el mapa siguiente se
-  juega sin FFA / Gun Game / control y vuelven `mapvoting` y `sv_maplist` del
-  `server.cfg` (al entrar al modo, el bot los deja en 0 y en el mapa del modo).
-  `vote maps` muestra los mapas del modo. Igual con `!votemap` del bot.
+  `vote map` (y `vote normal`) **siempre juega el mapa en modo normal**, también
+  estando en FFA / Gun Game / control y aunque el mapa sea de ese modo: el aviso
+  dice "cambiar a dday2 (vuelve al modo normal)" y, al aprobarse, el mapa siguiente
+  se juega sin FFA / Gun Game / control y vuelven `mapvoting` y `sv_maplist` del
+  `server.cfg`. Para seguir en el modo (o entrar a uno) se vota con su comando.
+- **Modos:** `vote gungame <mapa>`, `vote control <mapa>` y `vote ffa <mapa>` solo
+  aceptan mapas preparados para ese modo (`ents/<mapa>_ffa.ent` o `ents/<mapa>.ctl`);
+  con otro mapa, o sin mapa, responden con la lista de los que sirven. El aviso dice
+  "cambiar a gg_rats en Gun Game". Al aprobarse corta el mapa igual que `vote map` y
+  el siguiente se juega en ese modo; **después todo sigue como siempre**: votación del
+  final por secciones (si `mapvoting_modes 1`) o la rotación del modo si nadie vota.
+  Qué modos se votan lo dice `vote_modes` (por defecto ninguno: solo `vote map`); un
+  modo apagado responde "En este servidor no se vota control de zona.". En duelo y
+  torneo no se votan modos (sí `vote map`).
   Aprobada, termina como `sv nextmap`: la partida queda en las stats como
   cortada (`reason: forced`), no sale la votación de fin de mapa y el mapa
   cambia al terminar la intermisión.
@@ -116,8 +128,8 @@ centerprint borra las kills de arriba.
 
 **Avisos de cómo votar** (con `vote_enable 1` y sin votación en curso): al
 entrar al server (solo a ese jugador, una vez), a los 45 s de empezar el mapa,
-cada `vote_announce` segundos y al terminar el mapa. Si el bot tiene prendida
-la votación por chat, el aviso suma `!votemap` / `!votekick`.
+cada `vote_announce` segundos y al terminar el mapa. Solo nombra los modos
+que están en `vote_modes` (ej. `vote map <mapa>, vote gungame <mapa>, ...`).
 
 | Cvar | Por defecto | Qué hace |
 |---|---|---|
@@ -129,7 +141,7 @@ la votación por chat, el aviso suma `!votemap` / `!votekick`.
 | `vote_kick_percent` | `75` | % de sí que hay que superar en un kick. |
 | `vote_kick_min` | `3` | Humanos en equipo necesarios para un kick. |
 | `vote_announce` | `600` | Segundos entre avisos de cómo votar (`0` = sin avisos). |
-| `vote_chat` | `0` | Lo pone el bot: `1` = el aviso incluye los comandos del chat. |
+| `vote_modes` | `""` | Modos que se votan además del normal, separados por espacio: `gungame`, `control`, `ffa` (ej. `set vote_modes "gungame"`). La ayuda y los avisos muestran solo los que están. |
 
 Ninguno es *latched*: rigen al instante. Lo que se cambia por rcon se pierde al
 reiniciar el server; lo permanente va en `server.cfg` (en el server de
@@ -176,13 +188,10 @@ tag  [MR]          clave      el tag del clan, en cualquier parte del nick
 
 Detalle: [`../tools/chat-admin/README.md`](../tools/chat-admin/README.md).
 
-- **Votación por chat**, para cualquier jugador: `!votemap <mapa>`,
-  `!votekick <nick>`, `!si`, `!no`, `!voto`. Mismas reglas que la DLL, pero
-  cuenta a todos los jugadores de `status` (no distingue espectadores) y
-  aprobada hace `map` por rcon. Se prende con el comando de admin
-  `votacion on` (queda guardado y sobrevive a reinicios del bot) y se apaga
-  con `votacion off`; `votacion cancelar` corta la que está en curso. Tiene su
-  propio límite (6 comandos cada 30 s por jugador).
+- **Sin votación por chat:** `!votemap`, `!votekick`, `!si` y `!no` se sacaron el
+  2026-11-20 porque nadie los usaba (y el cvar `vote_chat` de la DLL con ellos). Se
+  vota solo en la consola con `vote`. Si un admin escribe `votacion`, el bot responde
+  cómo votar en la consola.
 - **Alias** (`alias <nick>`, solo admins): los otros nicks usados desde la
   misma IP exacta. El bot guarda `(ip, nick)` de `status` cada 20 s en una
   base SQLite local del server (180 días); la respuesta va solo a la consola

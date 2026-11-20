@@ -1340,7 +1340,7 @@ void Info_RemoveKey (char *s, char *key)
 
 		if (!strcmp (key, pkey) )
 		{
-			strcpy (start, s);	// remove this part
+			memmove (start, s, strlen (s) + 1);	// remove this part (they overlap: strcpy garbled the userinfo)
 			return;
 		}
 
@@ -1403,7 +1403,7 @@ void Info_SetValueForKey (char *s, char *key, char *value)
 
 	Com_sprintf (newi, sizeof(newi), "\\%s\\%s", key, value);
 
-	if (strlen(newi) + strlen(s) > maxsize)
+	if (strlen(newi) + strlen(s) >= maxsize)	// and the 0 at the end
 	{
 		Com_Printf ("Info string length exceeded\n");
 		return;

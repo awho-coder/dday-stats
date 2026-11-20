@@ -758,7 +758,7 @@ extern	edict_t	*ffa_gg_winner;		// Free For All Gun Game: the player who killed 
 void FFA_GunGameGive (edict_t *ent);	// p_classes.c: gives the weapon of the step of the player
 gitem_t *FFA_GunGameWeapon (edict_t *ent);	// p_classes.c: weapon of the step of the player
 void FFA_GunGameThink (edict_t *ent);	// p_classes.c: gives the weapon of a new step, once per frame and outside the weapon code
-void FFA_GunGameKill (edict_t *killer, int mod);	// p_classes.c: a kill of the player, promotes or wins
+void FFA_GunGameKill (edict_t *killer, edict_t *victim, int mod);	// p_classes.c: a kill of the player, promotes or wins
 void FFA_GunGameDeath (edict_t *victim, qboolean suicide, int mod);	// p_classes.c: a death of the player, may demote
 extern	cvar_t	*ffa_gg_snd_up;		// Free For All Gun Game: sound (path in the sound folder) of the player who goes up a step
 extern	cvar_t	*ffa_gg_snd_down;	// Free For All Gun Game: sound of the player who goes down a step
@@ -940,7 +940,7 @@ extern cvar_t *sleepdart_cooldown; // segundos entre dos dardos del mismo Medic
 extern cvar_t *sleepdart_wake;     // 1 = el dano despierta al dormido
 extern cvar_t *bot_noshoot;        // 1 = los bots no disparan (para probar cosas con bots)
 extern cvar_t *sleepdart_anim;     // 1, 2 o 3: animacion de muerte con la que se queda dormido en el piso
-extern cvar_t *hitmarkers;         // 0 = nada, 1 = sonido al pegarle a un enemigo, 2 = sonido y X en el centro
+extern cvar_t *hitmarkers;         // 0 = apagados; otro = cada jugador elige con el comando hitmarker (apagado si no elige)
 extern cvar_t *fast_bleeding;
 extern cvar_t *fast_sniper;
 
@@ -1054,15 +1054,24 @@ void Think_Arty (edict_t *ent);
 
 qboolean OnSameTeam(edict_t *self,edict_t *target);
 void G_LocalSound (edict_t *ent, int soundindex);
-void G_SoundExcept (edict_t *ent, int channel, int soundindex, edict_t *except);
 #define HITMARK_HIT		0		// kinds of hit for Hitmarker
 #define HITMARK_KILL	1
 #define HITMARK_HEAD	2		// a headshot (it kills)
 void Hitmarker (edict_t *attacker, int kind);
+#define HM_OFF			0		// what each player chooses with the command hitmarker (his client and dday/hitmarkers.txt)
+#define HM_ALL			1		// sound and X
+#define HM_SOUND		2		// sound only
+#define HM_X			3		// X only
+#define HM_KILLS		4		// sound and red X, only when he kills
+#define HM_CHOICES		5
+qboolean Hitmarker_WantsX (edict_t *ent, qboolean kill);
+void Hitmarker_HeadVoice (edict_t *targ, edict_t *except);
+void Hitmarker_Cmd (edict_t *ent);
+void Hitmarker_Userinfo (edict_t *ent, char *userinfo);
+void Hitmarker_ClientBegin (edict_t *ent);
 qboolean G_IsFFA(void);
 // g_vote.c: mapas de cada modo (FFA / Gun Game: ents/<mapa>_ffa.ent; control: ents/<mapa>.ctl)
 const char *Mode_NextMap (const char *current);	// proximo mapa de la rotacion del modo, NULL fuera de esos modos
-qboolean Mode_MapFits (const char *map);		// el mapa sirve para el modo actual (true fuera de esos modos)
 const char *Mode_Label (void);					// "Gun Game", "Free For All" o "control de zona"
 int Mode_PreparedMaps (int vmode, const char **out, int max);	// mapas preparados para un modo (VMODE_*)
 qboolean Vote_MapPlayable (const char *map);	// el .bsp carga y tiene spawns de D-Day
@@ -1071,6 +1080,7 @@ qboolean Vote_MapPlayable (const char *map);	// el .bsp carga y tiene spawns de 
 int MapVote_CurrentMode (void);		// modo de la partida que se esta jugando (VMODE_*)
 int MapVote_Seconds (void);			// duracion de la votacion de fin de mapa
 void MapVote_SetPendingMode (int vmode);	// el proximo mapa se juega en ese modo (VMODE_*)
+const char *MapVote_ModeLabel (int vmode);	// "normal", "Gun Game", "control de zona", "Free For All"
 void MapVote_ApplyMode (void);		// deja los cvars del modo ganador justo antes de cambiar de mapa (ExitLevel)
 // Free For All scoreboard pictures. The leading '/' makes them full paths: the client downloads the .png
 // itself (a plain name like "ffa_score" makes it ask for pics/ffa_score.pcx, which does not exist)
@@ -1816,6 +1826,7 @@ struct gclient_s
 	float		jump_pause_time;
 
 	edict_t     *last_wound_inflictor;
+	int			last_wound_ffa_level;	// Gun Game: step of last_wound_inflictor when he hurt him (a bleed-out wins only from the last step)
 
 	int			sidestep_anim;
 	int			last_sidestep_anim;
@@ -1851,6 +1862,7 @@ struct gclient_s
 	float       hitmarker_until;		// hitmarkers: level.time until the X is shown
 	qboolean    hitmarker_kill;			// hitmarkers: the last hit killed (red X)
 	float       hitmarker_sound_time;	// hitmarkers: level.time of the last sound (one a frame, the pellets of a shotgun)
+	qboolean    hitmarker_sound_kill;	// hitmarkers: that sound was of a kill (a kill after a hit in the same frame)
 	vec3_t      sleep_mins, sleep_maxs;	// his box while he sleeps: around his body, which lies away from his origin
 	qboolean    sleep_falling;			// put to sleep in the air: he falls with his speed until he lands
 	int         sleep_pose;				// the pose he sleeps in (sleep_poses in p_weapon.c)

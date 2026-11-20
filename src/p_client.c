@@ -2896,6 +2896,8 @@ void ClientBegin (edict_t *ent)
 	ent->client = game.clients + (ent - g_edicts - 1);
 	ent->client->resp.AlreadySpawned=false;
 
+	Hitmarker_ClientBegin (ent);	// the client sends back the choice of hitmarkers it keeps
+
 	// kernel: CTB also needs this to clear structs at the beginning
 	if (deathmatch->value || ctb_mode->value)
 	{
@@ -2990,6 +2992,7 @@ void ClientUserinfoChanged (edict_t *ent, char *userinfo)
 	strncpy (ent->client->pers.netname, s, sizeof(ent->client->pers.netname)-1);
 
 	Killfeed_Userinfo (ent, userinfo);	// "set killfeed <style> u" in the config of the client
+	Hitmarker_Userinfo (ent, userinfo);	// "hmu": the choice of hitmarkers kept by the client
 
 	// set skin
 	s = Info_ValueForKey (userinfo, "skin");
@@ -3560,7 +3563,7 @@ int MapVote_Seconds (void)
 	return vote_by_modes ? VOTE_SECONDS_MODES : VOTE_SECONDS;
 }
 
-static const char *MapVote_ModeLabel (int vmode)
+const char *MapVote_ModeLabel (int vmode)
 {
 	switch (vmode)
 	{

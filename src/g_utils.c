@@ -692,32 +692,6 @@ void G_LocalSound (edict_t *ent, int soundindex)
 	gi.unicast (ent, true);
 }
 
-// as gi.sound (ent, channel, sound, 1, ATTN_NORM, 0), but not for "except" and the spectators who follow him: one
-// svc_sound for each other player who can hear it
-void G_SoundExcept (edict_t *ent, int channel, int soundindex, edict_t *except)
-{
-	edict_t	*cl;
-	int		i;
-
-	for (i = 1; i <= maxclients->value; i++)
-	{
-		cl = g_edicts + i;
-		if (!cl->inuse || !cl->client || cl->ai || cl == except)
-			continue;
-		if (except && cl->client->chasetarget == except)
-			continue;
-		if (!gi.inPHS (ent->s.origin, cl->s.origin))
-			continue;
-
-		gi.WriteByte (svc_sound);
-		gi.WriteByte (4 | 8);				// SND_POS | SND_ENT (volume 1 and ATTN_NORM are the defaults)
-		gi.WriteByte (soundindex);
-		gi.WriteShort (((ent - g_edicts) << 3) | channel);
-		gi.WritePosition (ent->s.origin);
-		gi.unicast (cl, false);
-	}
-}
-
 qboolean OnSameTeam(edict_t *self,edict_t *target)
 {
 	if (G_IsFFA())

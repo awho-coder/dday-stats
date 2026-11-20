@@ -51,6 +51,16 @@ Versión 5.068
 - Agrega -std=gnu99 al Makefile para compilar con GCC 15, que usa C23
   por defecto.
 
+- El observador en noclip ya no ve la pantalla naranja al salirse del
+  mapa (`SV_CalcBlend()` de p_view.c ignora CONTENTS_SOLID en noclip).
+
+- `SwitchToObserver()` de p_observer.c manda `gl_clear 1` al cliente:
+  fuera del mapa no se dibuja nada y el frame anterior quedaba pegado
+  ("hall of mirrors"), también el texto del chat. No se guarda en el
+  config del jugador. Que el observador vea jugadores, explosiones y
+  sonidos fuera del mapa depende de un parche de Q2PRO, no de la DLL
+  (ver docs/OBSERVADOR.md).
+
 Versión 5.067
 -------------
 
