@@ -326,10 +326,10 @@ static char *KF_ChooseFaction (edict_t *ent)
 
 
 // Each player chooses the style of his feed (command "killfeed <style>" or "set killfeed <style> u" in his config,
-// default killfeed_style): the statusbar with the feed is sent to every player by himself (svc_configstring by
+// default killfeed_style, 0): the statusbar with the feed is sent to every player by himself (svc_configstring by
 // unicast); the configstring of the server keeps the statusbar of the level without the feed (new clients, MVD)
 //   0  off: no feed, the obituary in text
-//   1  like the kill feed of VisorDemos with the weapon: "killer  weapon[ HS][ TK]  victim" on a black plate
+//   1  like the kill feed of VisorDemos with the weapon (the favourite): "killer  weapon[ HS][ TK]  victim" on a black plate
 //   2  like 1 with the flags, the headshot icon and one plate of the color of each team (killer and victim)
 //   3  solid plates of two colors (green and red), white names
 //   4  one plate of the team of the killer (dark, tinted), names of the color of their team
@@ -604,9 +604,9 @@ static int KF_StyleOf (edict_t *ent)
 	int		style = (n >= 0) ? kf_client_style[n] : -1;
 
 	if (style < 0)
-		style = killfeed_style ? (int)killfeed_style->value : 1;
+		style = killfeed_style ? (int)killfeed_style->value : KF_STYLE_OFF;
 	if (style < 0 || style >= KF_STYLES)
-		style = 1;
+		style = KF_STYLE_OFF;
 	return style;
 }
 
@@ -668,8 +668,16 @@ static void KF_Send (void)
 
 
 // sets the statusbar of the level (once per map) and clears the feed
+// The pictures of the feed are in a pak (killfeed<N>.pkz, tools/killfeed/make_pkz.sh) that Q2PRO downloads by HTTP:
+// the .filelist of the download server lists it, but the client reads that list only when it has to download some
+// file. KF_WITNESS is a tiny picture that is only in the pak: a client without the pak misses it, downloads it and
+// with it the .filelist and the pak. A new pak goes with a new witness (kf_v2...)
+#define KF_WITNESS	"/pics/kf_v1.png"
+
 void Killfeed_SetBase (char *statusbar)
 {
+	gi.imageindex (KF_WITNESS);
+
 	KF_Compact (kf_base, sizeof (kf_base), statusbar);
 	kf_base_set = true;
 	kf_count = 0;

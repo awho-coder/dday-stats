@@ -28,7 +28,9 @@ Las posiciones del texto están en las constantes `FFA_PANEL_*`, `FFA_TEXT_X`, `
 
 ## Killfeed (`kf_*.png`)
 
-El killfeed (`src/p_killfeed.c`) funciona en todos los modos de juego y se dibuja arriba a la izquierda, dentro del statusbar. Cada fila usa imágenes que carga el **cliente**: hay que copiarlas a `<carpeta del juego>/dday/pics/` del servidor y de los jugadores, o incluirlas en el pak. A diferencia de las de Free For All, el servidor **no** las registra con `gi.imageindex` (son 186 y el límite de imágenes del nivel es 256), así que el cliente no las descarga solo. Si faltan, el comportamiento depende del motor del cliente (sin verificar): lo esperable es que no dibuje ese fondo o ese icono y que el texto igual se vea.
+El killfeed (`src/p_killfeed.c`) funciona en todos los modos de juego y se dibuja arriba a la izquierda, dentro del statusbar. Viene apagado (`killfeed_style 0`): cada jugador lo prende con el comando `killfeed`.
+
+Las imágenes las carga el **cliente** y son demasiadas para registrarlas con `gi.imageindex` (el límite del nivel es 256), así que van en un pak que Q2PRO baja por HTTP: `tools/killfeed/make_pkz.sh <salida> [N]` arma `killfeed<N>.pkz` y el `.filelist` que lo lista, y los dos se sirven en `<sv_downloadserver>dday/`. Q2PRO pide el `.filelist` solo cuando tiene que bajar algún archivo: por eso el DLL registra un testigo (`/pics/kf_v<N>.png`, `KF_WITNESS`) que está solo dentro del pak, nunca suelto en `pics/` del server. Si se cambia el pak, subir `N` en el script y en `KF_WITNESS`. Quien baja por UDP (sin HTTP) no recibe el pak: tiene que copiarlo a mano en `dday/`. Sin las imágenes, Q2PRO dibuja un cuadrito ajedrezado de 8 x 8 donde va cada imagen (los textos se ven igual).
 
 Una fila tiene el killer, el icono del arma y la víctima; según el estilo (ver la tabla de estilos más abajo) lleva banderas, marca de headshot y una o dos placas. Sin killer (suicidio, entorno, granada propia) es `calavera  víctima`.
 
