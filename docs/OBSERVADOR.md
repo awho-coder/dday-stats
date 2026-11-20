@@ -40,15 +40,19 @@ Dentro del mapa todo sigue igual: no es un wallhack, y un jugador vivo no puede 
 
 ### Compilar e instalar
 
-Hay dos versiones del mismo parche en `tools/q2pro/`:
+El parche está publicado en un fork de Q2PRO, listo para clonar o para pasarle a otro server:
 
-- `observer-void-17e38fd.patch`: sobre Q2PRO `17e38fd`, que es lo que corre en S1 y S2.
-- `observer-void.patch`: sobre una versión más nueva (`601a8df`), con la que se probó en local.
+- Release con el binario ya compilado, los parches y un LEEME:
+  <https://github.com/awho-coder/q2pro/releases/tag/dday-observer-v2>
+- Rama `dday-observer`: Q2PRO `17e38fd` + parche, lo mismo que corre en S1 y S2.
+- Rama `dday-observer-latest`: el parche sobre un Q2PRO más nuevo (`601a8df`).
+
+Las mismas versiones del parche están en `tools/q2pro/` (`observer-void-17e38fd.patch` y
+`observer-void.patch`).
 
 ```sh
-git clone https://github.com/skullernet/q2pro && cd q2pro
-git checkout 17e38fd
-git apply /ruta/a/dday-dll/tools/q2pro/observer-void-17e38fd.patch
+git clone https://github.com/awho-coder/q2pro && cd q2pro
+git checkout dday-observer
 meson setup build --buildtype=debugoptimized && ninja -C build
 strip -o q2proded.new build/q2proded
 ```
