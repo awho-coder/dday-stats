@@ -29,7 +29,6 @@
  *   vote_kick_min      3    humanos en equipo necesarios para un kick
  *   vote_announce      600  segundos entre avisos de como votar (0 = sin avisos); ademas
  *                           se avisa al entrar al server, a los 45 s del mapa y al terminar
- *   vote_chat          0    lo pone el bot: 1 = el aviso incluye !votemap/!votekick
  *   vote_modes         ""   modos que se pueden votar ademas del normal: "gungame control ffa"
  *                           ("" = solo vote map / vote normal)
  *
@@ -93,7 +92,6 @@ static cvar_t *vote_kick;
 static cvar_t *vote_kick_percent;
 static cvar_t *vote_kick_min;
 static cvar_t *vote_announce;	// segundos entre avisos de como votar (0 = sin avisos)
-static cvar_t *vote_chat;		// 1 = el bot tiene prendida la votacion por chat (lo pone el bot)
 static cvar_t *vote_modes;		// modos que se pueden votar ademas del normal ("gungame control ffa")
 
 // avisos de como votar: al entrar al server (una vez por jugador), al empezar el mapa,
@@ -136,7 +134,6 @@ void Vote_Init (void)
 	vote_kick_percent = gi.cvar ("vote_kick_percent", "75", 0);
 	vote_kick_min     = gi.cvar ("vote_kick_min", "3", 0);
 	vote_announce     = gi.cvar ("vote_announce", "600", 0);
-	vote_chat         = gi.cvar ("vote_chat", "0", 0);
 	vote_modes        = gi.cvar ("vote_modes", "", 0);
 }
 
@@ -162,24 +159,15 @@ static qboolean Vote_IsDuel (void);
 static void Vote_HowTo (edict_t *ent)
 {
 	char		modes[128], l1[256];
-	const char	*l2 = "Tambien en el chat: !votemap <mapa>, !votekick <jugador>, !si o !no.\n";
 
 	Vote_ModeUsage (modes, sizeof(modes), ", ");
 	Com_sprintf (l1, sizeof(l1), "Votaciones: en la consola escribe vote map <mapa>%s, vote kick <jugador>, "
 		"vote yes o vote no (vote maps <texto> busca mapas).\n", modes);
 
 	if (ent)
-	{
 		safe_cprintf (ent, PRINT_HIGH, "%s", l1);
-		if (vote_chat->value)
-			safe_cprintf (ent, PRINT_HIGH, "%s", l2);
-	}
 	else
-	{
 		safe_bprintf (PRINT_HIGH, "%s", l1);
-		if (vote_chat->value)
-			safe_bprintf (PRINT_HIGH, "%s", l2);
-	}
 }
 
 // desde ClientBeginDeathmatch (cada mapa): solo la primera vez que entra al server

@@ -205,7 +205,7 @@ HELP = ("[ADMIN] comandos: estado, kick <quien>, kickban <quien>, ban <ip>, unba
         "mapa <nombre>, duelo <mapa>, publico, cuenta, reset, resetscore, tiempo, mapas, bans, "
         "bots on|off, kickbots, screenshot, stuff <cmd>, autostuff <cmd>, autostuffoff, "
         "control <mapa>, ffa <mapa>, ffa ruleta <mapa>, gungame <mapa>, dm <mapa>, kamikaze on|off, tornado [on|off], medic on|off, medic bazooka on|off, dardo on|off, officer bonus on|off, tab nuevo on|off, "
-        "grabar on|off|ahora, votacion on|off|cancelar, alias <nick>, lock, unlock, say <texto>, ayuda")
+        "grabar on|off|ahora, alias <nick>, lock, unlock, say <texto>, ayuda")
 
 HELP_DUEL = ("[ADMIN] server de DUELOS: estado, capitanes [reset], modoready on|off, tiempoduelo <min>|libre, "
              "duelo <mapa>, control <mapa>, normal, cuenta [min], reset, resetscore, marcador, torneo on|off, freeze, "
@@ -405,20 +405,8 @@ def run_cmd(text, by):
             return None, True
         return txt, True
     if verb in ("votacion", "votaciones"):
-        # votacion de mapa por chat abierta a todos (!votemap <mapa>, !si, !no); se guarda en VOTEFLAG
-        a = norm(arg)
-        if a in ("on", "1", "si", "activar", "activa", "prender", "prende", "encender", "enciende"):
-            vote_set(True)
-            return ("[ADMIN] votacion por chat ON: cualquiera puede escribir !votemap <mapa> o !votekick <nick> "
-                    "y votar con !si / !no"), True
-        if a in ("off", "0", "no", "desactivar", "desactiva", "apagar", "apaga"):
-            vote_set(False)
-            return "[ADMIN] votacion por chat OFF", True
-        if a in ("cancelar", "cancela", "parar", "para"):
-            if not VOTE["active"]: return "[ADMIN] no hay ninguna votacion en curso", True
-            VOTE["active"] = False
-            return "[ADMIN] votacion cancelada", True
-        return "[ADMIN] votacion por chat: %s (uso: votacion on|off|cancelar)" % ("ON" if vote_enabled() else "OFF"), True
+        # la votacion por chat (!votemap, !votekick, !si, !no) se saco el 2026-11-20: no se usaba
+        return "[ADMIN] la votacion por chat ya no existe; se vota en la consola: vote map <mapa>, vote gungame <mapa>, vote kick <jugador>", True
     if verb in ("kamikaze", "kamikase", "kamicase"):
         # cvar de la DLL (no latched): rige desde el proximo airstrike; un reinicio del server lo apaga
         a = norm(arg)
@@ -911,76 +899,8 @@ CHAT_PATS = [
     r'^\s*([^<>\s][^:]{0,40}?):\s+(.+)$',
 ]
 
-# ── votacion por chat (para probar antes de la de la DLL) ──
-# Cualquier jugador: "!votemap <mapa>" (o "!votar"), "!votekick <nick>", "!si" / "!no", "!voto" (estado).
-# Se prende con el comando de admin "votacion on" (queda guardado en VOTEFLAG); apagada por defecto.
-VOTEFLAG      = "/home/ubuntu/dday/chat-admin.vote"
 GAMEDIR       = "/home/ubuntu/dday/dday"
-VOTE_TIME     = 30      # segundos que dura
-VOTE_PERCENT  = 50      # mapa: hay que superar este % de los jugadores del server
-VOTE_KICK_PERCENT = 75  # kick: % de los jugadores sin contar al acusado
-VOTE_KICK_MIN = 3       # jugadores necesarios para votar un kick
-VOTE_COOLDOWN = 60      # espera tras una votacion rechazada
-KICK_WAIT     = 120     # tras un kick rechazado (quien propuso) y entre kicks al mismo jugador
-VOTE_REMIND   = 10
-VOTE = {"active": False, "kind": "map", "map": "", "target": None, "target_nick": "", "caller": "",
-        "caller_nick": "", "end": 0, "remind": 0, "next": 0, "votes": {}}
-KICK_WAIT_CALLER = {}   # nick normalizado -> time.time() hasta el que no puede proponer kick
-KICK_WAIT_TARGET = {}   # nick normalizado -> hasta cuando no se le puede votar kick
-VOTE_START = {"votemap", "votar", "votamapa", "votemapa", "vmap"}
-VOTE_KICK  = {"votekick", "vkick", "votarkick"}
-VOTE_YES   = {"si", "yes", "s", "y", "f1"}
-VOTE_NO    = {"no", "n", "f2"}
-VOTE_INFO  = {"voto", "votacion", "vote"}
 _MAPS_CACHE = {"t": 0, "maps": {}}
-
-VOTE_RATE = {}
-
-def vote_rate_ok(nick):
-    """Hasta 6 comandos de votacion cada 30 s por jugador (aparte del limite de los comandos de admin)."""
-    now = time.time()
-    q = [t for t in VOTE_RATE.get(nick, []) if now - t < 30]
-    if len(q) >= 6:
-        return False
-    q.append(now); VOTE_RATE[nick] = q
-    return True
-
-def vote_enabled():
-    try: return open(VOTEFLAG).read().strip() == "1"
-    except Exception: return False
-
-def vote_set(on):
-    try:
-        with open(VOTEFLAG, "w") as f: f.write("1\n" if on else "0\n")
-    except Exception:
-        return False
-    cfg_vote_chat_sync(1 if on else 0)
-    vote_chat_sync(force=True)
-    return True
-
-def cfg_vote_chat_sync(val):
-    """Deja 'set vote_chat N' en el server.cfg: el cvar debe sobrevivir a reinicios y cargas de mapa."""
-    try:
-        txt = open(CFG, encoding="utf-8", errors="replace").read()
-        line = "set vote_chat %d" % val
-        if re.search(r"(?m)^\s*set\s+vote_chat\s+\d+", txt):
-            txt = re.sub(r"(?m)^\s*set\s+vote_chat\s+\d+.*$", line, txt)
-        else:
-            txt = txt.rstrip("\n") + "\n" + line + "\n"
-        open(CFG, "w", encoding="utf-8").write(txt)
-        return True
-    except Exception as e:
-        print("ERR cfg vote_chat %s" % e)
-        return False
-
-_VCHAT = {"next": 0}
-
-def vote_chat_sync(force=False):
-    """Le dice a la DLL (cvar vote_chat) si la votacion por chat esta prendida, para que el aviso de
-    como votar incluya !votemap. Cada 60 s: un reinicio del server borra el cvar."""
-    if not force and time.time() < _VCHAT["next"]: return
-    _VCHAT["next"] = time.time() + 600
-    rcon("set vote_chat %d" % (1 if vote_enabled() else 0), wait=0.3)
 
 def server_maps():
     """{nombre en minusculas: nombre real} de los .bsp del server (cache de 60 s)."""
@@ -999,19 +919,6 @@ def cvar_value(name):
     """Valor actual de un cvar del server por rcon ('' si no se pudo leer)."""
     m = re.search(r'is\s+"([^"]*)"', rcon(name))
     return m.group(1) if m else ""
-
-def mode_maps():
-    """(nombre del modo, [mapas]) si el server esta en FFA / Gun Game o en control de zona: los mapas
-    preparados para el modo (ents/<mapa>_ffa.ent o ents/<mapa>.ctl), como la rotacion de la DLL;
-    (None, None) en el juego normal."""
-    if cvar_value("ffa") == "1" and cvar_value("control_mode") in ("", "0"):
-        label = "Gun Game" if cvar_value("ffa_gungame") == "1" else "Free For All"
-        suffix = "_ffa.ent"
-    elif cvar_value("control_mode") == "1":
-        label, suffix = "control de zona", ".ctl"
-    else:
-        return None, None
-    return label, prepared_maps(suffix)
 
 def prepared_maps(suffix):
     """Mapas del server con ents/<mapa><suffix> (_ffa.ent o .ctl), en orden alfabetico."""
@@ -1051,214 +958,6 @@ def map_suggest(q, names):
     for n in difflib.get_close_matches(q, sorted(names), n=5, cutoff=0.6):
         if n not in out and len(out) < 5: out.append(n)
     return out
-
-def vote_parse_chat(line):
-    """(nick, texto) de cualquier jugador; ignora al server ('console'), los avisos del bot y el chat de equipo."""
-    for p in CHAT_PATS:
-        m = re.match(p, line)
-        if m:
-            nick, text = m.group(1).strip(), m.group(2).strip()
-            if norm(nick) == "console" or nick.startswith("(") or text.startswith("["):
-                return None
-            return nick, text
-    return None
-
-def vote_needed(total):
-    pct = VOTE_KICK_PERCENT if VOTE["kind"] == "kick" else VOTE_PERCENT
-    return total * pct // 100 + 1
-
-def vote_count():
-    """(si, no, total) con los jugadores conectados ahora; en un kick el acusado no cuenta."""
-    pl = dict(players())
-    VOTE["votes"] = {uid: v for uid, v in VOTE["votes"].items() if uid in pl}
-    if VOTE["kind"] == "kick":
-        pl.pop(VOTE["target"], None)
-        VOTE["votes"].pop(VOTE["target"], None)
-    yes = sum(1 for v in VOTE["votes"].values() if v)
-    no = sum(1 for v in VOTE["votes"].values() if not v)
-    return yes, no, len(pl)
-
-def vote_blocked():
-    # como la DLL: se vota tambien en duelo y torneo (un mapa votado a mitad deja la partida cortada)
-    return None
-
-def vote_what():
-    if VOTE["kind"] == "kick":
-        return "echar a %s" % VOTE["target_nick"]
-    return "cambiar a %s%s" % (VOTE["map"], " (vuelve al modo normal)" if VOTE.get("to_normal") else "")
-
-def vote_target_present():
-    """En un kick: el acusado sigue en su slot (mismo nick)."""
-    return dict(players()).get(VOTE["target"]) == VOTE["target_nick"]
-
-def vote_finish(passed, why=""):
-    VOTE["active"] = False
-    kick = VOTE["kind"] == "kick"
-    if kick:
-        KICK_WAIT_TARGET[norm(VOTE["target_nick"])] = time.time() + KICK_WAIT
-    if not passed:
-        VOTE["next"] = time.time() + VOTE_COOLDOWN
-        if kick:
-            KICK_WAIT_CALLER[norm(VOTE["caller_nick"])] = time.time() + KICK_WAIT
-        say("[VOTO] rechazada (%s): %s" % (why, vote_what()))
-        log_action(VOTE["caller"], "vote " + vote_what(), "rechazada: " + why)
-        return
-    say("[VOTO] aprobada: %s" % vote_what())
-    log_action(VOTE["caller"], "vote " + vote_what(), "aprobada")
-    if kick:
-        if vote_target_present():
-            rcon("kick %d" % VOTE["target"])
-    else:
-        if VOTE.get("to_normal"):
-            restore_rotation()
-        rcon("map %s" % VOTE["map"])
-
-def vote_check():
-    """Decide la votacion si ya alcanza (o ya no puede alcanzar). True si termino."""
-    if VOTE["kind"] == "kick" and not vote_target_present():
-        VOTE["active"] = False
-        say("[VOTO] cancelada: %s se fue del servidor" % VOTE["target_nick"]); return True
-    yes, no, total = vote_count()
-    if not total:
-        vote_finish(False, "no quedan jugadores"); return True
-    need = vote_needed(total)
-    if yes >= need:
-        vote_finish(True); return True
-    if total - no < need:
-        vote_finish(False, "no alcanzan los votos"); return True
-    return False
-
-def vote_status():
-    yes, no, total = vote_count()
-    return "[VOTO] %s propone %s: si %d, no %d, faltan %d si (%d s). Escribe !si o !no" % (
-        VOTE["caller"], vote_what(), yes, no, max(vote_needed(total) - yes, 0),
-        max(int(VOTE["end"] - time.time() + 0.9), 0))
-
-def find_target(who, pl):
-    """(uid, nick) por numero de slot o nick (exacto o parte unica). (None, motivo) si no."""
-    w = who.strip().lstrip("#")
-    if w.isdigit():
-        d = dict(pl)
-        return (int(w), d[int(w)]) if int(w) in d else (None, "no hay ningun jugador con el numero %s" % w)
-    n = norm(who)
-    if not n: return None, "uso: !votekick <nick o numero>"
-    exact = [(u, k) for u, k in pl if norm(k) == n]
-    if exact: return exact[0]
-    part = [(u, k) for u, k in pl if n in norm(k)]
-    if len(part) == 1: return part[0]
-    return None, ("hay varios jugadores con '%s', usa el numero" % who[:20]) if part else \
-                 ("no hay ningun jugador '%s'" % who[:20])
-
-def vote_open(kind, nick, uid, **kw):
-    now = time.time()
-    kw.setdefault("to_normal", False)
-    VOTE.update(active=True, kind=kind, caller=nick, caller_nick=nick, end=now + VOTE_TIME,
-                remind=now + VOTE_REMIND, votes={uid: True}, **kw)
-
-def vote_line(line, dry=False):
-    """Atiende los comandos de votacion de cualquier jugador. None si la linea no es de votacion."""
-    cp = vote_parse_chat(line)
-    if not cp: return None
-    nick, text = cp
-    t = text.strip()
-    if not t.startswith("!"): return None
-    words = t[1:].split()
-    if not words: return None
-    verb = norm(words[0])
-    if verb not in VOTE_START | VOTE_KICK | VOTE_YES | VOTE_NO | VOTE_INFO: return None
-    res = ("vote", nick, text, None)
-    out = lambda msg: (say(msg) if not dry else None, print("VOTE %s -> %s" % (nick, msg)))
-    if not vote_enabled():
-        if verb in VOTE_START | VOTE_KICK: out("[VOTO] la votacion por chat esta apagada")
-        return res
-    if not vote_rate_ok(nick):
-        out("[VOTO] calma, espera unos segundos")
-        return ("rate", nick, text, None)
-    pl = players()
-    # el slot del que vota: un voto por slot aunque se cambie el nick
-    uid = next((u for u, n in pl if n == nick), None)
-    if uid is None:
-        print("VOTE %s no aparece en status, se ignora" % nick)
-        return res
-
-    if verb in VOTE_INFO:
-        out(vote_status() if VOTE["active"] else "[VOTO] uso: !votemap <mapa>, !votekick <nick>, !si, !no")
-        return res
-
-    if verb in VOTE_YES | VOTE_NO:
-        if not VOTE["active"]:
-            out("[VOTO] no hay ninguna votacion en curso"); return res
-        if VOTE["kind"] == "kick" and uid == VOTE["target"]:
-            out("[VOTO] no puedes votar en tu propio kick"); return res
-        VOTE["votes"][uid] = verb in VOTE_YES
-        if not vote_check():
-            out(vote_status())
-        return res
-
-    # abrir una votacion
-    if VOTE["active"]:
-        out(vote_status()); return res
-    if time.time() < VOTE["next"]:
-        out("[VOTO] espera %d s para proponer otra" % int(VOTE["next"] - time.time() + 0.9)); return res
-    if len(words) < 2:
-        out("[VOTO] uso: !votemap <mapa> o !votekick <nick>"); return res
-    why = vote_blocked()
-    if why:
-        out("[VOTO] " + why); return res
-
-    if verb in VOTE_KICK:
-        if len(pl) < VOTE_KICK_MIN:
-            out("[VOTO] para votar un kick hacen falta %d jugadores (hay %d)" % (VOTE_KICK_MIN, len(pl))); return res
-        wait = KICK_WAIT_CALLER.get(norm(nick), 0) - time.time()
-        if wait > 0:
-            out("[VOTO] espera %d s para proponer otro kick" % int(wait + 0.9)); return res
-        tuid, tnick = find_target(" ".join(words[1:]), pl)
-        if tuid is None:
-            out("[VOTO] " + tnick); return res
-        if tuid == uid:
-            out("[VOTO] no puedes votar para echarte a ti mismo"); return res
-        if is_allowed(tnick):
-            out("[VOTO] no se puede votar para echar a un admin"); return res
-        wait = KICK_WAIT_TARGET.get(norm(tnick), 0) - time.time()
-        if wait > 0:
-            out("[VOTO] a %s ya lo votaron hace poco, espera %d s" % (tnick, int(wait + 0.9))); return res
-        vote_open("kick", nick, uid, target=tuid, target_nick=tnick)
-    else:
-        maps = server_maps()
-        real = maps.get(words[1].lower())
-        if not real:
-            sug = map_suggest(words[1], list(maps))
-            out("[VOTO] el mapa '%s' no esta en el servidor%s" % (words[1][:20],
-                ". Quisiste decir: " + ", ".join(maps[s] for s in sug) + "?" if sug else "")); return res
-        kind = map_kind(real)
-        if kind != "ok":
-            out("[VOTO] '%s' %s" % (real, "esta en el servidor pero no es un mapa de D-Day" if kind == "nodday"
-                                    else "tiene el archivo danado, no se puede votar")); return res
-        # FFA / Gun Game / control: un mapa que no esta preparado para el modo vuelve al modo normal (igual que
-        # la votacion de la DLL)
-        _, allowed = mode_maps()
-        to_normal = allowed is not None and real.lower() not in {m.lower() for m in allowed}
-        vote_open("map", nick, uid, map=real, target=None, target_nick="", to_normal=to_normal)
-    if dry:
-        print("VOTE %s abre votacion: %s" % (nick, vote_what())); return res
-    if not vote_check():
-        out(vote_status())
-    return res
-
-def vote_tick():
-    """Desde el bucle del daemon: vence la votacion y recuerda cada VOTE_REMIND segundos."""
-    if not VOTE["active"]: return
-    now = time.time()
-    if not vote_enabled():
-        vote_finish(False, "votacion apagada"); return
-    if now >= VOTE["end"]:
-        if not vote_check():
-            vote_finish(False, "se acabo el tiempo")
-        return
-    if now >= VOTE["remind"]:
-        VOTE["remind"] = now + VOTE_REMIND
-        if not vote_check():
-            say(vote_status())
 
 # ── nicks protegidos (los revisa la DLL con dday/nicks.txt; aca solo se avisa) ──
 NICKS_FILE = os.path.join(GAMEDIR, "nicks.txt")
@@ -1426,8 +1125,6 @@ def map_phrase(text):
 
 
 def handle_line(line, dry=False):
-    v = vote_line(line, dry)
-    if v: return v
     cp = parse_chat(line)
     if not cp: return None
     nick, text = cp
@@ -1576,12 +1273,8 @@ def daemon():
     print("chat-admin escuchando en %s" % LOG)
     check_admin_protection(); sys.stdout.flush()
     while True:
-        try: vote_tick()
-        except Exception as e: print("ERR vote %s" % e)
         try: alias_tick()
         except Exception as e: print("ERR alias %s" % e)
-        try: vote_chat_sync()
-        except Exception as e: print("ERR vote_chat %s" % e)
         line = f.readline()
         if not line: time.sleep(0.3); continue
         if RCON_FROM.search(line):

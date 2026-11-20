@@ -26,8 +26,7 @@ mapas **preparados** para él:
   Para jugar un modo se vota con su comando: `vote gungame <mapa>`, `vote control <mapa>` o
   `vote ffa <mapa>`, solo con mapas preparados para ese modo y si el modo está en `vote_modes`
   (por defecto ninguno; S1 tiene `"gungame"`). Al aprobarse corta el mapa al tiro y después todo
-  sigue como siempre. `vote maps gungame` lista los mapas de ese modo. `!votemap` del bot todavía
-  deja seguir en el modo con un mapa preparado.
+  sigue como siempre. `vote maps gungame` lista los mapas de ese modo.
 - **Agregar un mapa a un modo:** subir su `.ctl` o `_ffa.ent` a `ents/` del server (sin reinicio).
 - **Nombre del server** (`hostname_mode 1`, 0 por defecto; en Oracle va en `server.cfg`): al cargar
   cada mapa la palabra "Ladder" del `hostname` cambia por el modo: `D-Day Chile FFA Test`,
@@ -469,7 +468,6 @@ Detalle: [`VOTACION.md`](VOTACION.md).
 | `vote_kick_percent` | `75` | % de sí en un kick (sin contar al acusado). |
 | `vote_kick_min` | `3` | Humanos en equipo necesarios para un kick. |
 | `vote_announce` | `600` | Segundos entre avisos de cómo votar (`0` = sin avisos). |
-| `vote_chat` | `0` | Lo pone el bot: el aviso incluye `!votemap`. |
 | `vote_modes` | `""` | Modos que se votan con `vote <modo> <mapa>` además del normal: `gungame`, `control`, `ffa` (separados por espacio). En S1: `"gungame"`. |
 | `sv votecancel` | — | Corta la votación en curso. |
 | `nick_protect` | `1` | Nicks y tags de `dday/nicks.txt` solo con clave (`set nickpw <clave> u`, `set tagpw <clave> u`). |
@@ -552,9 +550,9 @@ comando.
 - **q2pro:** `screenshot` `stuff <cmd>` `stuffid <id> <cmd>` `autostuff <cmd>`
   `autostuffoff` `liststuff`
 - **Password:** `pass <nueva>` `passoff`
-- **Votación y alias:** `votacion on|off|cancelar` prende la votación por chat para todos
-  (`!votemap <mapa>`, `!votekick <nick>`, `!si`, `!no`, `!voto`); `alias <nick>` muestra los
-  otros nicks de la misma IP, solo en la consola del admin. Ver [`VOTACION.md`](VOTACION.md).
+- **Alias:** `alias <nick>` muestra los otros nicks de la misma IP, solo en la consola del admin.
+  La votación por chat (`!votemap`, `!votekick`, `!si`, `!no`) se sacó el 2026-11-20: se vota con
+  `vote` en la consola. Ver [`VOTACION.md`](VOTACION.md).
 - **Con LLM:** `elo <nick>`
 
 ## Comandos del juego que ya existían y usamos

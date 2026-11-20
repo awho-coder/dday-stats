@@ -95,7 +95,7 @@ server 1.
 
 ## Comandos (primer palabra; no requieren "admin")
 
-- **Admins**: `alias <nick>` (respuesta privada), `votacion on|off|cancelar`
+- **Admins**: `alias <nick>` (respuesta privada)
 - **Info**: `estado` `ayuda` `bans` `tiempo` `mapas` `infomapa` `marcador` `zona`
   `versiones` `lag` `tiempos`
 - **Juego**: `mapa <x>` `duelo <mapa>` `publico` `control <mapa>` `ffa <mapa>` `dm <mapa>`
@@ -128,22 +128,12 @@ server 1.
 - **Bloqueados para siempre**: `exec` `set` `restart` `rcon_password`
   archivos/BD/servicios (whitelist dura en código, no en prompt)
 
-## Votación por chat (para todos los jugadores)
+## Votación por chat (sacada)
 
-Sirve para probar antes de la votación de la DLL (`vote map`, `vote kick`, cvar `vote_enable`).
-Está apagada por defecto; el admin la prende con `votacion on` (queda guardado en
-`/home/ubuntu/dday/chat-admin.vote`, sobrevive a reinicios del bot) y la apaga con `votacion off`.
-`votacion cancelar` corta la que está en curso.
-
-- `!votemap <mapa>` (o `!votar`): cualquier mapa de D-Day del server (`dday/maps/*.bsp`, sin
-  distinguir mayúsculas). Si no está, avisa y sugiere parecidos; avisa si no es de D-Day o el
-  archivo está dañado. Aprobada (sí > 50 % de los jugadores de `status`) → `map <mapa>`.
-- `!votekick <nick o número>`: sí > 75 % sin contar al acusado, mínimo 3 jugadores; el acusado no
-  vota; no se puede echar a un admin; sin ban. Si el acusado se va, se cancela. Un kick rechazado
-  hace esperar 2 min al que lo propuso, y a un mismo jugador no se le vota más de una vez cada 2 min.
-- `!si` / `!no`: vota. `!voto`: muestra cómo va. Dura 30 s; tras un rechazo, 60 s de espera.
-- Se vota también en torneo y duelo, como en la DLL (un mapa votado a mitad deja el duelo cortado). Un voto
-  por slot de `status`.
+`!votemap`, `!votekick`, `!si`, `!no` y `!voto` se sacaron el 2026-11-20: no se usaban. Se vota en la
+consola con la votación de la DLL (`vote map`, `vote gungame`, `vote kick`, ver
+[`../../docs/VOTACION.md`](../../docs/VOTACION.md)). `votacion` solo responde cómo votar.
+El archivo `/home/ubuntu/dday/chat-admin.vote` ya no se lee.
 
 ## Alias (otros nicks del mismo jugador)
 

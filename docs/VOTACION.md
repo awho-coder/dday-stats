@@ -98,7 +98,6 @@ Reglas:
   dice "cambiar a dday2 (vuelve al modo normal)" y, al aprobarse, el mapa siguiente
   se juega sin FFA / Gun Game / control y vuelven `mapvoting` y `sv_maplist` del
   `server.cfg`. Para seguir en el modo (o entrar a uno) se vota con su comando.
-  (`!votemap` del bot todavía deja seguir en el modo con un mapa del modo.)
 - **Modos:** `vote gungame <mapa>`, `vote control <mapa>` y `vote ffa <mapa>` solo
   aceptan mapas preparados para ese modo (`ents/<mapa>_ffa.ent` o `ents/<mapa>.ctl`);
   con otro mapa, o sin mapa, responden con la lista de los que sirven. El aviso dice
@@ -129,8 +128,8 @@ centerprint borra las kills de arriba.
 
 **Avisos de cómo votar** (con `vote_enable 1` y sin votación en curso): al
 entrar al server (solo a ese jugador, una vez), a los 45 s de empezar el mapa,
-cada `vote_announce` segundos y al terminar el mapa. Si el bot tiene prendida
-la votación por chat, el aviso suma `!votemap` / `!votekick`.
+cada `vote_announce` segundos y al terminar el mapa. Solo nombra los modos
+que están en `vote_modes` (ej. `vote map <mapa>, vote gungame <mapa>, ...`).
 
 | Cvar | Por defecto | Qué hace |
 |---|---|---|
@@ -142,7 +141,6 @@ la votación por chat, el aviso suma `!votemap` / `!votekick`.
 | `vote_kick_percent` | `75` | % de sí que hay que superar en un kick. |
 | `vote_kick_min` | `3` | Humanos en equipo necesarios para un kick. |
 | `vote_announce` | `600` | Segundos entre avisos de cómo votar (`0` = sin avisos). |
-| `vote_chat` | `0` | Lo pone el bot: `1` = el aviso incluye los comandos del chat. |
 | `vote_modes` | `""` | Modos que se votan además del normal, separados por espacio: `gungame`, `control`, `ffa` (ej. `set vote_modes "gungame"`). La ayuda y los avisos muestran solo los que están. |
 
 Ninguno es *latched*: rigen al instante. Lo que se cambia por rcon se pierde al
@@ -190,13 +188,10 @@ tag  [MR]          clave      el tag del clan, en cualquier parte del nick
 
 Detalle: [`../tools/chat-admin/README.md`](../tools/chat-admin/README.md).
 
-- **Votación por chat**, para cualquier jugador: `!votemap <mapa>`,
-  `!votekick <nick>`, `!si`, `!no`, `!voto`. Mismas reglas que la DLL, pero
-  cuenta a todos los jugadores de `status` (no distingue espectadores) y
-  aprobada hace `map` por rcon. Se prende con el comando de admin
-  `votacion on` (queda guardado y sobrevive a reinicios del bot) y se apaga
-  con `votacion off`; `votacion cancelar` corta la que está en curso. Tiene su
-  propio límite (6 comandos cada 30 s por jugador).
+- **Sin votación por chat:** `!votemap`, `!votekick`, `!si` y `!no` se sacaron el
+  2026-11-20 porque nadie los usaba (y el cvar `vote_chat` de la DLL con ellos). Se
+  vota solo en la consola con `vote`. Si un admin escribe `votacion`, el bot responde
+  cómo votar en la consola.
 - **Alias** (`alias <nick>`, solo admins): los otros nicks usados desde la
   misma IP exacta. El bot guarda `(ip, nick)` de `status` cada 20 s en una
   base SQLite local del server (180 días); la respuesta va solo a la consola
