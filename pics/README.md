@@ -42,7 +42,7 @@ Una fila tiene el killer, el icono del arma y la víctima; según el estilo (ver
 | `kf_hs.png` | 14 x 14 px | Marca de headshot, a la derecha del arma (la misma condición que el cue "Headshot!"). |
 | `kf_<facción>.png` | 12 x 14 px | Bandera de la facción del jugador (`usa usm gbr grm ita jpn pol rus`), a partir de `pics/teams/<facción>.pcx`. En Free For All no se dibujan: todos están en el mismo equipo. |
 
-Cada jugador elige el estilo con el comando `killfeed <número>` (`killfeed` solo muestra la lista) o con `set killfeed <número> u` en su `autoexec.cfg`. Quien no elige ve el de `killfeed_style` del server (1 por defecto). El server le manda a cada jugador su propio statusbar con el feed (configstring por unicast); el configstring del server queda con el statusbar del nivel sin feed. Al que tiene el killfeed apagado (0) le sigue llegando el obituario en texto.
+Cada jugador elige el estilo con el comando `killfeed <número>` (`killfeed` solo muestra la lista). El server lo guarda en el userinfo del cliente (`set kf_style <número> u`, por stuffcmd): cada cambio de mapa recarga el DLL y reconecta a todos, y así el estilo vuelve en cada conexión. Para que quede fijo aunque cierre el juego, `set kf_style <número> u` en su `autoexec.cfg`. Quien no elige ve el de `killfeed_style` del server (1 por defecto). El server le manda a cada jugador su propio statusbar con el feed (configstring por unicast); el configstring del server queda con el statusbar del nivel sin feed. Al que tiene el killfeed apagado (0) le sigue llegando el obituario en texto.
 
 | Estilo | Fila | Nombres |
 |---|---|---|
