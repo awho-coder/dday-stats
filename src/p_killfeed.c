@@ -325,7 +325,7 @@ static char *KF_ChooseFaction (edict_t *ent)
 }
 
 
-// Each player chooses the style of his feed (command "killfeed <style>" or "set killfeed <style> u" in his config,
+// Each player chooses the style of his feed (command "killfeed <style>", kept in his userinfo "kf_style",
 // default killfeed_style, 0): the statusbar with the feed is sent to every player by himself (svc_configstring by
 // unicast); the configstring of the server keeps the statusbar of the level without the feed (new clients, MVD)
 //   0  off: no feed, the obituary in text
@@ -721,11 +721,16 @@ static void KF_SetStyle (edict_t *ent, int style)
 }
 
 
-// userinfo "killfeed" ("set killfeed <style> u" in the config of the client)
+// userinfo "kf_style" (the command killfeed sets it in the client, or "set kf_style <style> u" in his config;
+// "killfeed" is read too). Every change of level reloads the game library and reconnects the clients: the style
+// would be lost if it were only kept here, the userinfo of the client brings it back on every connection
 void Killfeed_Userinfo (edict_t *ent, char *userinfo)
 {
-	char	*s = Info_ValueForKey (userinfo, "killfeed");
+	char	*s = Info_ValueForKey (userinfo, "kf_style");
 	int		style;
+
+	if (!s[0])
+		s = Info_ValueForKey (userinfo, "killfeed");
 
 	if (!s[0])
 		return;
@@ -745,7 +750,7 @@ void Killfeed_Cmd (edict_t *ent)
 		safe_cprintf (ent, PRINT_HIGH, "Estilos del killfeed (killfeed <numero>):\n");
 		for (i = 0; i < KF_STYLES; i++)
 			safe_cprintf (ent, PRINT_HIGH, "%s %d  %s\n", (i == current) ? "->" : "  ", i, kf_styles[i].name);
-		safe_cprintf (ent, PRINT_HIGH, "Para dejarlo fijo, pon en tu autoexec.cfg: set killfeed <numero> u\n");
+		safe_cprintf (ent, PRINT_HIGH, "Se mantiene al cambiar de mapa. Para dejarlo fijo siempre, pon en tu autoexec.cfg: set kf_style <numero> u\n");
 		return;
 	}
 
@@ -757,6 +762,8 @@ void Killfeed_Cmd (edict_t *ent)
 	}
 
 	KF_SetStyle (ent, style);
+	// kept in the userinfo of the client, so that it comes back after every change of level (see Killfeed_Userinfo)
+	stuffcmd (ent, va ("set kf_style %d u\n", style));
 	safe_cprintf (ent, PRINT_HIGH, "Killfeed: %d %s\n", style, kf_styles[style].name);
 }
 
