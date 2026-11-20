@@ -32,6 +32,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "g_cmds.h"
 #include "q_shared.h"
 #include "x_fire.h"//faf
+#include <errno.h>
 
 
 #define LEG_DAMAGE		(height/2) - abs(targ->mins[2]) - 3 
@@ -1242,16 +1243,16 @@ void T_Damage (edict_t *targ, edict_t *inflictor, edict_t *attacker, vec3_t dir,
 				if(!saved)
 				{
 					if (!targ->deadflag) {
-						// hitmarkers: HITHEAD_SOUND in place of the voice, on his head for the ones near, and for the
-						// shooter at full volume wherever he is (Hitmarker; not twice, he is left out here)
+						// hitmarkers: HITHEAD_SOUND in place of the voice for the ones near who chose the sound, and for
+						// the shooter at full volume wherever he is (Hitmarker; not twice, see Hitmarker_HeadVoice)
 						if (hitmarkers->value && attacker && attacker != targ && attacker->client && !attacker->ai &&
 							!OnSameTeam (targ, attacker))
 						{
-							G_SoundExcept (targ, CHAN_VOICE, gi.soundindex (HITHEAD_SOUND), attacker);
+							Hitmarker_HeadVoice (targ, attacker);
 							Hitmarker (attacker, HITMARK_HEAD);
 						}
 						else if (hitmarkers->value)
-							gi.sound (targ, CHAN_VOICE, gi.soundindex (HITHEAD_SOUND), 1, ATTN_NORM, 0);
+							Hitmarker_HeadVoice (targ, NULL);
 						else
 						gi.sound (targ, CHAN_VOICE, gi.soundindex ("misc/hithead.wav"), 1, ATTN_NORM, 0); // ZeRo - Era CHAN_BODY, pero así no se escuchaba completo el sonido del headshot.
 						safe_cprintf(targ,PRINT_HIGH,"Your head's been shot off!\n");
@@ -1564,31 +1565,216 @@ void T_Damage (edict_t *targ, edict_t *inflictor, edict_t *attacker, vec3_t dir,
 ============
 Hitmarker
 
-hitmarkers 1: a sound only for the attacker (and the spectators who follow him) when he hits or kills an enemy, and
-another one for a headshot (that one is also heard by the ones near, in place of the voice "HEADSHOT", see
-T_Damage). hitmarkers 2: also an X in the middle of the screen, white or red when it kills (in STAT_CROSSHAIR, see
-G_SetStats: not over a scope)
+hitmarkers (cvar of the server) 0: none. Otherwise each player chooses with the command "hitmarker <0-4>" (HM_*, kept
+in his client and by his name in the server, see Hitmarker_Userinfo; HM_OFF if he did not choose): a sound only for him (and the spectators who follow him, with
+their own choice) when he hits or kills an enemy, another one for a headshot (that one is also heard by the ones
+near who chose the sound, in place of the voice "HEADSHOT", see Hitmarker_HeadVoice), and an X in the middle of the
+screen, white or red when it kills (in STAT_CROSSHAIR, see G_SetStats: not over a scope)
 ============
 */
-// a sound for that player alone and the spectators who follow him
-static void Hitmarker_Sound (edict_t *ent, int sound)
+static char *hm_names[HM_CHOICES] =
 {
-	edict_t	*spec;
+	"apagado",
+	"todo: sonido y X",
+	"solo sonido",
+	"solo la X",
+	"solo al matar: sonido y X roja",
+};
+
+// The choice is kept in two places:
+// - in the client: "seta hm <choice>" (in his config.cfg when he quits, with Q2PRO) and the userinfo "hmu"
+//   ("x<choice>"). When he comes in, Hitmarker_ClientBegin sends "set hmu x$hm u": the client puts its hm in place of
+//   $hm (not between quotes: it would not), "x" alone if it has none. The choice goes with him to every server and
+//   after a change of name.
+// - in the server, by name in dday/hitmarkers.txt (a line "<choice> <name>" each, HM_OFF is not written): for the
+//   clients that do not keep it (r1q2, 3.20, another PC).
+// The one of the client goes first. hm_name: the name the choice of each slot belongs to ("" = not read yet)
+#define HM_FILE		"hitmarkers.txt"
+static int	hm_pref[MAX_CLIENTS];
+static char	hm_name[MAX_CLIENTS][sizeof(((client_persistant_t *)0)->netname)];
+
+// opens <homedir, basedir or .>/dday/<file> (the first one that works); path: where
+static FILE *Hitmarker_OpenFile (char *file, char *mode, char *path, size_t size)
+{
+	char	*bases[3];
+	FILE	*f;
 	int		i;
 
-	G_LocalSound (ent, sound);
+	bases[0] = sys_homedir ? sys_homedir->string : NULL;
+	bases[1] = sys_basedir ? sys_basedir->string : NULL;
+	bases[2] = ".";
+
+	for (i = 0; i < 3; i++)
+	{
+		if (!bases[i] || !*bases[i])
+			continue;
+		if (snprintf (path, size, "%s/%s/%s", bases[i], GAMEVERSION, file) >= (int)size)
+			continue;
+		if ((f = fopen (path, mode)) != NULL)
+			return f;
+	}
+	return NULL;
+}
+
+// a line of the file without its end; false if it is not "<choice> <name>"
+static qboolean Hitmarker_ParseLine (char *line, int *pref, char **name)
+{
+	line[strcspn (line, "\r\n")] = 0;
+	if (line[0] < '0' || line[0] >= '0' + HM_CHOICES || line[1] != ' ' || !line[2])
+		return false;
+	*pref = line[0] - '0';
+	*name = line + 2;
+	return true;
+}
+
+static int Hitmarker_LoadPref (char *name)
+{
+	char	path[256], line[128], *n;
+	FILE	*f;
+	int		p, pref = HM_OFF;
+
+	if (!(f = Hitmarker_OpenFile (HM_FILE, "r", path, sizeof(path))))
+		return HM_OFF;
+	while (fgets (line, sizeof(line), f))
+	{
+		if (Hitmarker_ParseLine (line, &p, &n) && !Q_stricmp (n, name))
+		{
+			pref = p;
+			break;
+		}
+	}
+	fclose (f);
+	return pref;
+}
+
+// writes the file again with the choice of that name (to a .tmp and renamed, never half written)
+static void Hitmarker_SavePref (char *name, int pref)
+{
+	char	path[256], tmp[256 + 4], line[128], *n;
+	FILE	*in, *out;
+	int		p;
+
+	in = Hitmarker_OpenFile (HM_FILE, "r", path, sizeof(path));
+	if (in)
+	{
+		Com_sprintf (tmp, sizeof(tmp), "%s.tmp", path);
+		out = fopen (tmp, "w");
+	}
+	else if ((out = Hitmarker_OpenFile (HM_FILE ".tmp", "w", tmp, sizeof(tmp))) != NULL)
+	{
+		Com_sprintf (path, sizeof(path), "%s", tmp);
+		path[strlen (path) - 4] = 0;
+	}
+	if (!out)
+	{
+		if (in)
+			fclose (in);
+		gi.dprintf ("hitmarkers: no se pudo escribir dday/%s (%s)\n", HM_FILE, strerror (errno));
+		return;
+	}
+
+	if (in)
+	{
+		while (fgets (line, sizeof(line), in))
+		{
+			if (Hitmarker_ParseLine (line, &p, &n) && Q_stricmp (n, name))
+				fprintf (out, "%d %s\n", p, n);
+		}
+		fclose (in);
+	}
+	if (pref != HM_OFF)
+		fprintf (out, "%d %s\n", pref, name);
+
+	if (fclose (out) || rename (tmp, path))
+		gi.dprintf ("hitmarkers: no se pudo guardar dday/%s (%s)\n", HM_FILE, strerror (errno));
+}
+
+// what the player chose (HM_*): read from the file the first time for each name in each slot
+static int Hitmarker_Pref (edict_t *ent)
+{
+	int		slot;
+	char	*name;
+
+	if (!hitmarkers->value || !ent || !ent->inuse || !ent->client || ent->ai)
+		return HM_OFF;
+	slot = ent - g_edicts - 1;
+	name = ent->client->pers.netname;
+	if (slot < 0 || slot >= MAX_CLIENTS || !name[0])
+		return HM_OFF;
+
+	if (strcmp (hm_name[slot], name))
+	{
+		hm_pref[slot] = Hitmarker_LoadPref (name);
+		Com_sprintf (hm_name[slot], sizeof(hm_name[slot]), "%s", name);
+	}
+	return hm_pref[slot];
+}
+
+static qboolean Hitmarker_WantsSound (edict_t *ent, int kind)
+{
+	int		pref = Hitmarker_Pref (ent);
+
+	return pref == HM_ALL || pref == HM_SOUND || (pref == HM_KILLS && kind != HITMARK_HIT);
+}
+
+qboolean Hitmarker_WantsX (edict_t *ent, qboolean kill)
+{
+	int		pref = Hitmarker_Pref (ent);
+
+	return pref == HM_ALL || pref == HM_X || (pref == HM_KILLS && kill);
+}
+
+// the voice of a headshot on the head of targ, for each player who can hear it: HITHEAD_SOUND for the ones who chose
+// the sound, the voice "HEADSHOT" of always for the rest. "except" (the shooter) and the spectators who follow him
+// are left out if they chose the sound: Hitmarker gives it to them at full volume
+void Hitmarker_HeadVoice (edict_t *targ, edict_t *except)
+{
+	edict_t	*cl;
+	int		i, sound;
+	int		hm = gi.soundindex (HITHEAD_SOUND), plain = gi.soundindex ("misc/hithead.wav");
 
 	for (i = 1; i <= maxclients->value; i++)
 	{
-		spec = g_edicts + i;
-		if (spec->inuse && spec->client && spec != ent && spec->client->chasetarget == ent)
-			G_LocalSound (spec, sound);
+		cl = g_edicts + i;
+		if (!cl->inuse || !cl->client || cl->ai)
+			continue;
+		if (!gi.inPHS (targ->s.origin, cl->s.origin))
+			continue;
+		sound = Hitmarker_WantsSound (cl, HITMARK_HEAD) ? hm : plain;
+		if (except && sound == hm && (cl == except || cl->client->chasetarget == except))
+			continue;
+
+		gi.WriteByte (svc_sound);
+		gi.WriteByte (4 | 8);				// SND_POS | SND_ENT (volume 1 and ATTN_NORM are the defaults)
+		gi.WriteByte (sound);
+		gi.WriteShort (((targ - g_edicts) << 3) | CHAN_VOICE);
+		gi.WritePosition (targ->s.origin);
+		gi.unicast (cl, false);
+	}
+}
+
+// the sound for that player alone and the spectators who follow him, the ones who chose it. after_hit: a kill in the
+// same frame as a hit, only for the ones who hear only the kills (the rest already heard the hit)
+static void Hitmarker_Sound (edict_t *ent, int sound, int kind, qboolean after_hit)
+{
+	edict_t	*cl;
+	int		i;
+
+	for (i = 1; i <= maxclients->value; i++)
+	{
+		cl = g_edicts + i;
+		if (!cl->inuse || !cl->client || (cl != ent && cl->client->chasetarget != ent))
+			continue;
+		if (!Hitmarker_WantsSound (cl, kind) || (after_hit && Hitmarker_Pref (cl) != HM_KILLS))
+			continue;
+		G_LocalSound (cl, sound);
 	}
 }
 
 void Hitmarker (edict_t *attacker, int kind)
 {
 	gclient_t	*cl = attacker->client;
+	qboolean	after_hit = false;
 	int			sound;
 
 	if (!cl || attacker->ai)
@@ -1609,13 +1795,105 @@ void Hitmarker (edict_t *attacker, int kind)
 		cl->hitmarker_kill = true;
 	}
 
-	// one sound a frame (the pellets of a shotgun, a grenade on several), but the headshot is always heard
+	// one sound a frame (the pellets of a shotgun, a grenade on several), but the headshot is always heard; a kill
+	// after a hit is still heard by the ones who hear only the kills
 	if (kind != HITMARK_HEAD && cl->hitmarker_sound_time == level.time)
-		return;
+	{
+		if (kind == HITMARK_HIT || cl->hitmarker_sound_kill)
+			return;
+		after_hit = true;
+	}
 	cl->hitmarker_sound_time = level.time;
+	cl->hitmarker_sound_kill = (kind != HITMARK_HIT);
 
 	sound = gi.soundindex (kind == HITMARK_HEAD ? HITHEAD_SOUND : HITMARK_SOUND);
-	Hitmarker_Sound (attacker, sound);
+	Hitmarker_Sound (attacker, sound, kind, after_hit);
+}
+
+// the choice in "hmu", -1 if the client has none
+static int Hitmarker_ClientPref (char *userinfo)
+{
+	char	*s = Info_ValueForKey (userinfo, "hmu");
+
+	if (s[0] != 'x' || s[1] < '0' || s[1] >= '0' + HM_CHOICES || s[2])
+		return -1;
+	return s[1] - '0';
+}
+
+// from ClientUserinfoChanged, with his name already set: the choice the client brings goes first, and it is written in
+// the file of this server too
+void Hitmarker_Userinfo (edict_t *ent, char *userinfo)
+{
+	int		slot = ent - g_edicts - 1, pref;
+	char	*name;
+
+	if (!hitmarkers->value || !ent->client || ent->ai || slot < 0 || slot >= MAX_CLIENTS)
+		return;
+	name = ent->client->pers.netname;
+	pref = Hitmarker_ClientPref (userinfo);
+	if (pref < 0 || !name[0])
+		return;
+	if (!strcmp (hm_name[slot], name) && hm_pref[slot] == pref)
+		return;		// nothing new
+
+	hm_pref[slot] = pref;
+	Com_sprintf (hm_name[slot], sizeof(hm_name[slot]), "%s", name);
+	if (Hitmarker_LoadPref (name) != pref)
+		Hitmarker_SavePref (name, pref);
+}
+
+// when he comes in: if his userinfo has no "hmu" yet, the client is asked for the choice it keeps (a client that
+// does not know "$hm" sends "x$hm", taken as none)
+void Hitmarker_ClientBegin (edict_t *ent)
+{
+	if (!hitmarkers->value || !ent->client || ent->ai)
+		return;
+	if (Info_ValueForKey (ent->client->pers.userinfo, "hmu")[0])
+		return;
+	stuffcmd (ent, "set hmu x$hm u\n");
+}
+
+// command "hitmarker [0-4]": what the player wants of the hitmarkers, kept in his client and in the server
+void Hitmarker_Cmd (edict_t *ent)
+{
+	char	*s, *name;
+	int		i, pref, slot = ent - g_edicts - 1;
+
+	if (!ent->client || ent->ai || slot < 0 || slot >= MAX_CLIENTS)
+		return;
+	if (!hitmarkers->value)
+	{
+		safe_cprintf (ent, PRINT_HIGH, "Los hitmarkers estan desactivados en este servidor.\n");
+		return;
+	}
+
+	pref = Hitmarker_Pref (ent);
+	if (gi.argc () < 2)
+	{
+		safe_cprintf (ent, PRINT_HIGH, "Hitmarkers (hitmarker <numero>):\n");
+		for (i = 0; i < HM_CHOICES; i++)
+			safe_cprintf (ent, PRINT_HIGH, "%s %d  %s\n", (i == pref) ? "->" : "  ", i, hm_names[i]);
+		safe_cprintf (ent, PRINT_HIGH, "Queda guardado en tu juego y en el servidor.\n");
+		return;
+	}
+
+	s = gi.argv (1);
+	pref = atoi (s);
+	if (s[0] < '0' || s[0] > '9' || s[1] || pref >= HM_CHOICES)
+	{
+		safe_cprintf (ent, PRINT_HIGH, "hitmarker: va de 0 a %d (hitmarker sin numero muestra la lista)\n", HM_CHOICES - 1);
+		return;
+	}
+
+	name = ent->client->pers.netname;
+	if (!name[0])
+		return;
+	hm_pref[slot] = pref;
+	Com_sprintf (hm_name[slot], sizeof(hm_name[slot]), "%s", name);
+	Hitmarker_SavePref (name, pref);
+	// in the client: hm in his config.cfg (seta), hmu in his userinfo for the next servers and changes of level
+	stuffcmd (ent, va ("set hmu x%d u\nseta hm %d\n", pref, pref));
+	safe_cprintf (ent, PRINT_HIGH, "Hitmarkers: %d %s\n", pref, hm_names[pref]);
 }
 
 

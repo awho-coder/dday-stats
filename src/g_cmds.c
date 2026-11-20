@@ -3539,6 +3539,11 @@ void ClientCommand (edict_t *ent)
 		Cmd_Vote_f(ent);
 		return;
 	}
+	else if (Q_stricmp(cmd, "hitmarker") == 0 || Q_stricmp(cmd, "hitmarkers") == 0)	// what he wants of the hitmarkers (g_combat.c)
+	{
+		Hitmarker_Cmd(ent);
+		return;
+	}
 	// duelo/torneo con ready_mode: los capitanes ponen ready para empezar (g_ready.c)
 	else if (Q_stricmp(cmd, "ready") == 0 || Q_stricmp(cmd, "listo") == 0)
 	{

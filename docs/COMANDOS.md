@@ -357,26 +357,40 @@ Para probarlo con bots: `bot_noshoot 1` (en `0` por defecto) hace que los bots n
 
 ## Servidor: hitmarkers (`hitmarkers`)
 
-Apagado por defecto. Cuando le pegas a un enemigo, el server te manda un sonido solo a ti (y a los espectadores
-que te siguen). No se marcan los golpes a compañeros, ni el sangrado de las heridas, ni los golpes a cuerpos.
+Apagado por defecto. Con `hitmarkers 0` no hay hitmarkers para nadie. Con cualquier otro valor, **cada jugador
+elige** lo que quiere con el comando `hitmarker <numero>` (también `hitmarkers`); quien no elige no recibe nada.
+Cuando le pegas a un enemigo, el server te manda un sonido solo a ti (y a los espectadores que te siguen, cada uno
+con lo que eligió). No se marcan los golpes a compañeros, ni el sangrado de las heridas, ni los golpes a cuerpos.
 Tampoco los ataques de los bots.
 
-| `hitmarkers` | Qué hace |
+| `hitmarker` (jugador) | Qué recibe |
 |---|---|
-| `0` | Nada (el juego de siempre). |
-| `1` | Solo sonido: al pegar o matar (`sound/misc/hitmark.wav`), y otro en un headshot (`hitmark_head.wav`). |
-| `2` | Sonido y una X en el centro de la pantalla: blanca al pegar (`pics/hitmark.pcx`, 0,2 s) y roja al matar (`pics/hitkill.pcx`, 0,4 s). |
+| `0` | Nada (por defecto). |
+| `1` | Todo: sonido al pegar o matar (`sound/misc/hitmark.wav`), otro en un headshot (`hitmark_head.wav`) y una X en el centro: blanca al pegar (`pics/hitmark.pcx`, 0,2 s) y roja al matar (`pics/hitkill.pcx`, 0,4 s). |
+| `2` | Solo los sonidos. |
+| `3` | Solo la X. |
+| `4` | Solo al matar: el sonido y la X roja en las kills y los headshots; los golpes que no matan no marcan nada. |
 
-En un headshot, `hitmark_head.wav` reemplaza la voz "HEADSHOT" del juego (`misc/hithead.wav`) para todos: los que
-están cerca lo oyen en la cabeza del muerto, como se oía la voz, y quien disparó (y quien lo sigue) lo oye además a
-todo volumen sin importar la distancia (una sola vez, aunque esté cerca). Los headshots de los bots o entre
-compañeros también suenan con `hitmark_head.wav`, solo en la cabeza del muerto. Con `hitmarkers 0` suena la voz de
-siempre.
+`hitmarker` sin número muestra la lista y cuál tiene. La elección se guarda en **dos lugares**:
 
-No hace falta cambiar de mapa: se puede prender y apagar en cualquier momento (los archivos se precargan siempre).
-La X usa el mismo lugar del HUD que las miras (`STAT_CROSSHAIR`), así que con la mira telescópica, los binoculares,
+- **En el juego del jugador**: el server le manda `set hmu x<n> u` y `seta hm <n>`. Con Q2PRO, `hm` queda en su
+  `config.cfg` al cerrar el juego. Al entrar a un server, este le pide `set hmu x$hm u`: el cliente pone su `hm` en
+  lugar de `$hm` y lo manda en el userinfo (`hmu`). Así la elección pasa de S1 a S2 y sigue aunque cambie de nombre.
+- **En el server, por nombre** (sin distinguir mayúsculas), en `dday/hitmarkers.txt`: una línea `<opción> <nombre>`
+  por jugador (el `0` no se escribe). Sirve para clientes que no guardan `hm` (r1q2, 3.20) o si juega desde otro PC.
+
+Al entrar manda lo del cliente (y se copia al archivo de ese server); si el cliente no trae nada, se usa el archivo.
+La "x" de `hmu` es para que nunca llegue vacío (Q2PRO no reemplaza `$hm` entre comillas y deja vacío lo que no existe).
+
+En un headshot, `hitmark_head.wav` reemplaza la voz "HEADSHOT" del juego (`misc/hithead.wav`) para quienes eligieron
+sonido (`1`, `2` o `4`): los que están cerca lo oyen en la cabeza del muerto, como se oía la voz, y quien disparó (y
+quien lo sigue) lo oye además a todo volumen sin importar la distancia (una sola vez, aunque esté cerca). Los demás
+oyen la voz de siempre. Los headshots de los bots o entre compañeros también van así, solo en la cabeza del muerto.
+
+No hace falta cambiar de mapa: el server los puede prender y apagar en cualquier momento (los archivos se
+precargan siempre). La X usa el mismo lugar del HUD que las miras (`STAT_CROSSHAIR`), así que con la mira telescópica, los binoculares,
 la torreta o la mira del dardo solo suena. Suena una vez por cuadro (los perdigones de la escopeta o una granada
-que pega a varios suenan una vez). La LMG, la SMG y la Browning no hacen headshot mientras el enemigo tenga más
+que pega a varios suenan una vez; si en ese cuadro un perdigón pega y otro mata, quien eligió `4` oye la kill). La LMG, la SMG y la Browning no hacen headshot mientras el enemigo tenga más
 de 30 de vida (cuenta como golpe en el pecho).
 
 `pics/hitmark.pcx` y `pics/hitkill.pcx` salen de `tools/assets/gen_hitmarker.py`. `hitmark.wav` y

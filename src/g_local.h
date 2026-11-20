@@ -938,7 +938,7 @@ extern cvar_t *sleepdart_cooldown; // segundos entre dos dardos del mismo Medic
 extern cvar_t *sleepdart_wake;     // 1 = el dano despierta al dormido
 extern cvar_t *bot_noshoot;        // 1 = los bots no disparan (para probar cosas con bots)
 extern cvar_t *sleepdart_anim;     // 1, 2 o 3: animacion de muerte con la que se queda dormido en el piso
-extern cvar_t *hitmarkers;         // 0 = nada, 1 = sonido al pegarle a un enemigo, 2 = sonido y X en el centro
+extern cvar_t *hitmarkers;         // 0 = apagados; otro = cada jugador elige con el comando hitmarker (apagado si no elige)
 extern cvar_t *fast_bleeding;
 extern cvar_t *fast_sniper;
 
@@ -1052,11 +1052,21 @@ void Think_Arty (edict_t *ent);
 
 qboolean OnSameTeam(edict_t *self,edict_t *target);
 void G_LocalSound (edict_t *ent, int soundindex);
-void G_SoundExcept (edict_t *ent, int channel, int soundindex, edict_t *except);
 #define HITMARK_HIT		0		// kinds of hit for Hitmarker
 #define HITMARK_KILL	1
 #define HITMARK_HEAD	2		// a headshot (it kills)
 void Hitmarker (edict_t *attacker, int kind);
+#define HM_OFF			0		// what each player chooses with the command hitmarker (his client and dday/hitmarkers.txt)
+#define HM_ALL			1		// sound and X
+#define HM_SOUND		2		// sound only
+#define HM_X			3		// X only
+#define HM_KILLS		4		// sound and red X, only when he kills
+#define HM_CHOICES		5
+qboolean Hitmarker_WantsX (edict_t *ent, qboolean kill);
+void Hitmarker_HeadVoice (edict_t *targ, edict_t *except);
+void Hitmarker_Cmd (edict_t *ent);
+void Hitmarker_Userinfo (edict_t *ent, char *userinfo);
+void Hitmarker_ClientBegin (edict_t *ent);
 qboolean G_IsFFA(void);
 // g_vote.c: mapas de cada modo (FFA / Gun Game: ents/<mapa>_ffa.ent; control: ents/<mapa>.ctl)
 const char *Mode_NextMap (const char *current);	// proximo mapa de la rotacion del modo, NULL fuera de esos modos
@@ -1841,6 +1851,7 @@ struct gclient_s
 	float       hitmarker_until;		// hitmarkers: level.time until the X is shown
 	qboolean    hitmarker_kill;			// hitmarkers: the last hit killed (red X)
 	float       hitmarker_sound_time;	// hitmarkers: level.time of the last sound (one a frame, the pellets of a shotgun)
+	qboolean    hitmarker_sound_kill;	// hitmarkers: that sound was of a kill (a kill after a hit in the same frame)
 	vec3_t      sleep_mins, sleep_maxs;	// his box while he sleeps: around his body, which lies away from his origin
 	qboolean    sleep_falling;			// put to sleep in the air: he falls with his speed until he lands
 	int         sleep_pose;				// the pose he sleeps in (sleep_poses in p_weapon.c)

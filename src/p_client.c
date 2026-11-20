@@ -2890,6 +2890,8 @@ void ClientBegin (edict_t *ent)
 	ent->client = game.clients + (ent - g_edicts - 1);
 	ent->client->resp.AlreadySpawned=false;
 
+	Hitmarker_ClientBegin (ent);	// the client sends back the choice of hitmarkers it keeps
+
 	// kernel: CTB also needs this to clear structs at the beginning
 	if (deathmatch->value || ctb_mode->value)
 	{
@@ -2982,6 +2984,8 @@ void ClientUserinfoChanged (edict_t *ent, char *userinfo)
 	// set name
 	s = Info_ValueForKey (userinfo, "name");
 	strncpy (ent->client->pers.netname, s, sizeof(ent->client->pers.netname)-1);
+
+	Hitmarker_Userinfo (ent, userinfo);	// "hmu": the choice of hitmarkers kept by the client
 
 	// set skin
 	s = Info_ValueForKey (userinfo, "skin");
