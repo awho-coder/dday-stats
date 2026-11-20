@@ -589,7 +589,7 @@ void ClientObituary (edict_t *self, edict_t *inflictor, edict_t *attacker)
 		}
 		if (message)
 		{
-			kf = Killfeed_Add (self->client->last_wound_inflictor, self, mod, false);
+			kf = Killfeed_Add (self->client->last_wound_inflictor, self, mod, false, message, NULL);
 
 			//faf: if they were wounded before they got themselves killed, name who wounded them.
 			if (self->client->last_wound_inflictor)
@@ -850,7 +850,7 @@ void ClientObituary (edict_t *self, edict_t *inflictor, edict_t *attacker)
 				message3 = "";
 			if (message)
 			{
-				kf = Killfeed_Add (attacker, self, mod, self->client->resp.deathblend == 1);	// 1: the head shot that plays the "Headshot!" cue
+				kf = Killfeed_Add (attacker, self, mod, self->client->resp.deathblend == 1, message, message2);	// 1: the head shot that plays the "Headshot!" cue
 
 				// Means of Death msgs now server customizable
 				if (death_msg->value == 0) // print to self only

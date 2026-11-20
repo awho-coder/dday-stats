@@ -1013,7 +1013,7 @@ void FFA_HudReset(void);
 // p_killfeed.c
 void Killfeed_SetBase(char *statusbar);
 void Killfeed_UpdateBase(char *statusbar);
-qboolean Killfeed_Add(edict_t *killer, edict_t *victim, int mod, qboolean headshot);
+qboolean Killfeed_Add(edict_t *killer, edict_t *victim, int mod, qboolean headshot, char *mid, char *tail);
 void Killfeed_Frame(void);
 void Killfeed_ClientConnect(edict_t *ent);
 void Killfeed_Userinfo(edict_t *ent, char *userinfo);

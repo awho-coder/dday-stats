@@ -50,6 +50,7 @@ Cada jugador elige el estilo con el comando `killfeed <número>` (`killfeed` sol
 | 3 | banderas, dos placas sólidas verde / rojo | blancos |
 | 4 | banderas, una placa (equipo del killer) oscura teñida con franja de 7 px | verde `#9d5` / rojo `#f88` |
 | 5 | la original de Snako: banderas, una placa oscura del equipo del killer | blancos |
+| 6 | el kill feed de VisorDemos tal cual: `killer  verbo[ HS][ TK]  víctima` sobre la placa negra del estilo 1, con el verbo en texto ("sniped", "grenade", "suicide"... con las mismas reglas que `make_label` del visor) en vez del arma | azul `#8bf` / rojo `#f86`; verbo gris (rojo en un teamkill), `HS` naranjo, `TK` rojo |
 
 Los nombres de color usan el comando `color` del statusbar de Q2PRO (otros clientes lo ignoran y los dibujan en blanco). Como `color` también tiñe las imágenes, primero van las imágenes de todas las filas, después los textos agrupados por color (un solo `color` por grupo) y al final se vuelve a blanco para el statusbar del nivel.
 
