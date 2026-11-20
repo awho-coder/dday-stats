@@ -15,15 +15,19 @@ mapas **preparados** para él:
 | Modo | Mapa preparado si existe | Mapas hoy |
 |---|---|---|
 | Control | `ents/<mapa>.ctl` | eurovilla, inland4, invade2, invade6, itadday3, townwar |
-| FFA / Gun Game | `ents/<mapa>_ffa.ent` | dday2, gg_rats, tebessa2 |
+| FFA / Gun Game | `ents/<mapa>_ffa.ent` | dday2, gg_rats, inferno, tebessa2 |
 
 - **Rotación:** al terminar un mapa, la DLL pasa al siguiente mapa preparado (orden alfabético,
   vuelve al primero) y no abre la votación de fin de mapa. Si el modo arrancó en un mapa sin
   preparar, sigue con el primero preparado. Sin ningún mapa preparado se usa `sv_maplist`.
-- **Votación de los jugadores:** con `vote map` y `!votemap` un mapa preparado sigue en el modo y
-  cualquier otro **vuelve al modo normal** (el aviso dice "(vuelve al modo normal)"; al aprobarse
-  vuelven también `mapvoting` y `sv_maplist` del `server.cfg`, como `normal` del bot). `vote maps`
-  muestra los mapas del modo.
+- **Votación de los jugadores:** `vote map <mapa>` (igual que `vote normal <mapa>`) **siempre** juega el
+  mapa en modo normal, aunque sea un mapa del modo (el aviso dice "(vuelve al modo normal)"; al
+  aprobarse vuelven también `mapvoting` y `sv_maplist` del `server.cfg`, como `normal` del bot).
+  Para jugar un modo se vota con su comando: `vote gungame <mapa>`, `vote control <mapa>` o
+  `vote ffa <mapa>`, solo con mapas preparados para ese modo y si el modo está en `vote_modes`
+  (por defecto ninguno; S1 tiene `"gungame"`). Al aprobarse corta el mapa al tiro y después todo
+  sigue como siempre. `vote maps gungame` lista los mapas de ese modo. `!votemap` del bot todavía
+  deja seguir en el modo con un mapa preparado.
 - **Agregar un mapa a un modo:** subir su `.ctl` o `_ffa.ent` a `ents/` del server (sin reinicio).
 - **Nombre del server** (`hostname_mode 1`, 0 por defecto; en Oracle va en `server.cfg`): al cargar
   cada mapa la palabra "Ladder" del `hostname` cambia por el modo: `D-Day Chile FFA Test`,
@@ -466,13 +470,15 @@ Detalle: [`VOTACION.md`](VOTACION.md).
 | `vote_kick_min` | `3` | Humanos en equipo necesarios para un kick. |
 | `vote_announce` | `600` | Segundos entre avisos de cómo votar (`0` = sin avisos). |
 | `vote_chat` | `0` | Lo pone el bot: el aviso incluye `!votemap`. |
+| `vote_modes` | `""` | Modos que se votan con `vote <modo> <mapa>` además del normal: `gungame`, `control`, `ffa` (separados por espacio). En S1: `"gungame"`. |
 | `sv votecancel` | — | Corta la votación en curso. |
 | `nick_protect` | `1` | Nicks y tags de `dday/nicks.txt` solo con clave (`set nickpw <clave> u`, `set tagpw <clave> u`). |
 | `sv nicks [reload]` | — | Lista las reglas (sin claves) / relee el archivo. |
 
-Comandos de los jugadores (consola): `vote map <mapa>`, `vote restart`,
-`vote kick <nombre|número>`, `vote yes`, `vote no`, `vote maps <texto>`,
-`vote players`.
+Comandos de los jugadores (consola): `vote map <mapa>` (= `vote normal <mapa>`, siempre modo normal),
+`vote gungame <mapa>` / `vote control <mapa>` / `vote ffa <mapa>` (según `vote_modes`, no en duelo
+ni torneo), `vote restart`, `vote kick <nombre|número>`, `vote yes`, `vote no`,
+`vote maps <texto>` (`vote maps gungame`: los mapas de ese modo), `vote players`.
 
 ## Servidor: valores por defecto cambiados
 
@@ -519,10 +525,13 @@ comando.
   `say <texto>`
 - `control <mapa>` (o `modo control <mapa>`) arranca el modo control en ese mapa y **apaga la
   votación de fin de mapa** mientras dure la sesión; después **rota entre los mapas con `.ctl`**
-  (la DLL elige el siguiente) y `vote map` / `!votemap` solo aceptan esos mapas.
+  (la DLL elige el siguiente). Ahí `vote map` vuelve al modo normal y `vote control <mapa>` (si
+  `vote_modes` lo permite) sigue en control.
 - `ffa <mapa>` (o `ffa` solo = el mapa actual; también en frase: "admin quiero probar
   el ffa en dust") arranca Free For All en ese mapa; como `control`, rota entre los mapas con
-  `ents/<mapa>_ffa.ent` (dday2, gg_rats y tebessa2) y la votación de mapa solo acepta esos.
+  `ents/<mapa>_ffa.ent` (dday2, gg_rats, inferno y tebessa2). La votación de fin de mapa queda como en
+  `server.cfg` (en S1 se vota entre Normal y Gun Game). `vote map` vuelve al modo normal y
+  `vote gungame <mapa>` sigue en Gun Game.
 - `gungame <mapa>` igual que `ffa`, pero con el Gun Game (`ffa_gungame 1`); `ffa` lo apaga.
 - `ffa ruleta <mapa>` FFA con la ruleta de armas (`ffa_roulette 1`) en vez de todos Sniper.
 - `mapa`, `dm`, `normal` y `publico` apagan el modo control y el FFA, y restauran la

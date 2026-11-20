@@ -59,8 +59,9 @@ secciones. El mapa siguiente se juega en el modo de la opción ganadora.
   fija del modo (que queda de respaldo si nadie vota).
 - La votación dura 20 s (15 s la clásica) o termina antes si votaron todos los humanos.
 - Con `mapvoting_modes 0` la votación de fin de mapa es la de siempre (4 mapas en inglés).
-- Las sesiones del bot (`gungame <mapa>`, `control <mapa>`, `ffa <mapa>`) ponen `mapvoting 0`:
-  siguen en ese modo sin votación hasta `normal`, que repone `mapvoting` de `server.cfg`.
+- Las sesiones del bot `gungame <mapa>` y `ffa <mapa>` dejan `mapvoting` como en `server.cfg` (en S1
+  se vota al final también en Gun Game; sin `mapvoting_modes`, como en S2, rotan entre los mapas del
+  modo). `control <mapa>` pone `mapvoting 0`: sigue en control sin votación hasta `normal`.
 - No aplica en campaña, CTB ni con `DF_SAME_LEVEL`.
 
 ## Votación de la DLL (`src/g_vote.c`)
