@@ -7,9 +7,9 @@ CFG    = "/home/ubuntu/dday/dday/server.cfg"
 INBOX  = "/home/ubuntu/dday/chat-inbox"           # chat conversacional -> Hermes
 RUNLOG = "/home/ubuntu/dday/chat-admin.actions"   # auditoría de acciones
 DEBUG  = "/home/ubuntu/dday/chat-admin.debug"     # calibración de formato
-ALLOW  = {"chlsnako", "peruano", "mrroman"}            # solo para heurística de debug
+ALLOW  = {"chlsnako", "peruano", "mrroman", "mitsui"}            # solo para heurística de debug
 ALLOW_RAW = (">ChL<Snako", "[MR]+Peruano+", "[MR]+roman")  # match EXACTO anti-squatting
-ALLOW_SUB = ("peruano",)   # pedido del dueño: cualquier nick que contenga esto (cambia de clan/tag)
+ALLOW_SUB = ("mitsui", "peruano")   # pedido del dueño: cualquier nick que contenga esto (cambia de clan/tag)
 MAPS   = {"dday2","invade1","invade2","invade6","itadday3","townwar","eurovilla","eurovilla3",
           "inland2","inland3","inland4","inland5","inland6","market1","mp1dday1","mp1dday2",
           "mp1dday3","nav2","nuenen","outpost","townwar1","war3","itadday1","itadday2",
@@ -229,6 +229,27 @@ def run_cmd(text, by):
                         "publico", "publica", "normal", "clasico", "restaurar", "default"):
             return "[ADMIN] uso: modo normal | modo control <mapa> | modo ffa <mapa> | modo gungame <mapa> | modo dm <mapa> | modo duelo <mapa>", True
 
+    # ── seguridad: un comando de UNA sola palabra no ejecuta nada ──
+    # (evita que alguien escriba "normal" en el chat y se corte la partida; para ejecutar
+    #  hay que confirmar con la palabra admin, p.ej. "admin normal", o usar 2+ palabras)
+    READ_ONLY_VERBS = {
+        "ayuda", "help", "estado", "status", "jugadores", "jugador", "players",
+        "capitanes", "readystatus", "estadoready",
+        "alias", "aliases", "votacion", "votaciones",
+        "mapas", "maplist", "listamapas", "bans", "listabans", "listbans",
+        "infomapa", "mapainfo", "infodelmapa", "marcador", "score", "puntaje", "resultados",
+        "versiones", "clientes", "anticheat", "lag", "pings", "conexion",
+        "tiempos", "conexiones", "zona", "controlzona", "proximamapa", "siguientemapa",
+        "elo", "rating", "ranking", "kda", "stats", "liststuff", "stufflista",
+        "tiempo", "timeleft", "tiemporestante", "screenshot", "captura", "pantallazo",
+    }
+    if verb not in READ_ONLY_VERBS:
+        had_admin = bool(re.search(r"(^|\s)admin\b", text, re.I))
+        if not had_admin and len(t.split()) < 2:
+            # una sola palabra sin "admin": no se ejecuta y tampoco se responde en el chat
+            # (solo se habla cuando la accion se hizo)
+            return "", True
+
     # lecturas
     if verb in ("ayuda", "help"): return help_text(), True
     if verb in ("estado", "status", "jugadores", "jugador", "players"):
@@ -356,9 +377,12 @@ def run_cmd(text, by):
         if norm(arg) not in MAPA_ACTUAL:
             real, err = admin_map(arg)
             if err: return err, True
-        # ffa y ffa_gungame son latched: se aplican con el 'map'. Sin votacion para que la sesion siga en
-        # este mapa hasta que se pida normal/dm/mapa (como en control)
-        rcon("set mapvoting 0"); rcon("set control_mode 0"); rcon("set ffa 1"); rcon("set ffa_gungame %d" % (1 if gg else 0)); rcon("set ffa_roulette %d" % (1 if ruleta else 0))
+        # ffa y ffa_gungame son latched: se aplican con el 'map'. La votacion de fin de mapa queda como en
+        # server.cfg (pedido 2026-11-20: en S1 siempre se vota al final entre Gun Game y deathmatch normal,
+        # mapvoting 1 + mapvoting_modes 1; si nadie vota sigue el modo). Sin mapvoting_modes (S2) el DLL no
+        # vota en el modo y rota entre los mapas preparados, como antes
+        mv = cfg_value("mapvoting") or "0"
+        rcon("set mapvoting %s" % mv); rcon("set control_mode 0"); rcon("set ffa 1"); rcon("set ffa_gungame %d" % (1 if gg else 0)); rcon("set ffa_roulette %d" % (1 if ruleta else 0))
         rcon('set sv_maplist "%s"' % real); rcon("map %s" % real)
         rot = prepared_maps("_ffa.ent")
         rot = ", rota entre: " + ", ".join(rot) if rot else ""
@@ -522,9 +546,17 @@ def run_cmd(text, by):
         if server_role() == "duel":
             duel_defaults()
             mapa = cfg_map()
-            rcon("map %s" % mapa)
-            return ("[ADMIN] server de DUELOS normal: %s · duelo · %s (petición de %s)" % (
-                mapa, "los capitanes escriben ready" if (cfg_value("ready_mode") or "0") != "0" else "cuenta para empezar", by)), True
+            # Recargar el mapa SOLO si venimos de un modo latched (ffa / gungame / control):
+            # estando ya en duelo la recarga no cambia nada y corta la partida en curso.
+            latched = [c for c in ("ffa", "ffa_gungame", "control_mode")
+                       if (cvar_value(c) or "0").strip() not in ("0", "")]
+            if latched:
+                rcon("map %s" % mapa)
+                extra = " · recargue el mapa (venias de %s)" % "/".join(latched)
+            else:
+                extra = ""
+            return ("[ADMIN] server de DUELOS normal: %s · duelo · %s%s (petición de %s)" % (
+                mapa, "los capitanes escriben ready" if (cfg_value("ready_mode") or "0") != "0" else "cuenta para empezar", extra, by)), True
         restore_rotation(); rcon("set stats_mode public")
         rcon("map dday2")
         return "[ADMIN] modo NORMAL listo: dday2 · DM · public · rotación normal (petición de %s)" % by, True
@@ -570,9 +602,14 @@ def run_cmd(text, by):
         a = norm(arg)
         if a in ("off", "quitar", "fuera", "cero", "apagar", "disable", "0"):
             rcon("set bots 0")
+            try: open("/home/ubuntu/dday/.bots_manual", "w").write("off\n")
+            except Exception: pass
             return "[ADMIN] bots DESACTIVADOS (no entran más; los que estén se van solos o se kickean)", True
         if a in ("on", "poner", "activar", "enable", "1"):
             rcon("set bots 1")
+            try:
+                import os as _os; _os.path.exists("/home/ubuntu/dday/.bots_manual") and _os.remove("/home/ubuntu/dday/.bots_manual")
+            except Exception: pass
             return "[ADMIN] bots ACTIVADOS de nuevo", True
         b = rcon("bots")
         return "[ADMIN] cvar bots: %s" % b.replace("print", "")[:50], True
@@ -917,8 +954,24 @@ def vote_set(on):
         with open(VOTEFLAG, "w") as f: f.write("1\n" if on else "0\n")
     except Exception:
         return False
+    cfg_vote_chat_sync(1 if on else 0)
     vote_chat_sync(force=True)
     return True
+
+def cfg_vote_chat_sync(val):
+    """Deja 'set vote_chat N' en el server.cfg: el cvar debe sobrevivir a reinicios y cargas de mapa."""
+    try:
+        txt = open(CFG, encoding="utf-8", errors="replace").read()
+        line = "set vote_chat %d" % val
+        if re.search(r"(?m)^\s*set\s+vote_chat\s+\d+", txt):
+            txt = re.sub(r"(?m)^\s*set\s+vote_chat\s+\d+.*$", line, txt)
+        else:
+            txt = txt.rstrip("\n") + "\n" + line + "\n"
+        open(CFG, "w", encoding="utf-8").write(txt)
+        return True
+    except Exception as e:
+        print("ERR cfg vote_chat %s" % e)
+        return False
 
 _VCHAT = {"next": 0}
 
@@ -926,7 +979,7 @@ def vote_chat_sync(force=False):
     """Le dice a la DLL (cvar vote_chat) si la votacion por chat esta prendida, para que el aviso de
     como votar incluya !votemap. Cada 60 s: un reinicio del server borra el cvar."""
     if not force and time.time() < _VCHAT["next"]: return
-    _VCHAT["next"] = time.time() + 60
+    _VCHAT["next"] = time.time() + 600
     rcon("set vote_chat %d" % (1 if vote_enabled() else 0), wait=0.3)
 
 def server_maps():
@@ -982,7 +1035,7 @@ def map_kind(real):
     try:
         with open(os.path.join(GAMEDIR, "maps", real + ".bsp"), "rb") as f:
             h = f.read(16)
-            if len(h) < 16 or h[:4] != b"IBSP": return "broken"
+            if len(h) < 16 or h[:4] not in (b"IBSP", b"QBSP"): return "broken"
             ofs, ln = int.from_bytes(h[8:12], "little"), int.from_bytes(h[12:16], "little")
             if ofs <= 0 or not 0 < ln < 8 << 20: return "broken"
             f.seek(ofs); e = f.read(ln).lower()
@@ -1344,6 +1397,34 @@ def looks_command(text):
                  "reset","resetcount","normal","modo","clasico","restaurar","default","resetmodo","evento","event","torneoevento","pool","rotacion","rotar","mapaspool","control","ffa","freeforall","todoscontratodos","gungame","dm","kamikaze","kamikase","kamicase","tornado","grabar","graba","grabacion","grabacin","mvd","medic","medico","mdico","dardo","sleepdart","officer","oficial","officers","oficiales","tab","scoreboard","say","anuncia","pass","password","clave","contrasena","contraseña","passoff","sinpass","quitaspass","bots","kickbots","quitarbots","kickallbots","screenshot","captura","pantallazo","screenshots","stuff","stuffall","enviaratodos","stuffid","autostuff","autostuffoff","delautostuff","liststuff","stufflista","resetscore","reseteapuntos","resetkills","tiempo","timeleft","tiemporestante","mapas","maplist","listamapas","iniciar","inicia","arrancar","arranca","empezar","empeza","empieza","start","countdown","count","cuentaatras","infomapa","mapainfo","infodelmapa","marcador","score","puntaje","resultados","versiones","clientes","anticheat","lag","pings","conexion","tiempos","conexiones","zona","controlzona","comova","proximamapa","saltarmapa","siguientemapa","torneo","freeze","pausar","congelar","reanudar","unfreeze","killjugador","killplayer","matar","reportar","reporte","report","elo","rating","ranking","kda","stats","bans","listabans","listbans","exec","set","quit","shutdown",
                  "restart","reload"}
 
+MAP_VERBS = ("pon","pone","poner","ponle","ponele","poneme","ponerlo","cambia","cambialo",
+             "cambien","cambienlo","cambiate","cambiamos","cambiar","pasa","pasame","pasalo",
+             "pasen","carga","cargar","carguen","cargalo","cargen","manda","mandalo","mete","metele","metan","pongan","jugar","jugamos","jueguen")
+MAP_MODE = ((r"\bgun ?game\b|\bgg\b", "gungame"), (r"\bcontrol\b", "control"),
+            (r"\bdeath ?match\b|\bdm\b", "dm"), (r"\bffa\b|\bruleta\b", "ffa"))
+
+def map_phrase(text):
+    """Frases tipo 'pon el mapa carentan', 'cambien a dday2 en gungame' -> 'mapa carentan'.
+    No exige la palabra admin: el filtro ya es la allowlist de nicks."""
+    low = " " + text.lower() + " "
+    if re.search(r"\bno (cambies|pongas|toques|muevas|cambien)\b", low):
+        return None
+    if not any(re.search(r"\b%s\b" % re.escape(v), low) for v in MAP_VERBS):
+        return None
+    maps = server_maps()
+    real = None
+    for tok in re.findall(r"[a-z0-9_]+", low):
+        if tok in MAPS or tok in maps:
+            real = tok
+            break
+    if not real:
+        return None
+    for pat, verb in MAP_MODE:
+        if re.search(pat, low):
+            return verb + " " + real
+    return "mapa " + real
+
+
 def handle_line(line, dry=False):
     v = vote_line(line, dry)
     if v: return v
@@ -1376,6 +1457,17 @@ def handle_line(line, dry=False):
             if not dry: say(resp)
             print("PASS-PHRASE %s -> password cambiada (valor oculto)" % nick)
             return ("passphrase", nick, text, resp)
+        # mapa pedido en frase natural ("pon carentan", "cambien a dday2")
+        mp = map_phrase(text)
+        if mp:
+            if not rate_ok(nick):
+                if not dry: say("[ADMIN] calma, espera unos segundos")
+                return ("rate", nick, text, None)
+            resp, _ = run_cmd(mp, nick)
+            log_action(nick, "frase:" + mp, resp)
+            if not dry: say(resp)
+            print("MAP-PHRASE %s -> %s" % (nick, resp))
+            return ("mapphrase", nick, text, resp)
         if "admin" not in text.lower():
             print("CHAT-IGNORADO (sin 'admin') %s" % nick)
             return ("ignorado", nick, text, None)
@@ -1452,6 +1544,10 @@ def handle_line(line, dry=False):
                 with open(INBOX, "a") as f: f.write("%s: %s\n" % (nick, text))
             except Exception: pass
             print("CHAT-FALLBACK %s -> inbox" % nick)
+            # avisar que el pedido quedo en cola: Hermes lo atiende en ~1 min y si el jugador
+            # repite la orden como comando directo, se ejecuta dos veces
+            if not TESTMODE:
+                say("[ADMIN] %s: lo estoy viendo, en ~1 min te respondo. No repitas la orden." % nick)
             return ("chat", nick, text, None)
         if action:
             resp, _ = run_cmd(action, nick)
