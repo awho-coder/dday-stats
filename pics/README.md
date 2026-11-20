@@ -56,6 +56,8 @@ Cada jugador elige el estilo con el comando `killfeed <número>` (`killfeed` sol
 
 Los nombres de color usan el comando `color` del statusbar de Q2PRO (otros clientes lo ignoran y los dibujan en blanco). Como `color` también tiñe las imágenes, primero van las imágenes de todas las filas, después los textos agrupados por color (un solo `color` por grupo) y al final se vuelve a blanco para el statusbar del nivel.
 
+Los iconos (`kf_w_*`, banderas, calavera, etc.) van al doble de resolución: `pics/kf_<x>.png` mide el doble y `pics/kf_<x>.pcx` es el icono chico. Q2PRO dibuja el PNG con el tamaño del PCX (reemplazo en alta), así que en pantalla ocupan lo mismo y con el HUD escalado se ve el detalle; los clientes sin PNG usan el PCX. Se generan con `tools/killfeed/kf_icons_hd.py <carpeta dday del juego>` desde los iconos originales (`pics/w_*.pcx`, `pics/teams/*.pcx` de pak0.pak); los dibujados a mano, con Scale2x. Las placas no lo necesitan.
+
 El ancho de cada icono está en la tabla `kf_icons` de `src/p_killfeed.c`: el statusbar no puede medir imágenes, así que la posición de lo que va a su derecha se calcula con ese ancho. Si se cambia un icono por otro de otro ancho, o se agrega un arma, hay que actualizar la tabla. Un arma que no esté en la tabla se dibuja con la calavera.
 
 Los iconos de armas se generan a partir de los `pics/w_*.pcx` del juego (reducidos con promedio de área y pasados a tono hueso). El statusbar del engine tiene un límite de 1535 bytes: el killfeed va delante del statusbar del nivel y, si no cabe, al jugador se le mandan solo las filas más nuevas que caben (depende de su estilo: el 1 es el que menos ocupa).
