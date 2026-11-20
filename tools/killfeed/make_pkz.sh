@@ -23,7 +23,12 @@ trap 'rm -rf "$tmp"' EXIT
 
 mkdir "$tmp/pics"
 cp "$repo"/pics/kf_*.png "$repo"/pics/kf_*.pcx "$tmp/pics/"
-python3 -c "from PIL import Image; Image.new('RGBA', (1, 1), (0, 0, 0, 0)).save('$tmp/pics/kf_v$n.png')"
+# el testigo de este pak y los de los anteriores: el pak nuevo tambien sirve con un DLL que registra uno viejo
+i=1
+while [ "$i" -le "$n" ]; do
+  python3 -c "from PIL import Image; Image.new('RGBA', (1, 1), (0, 0, 0, 0)).save('$tmp/pics/kf_v$i.png')"
+  i=$((i + 1))
+done
 rm -f "$out/killfeed$n.pkz"
 (cd "$tmp" && zip -q -X -D -9 "$out/killfeed$n.pkz" pics/*.png pics/*.pcx)
 printf 'killfeed%s.pkz\n' "$n" > "$out/dday.filelist"
