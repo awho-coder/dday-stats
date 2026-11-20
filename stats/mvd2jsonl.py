@@ -12,7 +12,10 @@ Qué se saca del MVD:
   - mapa, jugadores (nombre y modelo -> equipo y clase), tiempo de cada uno en
     cada equipo y en cada clase (por frames, 10 por segundo)
   - cada muerte a partir del mensaje que el mod manda a todos (víctima, frase,
-    asesino, arma, ** HEADSHOT **), con la posición de los dos y la distancia
+    asesino, arma, ** HEADSHOT **), con la posición de los dos y la distancia.
+    Si el MVD trae el registro de muertes de la DLL (configstring KILL_LOG_CS,
+    desde el killfeed gráfico: quien lo usa no recibe el obituario en texto),
+    las muertes salen de ahí y los obituarios en texto no se usan
   - el arma exacta en armas "en mano": el modelo que tiene el que mata (gunindex)
   - el casco que desvía un tiro y el pie salvado (mensajes del mod)
   - en duelos, el inicio real ("Que comience el juego!") y el ganador
@@ -51,6 +54,10 @@ CLIENTNUM_NONE = 255
 # configstrings, esquema clásico (cs_remap_old); las versiones 2011+ con límites
 # extendidos usan otro y no se soportan (se avisa)
 CS_MODELS, CS_PLAYERSKINS, CS_END = 32, 1312, 2080
+# registro de muertes de la DLL (KillLog_Death, g_statslog.c): CS_PLAYERIDS - 4
+KILL_LOG_CS = CS_END - 4
+KILL_LOG_RE = re.compile(r"^K1\|(\d{1,3})\|([a-z_]+)\|([htwbc]+|-)\|(\d{1,3}|-)\|(\d{1,3})\|([0-9-])([0-9-])"
+                         r"\|([^|]*)\|([^|]*)$")
 MVD_VERSIONS = (2009, 2010)
 MAX_RAW_BYTES = 256 * 1024 * 1024  # MVD descomprimido
 
@@ -374,6 +381,25 @@ class Timeline:
         return out
 
 
+def kill_log(cs_changes):
+    """Muertes del registro de la DLL: [(frame, dict)]. El valor del gamestate
+    (en cs, no en cs_changes) es una muerte de antes de grabar y no está acá."""
+    out = []
+    for frame, idx, v in cs_changes:
+        if idx != KILL_LOG_CS:
+            continue
+        m = KILL_LOG_RE.match(v)
+        if not m:
+            continue
+        seq, mod, flags, kslot, vslot, kteam, vteam, kname, vname = m.groups()
+        out.append((frame, {"mod": mod, "flags": "" if flags == "-" else flags,
+                            "kslot": None if kslot == "-" else int(kslot), "vslot": int(vslot),
+                            "kteam": None if kteam == "-" else int(kteam),
+                            "vteam": None if vteam == "-" else int(vteam),
+                            "killer": kname, "victim": vname}))
+    return out
+
+
 def team_of(army):
     if army in ALLIES:
         return 0
@@ -507,8 +533,22 @@ def convert(path, server, kind, event, end_ts, weapons):
                         "gun": tl2.models.get(gun, "")}
         return None
 
+    def state_of_slot(f, slot, logname):
+        """(nombre, estado) del slot del registro; el nombre del registro viene
+        cortado y sin '|' ni '"': vale el del slot si empieza igual"""
+        tl2.advance(f)
+        slots = tl2.slots()
+        if slot in slots:
+            name = slots[slot][0]
+            clean = "".join(c for c in name if c not in '|"' and ord(c) >= 32)
+            if clean.startswith(logname):
+                return name, state_at(f, name)
+        return logname, None
+
     tl2 = Timeline(cs, cs_changes)
     kills, lucks, unknown = [], [], []
+    klog = kill_log(cs_changes)
+    by_wound = set()    # id() de las muertes del registro con crédito por herida
     for frame, k, text in lines:
         if k != "print":
             continue
@@ -523,6 +563,8 @@ def convert(path, server, kind, event, end_ts, weapons):
         if m:
             lucks.append((frame, "foot", m.group(1)))
             continue
+        if klog:
+            continue    # las muertes vienen del registro
         ob = parse_obituary(text, names)
         if ob is None:
             if any(w in text for w in (" was ", " by ", "himself")):
@@ -547,6 +589,36 @@ def convert(path, server, kind, event, end_ts, weapons):
         if killer and ks and vs["pos"] and ks["pos"]:
             ev["dist"] = int(math.dist(ks["pos"], vs["pos"]))
         kills.append((frame, ev))
+
+    # muertes del registro (mismo cálculo que las stats del server)
+    for frame, r in klog:
+        if r["mod"] == "changeteam":
+            continue    # no es una muerte (las stats tampoco la cuentan)
+        victim, vs = state_of_slot(frame, r["vslot"], r["victim"])
+        vs = vs or {"team": None, "class": None, "pos": None, "army": ""}
+        killer, ks = (state_of_slot(frame, r["kslot"], r["killer"]) if r["kslot"] is not None
+                      else (None, None))
+        mod = r["mod"]
+        weapon = None
+        if killer and ks and mod in HELD_WEAPON_MODS:
+            weapon = weapons.get(f"{ks['army']}|{ks['gun']}")
+        ev = {"ev": "kill", "t": round(frame * FRAME_S, 1),
+              "victim": {"name": victim, "bot": int("b" in r["flags"]),
+                         "team": r["vteam"] if r["vteam"] is not None else vs["team"],
+                         "class": vs["class"], "pos": vs["pos"]},
+              "killer": ({"name": killer, "bot": int("c" in r["flags"]),
+                          "team": r["kteam"] if r["kteam"] is not None else (ks["team"] if ks else None),
+                          "class": ks["class"] if ks else None, "pos": ks["pos"] if ks else None}
+                         if killer else None),
+              "mod": mod, "weapon": weapon, "hs": int("h" in r["flags"]), "ff": int("t" in r["flags"]),
+              "suicide": int(killer is None)}
+        if killer and ks and vs["pos"] and ks["pos"]:
+            ev["dist"] = int(math.dist(ks["pos"], vs["pos"]))
+        if "w" in r["flags"]:
+            by_wound.add(id(ev))
+        kills.append((frame, ev))
+    bots = {e["victim"]["name"] for _, e in kills if e["victim"]["bot"]} | \
+        {e["killer"]["name"] for _, e in kills if e["killer"] and e["killer"]["bot"]}
 
     # resumen por jugador (kills, muertes, racha...) desde el inicio
     def agg(name):
@@ -573,7 +645,9 @@ def convert(path, server, kind, event, end_ts, weapons):
             else:
                 sk["kills"] += 1
                 sk["hs"] += ev["hs"]
-                if ev["mod"] != "wound":
+                # la racha es del que mata directo: sin las muertes con crédito por
+                # herida (texto: mod "wound"; registro: flag w, como StatsLog_Streak)
+                if (id(ev) not in by_wound) if klog else (ev["mod"] != "wound"):
                     streak[kl["name"]] = streak.get(kl["name"], 0) + 1
                     sk["best_streak"] = max(sk["best_streak"], streak[kl["name"]])
     for frame, typ, name in lucks:
@@ -600,7 +674,7 @@ def convert(path, server, kind, event, end_ts, weapons):
             "source": "mvd", "mvd": Path(path).name}]
     events = []
     for f, name, team in team_changes:
-        events.append((f, 0, {"ev": "team", "t": round(f * FRAME_S, 1), "name": name, "bot": 0,
+        events.append((f, 0, {"ev": "team", "t": round(f * FRAME_S, 1), "name": name, "bot": int(name in bots),
                               "team": team if team is not None else -1}))
     if live_frame is not None:
         events.append((live_frame, 1, {"ev": "live", "t": round(live_frame * FRAME_S, 1),
@@ -612,7 +686,7 @@ def convert(path, server, kind, event, end_ts, weapons):
     for f, typ, name in lucks:
         ps = state_at(f, name) or {}
         events.append((f, 2, {"ev": "luck", "t": round(f * FRAME_S, 1), "type": typ,
-                              "player": {"name": name, "bot": 0, "team": ps.get("team"),
+                              "player": {"name": name, "bot": int(name in bots), "team": ps.get("team"),
                                          "class": ps.get("class"), "pos": ps.get("pos")}}))
     events.sort(key=lambda e: (e[0], e[1]))
     out += [e for _, _, e in events]
@@ -641,7 +715,7 @@ def convert(path, server, kind, event, end_ts, weapons):
         secs = [round(x * FRAME_S) for x in s["time"]]
         if not sum(secs) and not su:
             continue
-        out.append({"ev": "player", "t": t_end, "name": name, "bot": 0,
+        out.append({"ev": "player", "t": t_end, "name": name, "bot": int(name in bots),
                     "team": 0 if secs[0] >= secs[1] else 1, "time": secs,
                     "classes": {c: round(n * FRAME_S) for c, n in s["classes"].items()},
                     "kills": su.get("kills", 0), "deaths": su.get("deaths", 0),
