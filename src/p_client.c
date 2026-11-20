@@ -2897,6 +2897,7 @@ void ClientBegin (edict_t *ent)
 	ent->client->resp.AlreadySpawned=false;
 
 	Hitmarker_ClientBegin (ent);	// the client sends back the choice of hitmarkers it keeps
+	Killfeed_ClientBegin (ent);		// and the style of the killfeed
 
 	// kernel: CTB also needs this to clear structs at the beginning
 	if (deathmatch->value || ctb_mode->value)
@@ -2991,7 +2992,7 @@ void ClientUserinfoChanged (edict_t *ent, char *userinfo)
 	s = Info_ValueForKey (userinfo, "name");
 	strncpy (ent->client->pers.netname, s, sizeof(ent->client->pers.netname)-1);
 
-	Killfeed_Userinfo (ent, userinfo);	// "set killfeed <style> u" in the config of the client
+	Killfeed_Userinfo (ent, userinfo);	// "kfu": the style of the killfeed kept by the client
 	Hitmarker_Userinfo (ent, userinfo);	// "hmu": the choice of hitmarkers kept by the client
 
 	// set skin

@@ -371,16 +371,9 @@ Tampoco los ataques de los bots.
 | `3` | Solo la X. |
 | `4` | Solo al matar: el sonido y la X roja en las kills y los headshots; los golpes que no matan no marcan nada. |
 
-`hitmarker` sin número muestra la lista y cuál tiene. La elección se guarda en **dos lugares**:
-
-- **En el juego del jugador**: el server le manda `set hmu x<n> u` y `seta hm <n>`. Con Q2PRO, `hm` queda en su
-  `config.cfg` al cerrar el juego. Al entrar a un server, este le pide `set hmu x$hm u`: el cliente pone su `hm` en
-  lugar de `$hm` y lo manda en el userinfo (`hmu`). Así la elección pasa de S1 a S2 y sigue aunque cambie de nombre.
-- **En el server, por nombre** (sin distinguir mayúsculas), en `dday/hitmarkers.txt`: una línea `<opción> <nombre>`
-  por jugador (el `0` no se escribe). Sirve para clientes que no guardan `hm` (r1q2, 3.20) o si juega desde otro PC.
-
-Al entrar manda lo del cliente (y se copia al archivo de ese server); si el cliente no trae nada, se usa el archivo.
-La "x" de `hmu` es para que nunca llegue vacío (Q2PRO no reemplaza `$hm` entre comillas y deja vacío lo que no existe).
+`hitmarker` sin número muestra la lista y cuál tiene. La elección se guarda en el juego del jugador (`seta hm`,
+userinfo `hmu`) y en el server por nombre, en `dday/hitmarkers.txt` (el `0` no se escribe). Ver "Elecciones de
+cada jugador" más abajo.
 
 En un headshot, `hitmark_head.wav` reemplaza la voz "HEADSHOT" del juego (`misc/hithead.wav`) para quienes eligieron
 sonido (`1`, `2` o `4`): los que están cerca lo oyen en la cabeza del muerto, como se oía la voz, y quien disparó (y
@@ -396,6 +389,28 @@ de 30 de vida (cuenta como golpe en el pecho).
 `pics/hitmark.pcx` y `pics/hitkill.pcx` salen de `tools/assets/gen_hitmarker.py`. `hitmark.wav` y
 `hitmark_head.wav` son archivos aparte, pasados a 22050 Hz mono (al del headshot también se le quitó el silencio del
 final y se comprimió para que suene fuerte). Constantes `HITMARK_*` y `HITHEAD_SOUND` en `src/g_local.h`.
+
+## Jugador: killfeed (`killfeed`)
+
+Cada jugador elige cómo ve las muertes con `killfeed <0-6>` (`killfeed` sin número muestra la lista). `0` = en
+texto, como siempre; `1` a `6` = un feed gráfico arriba a la derecha (imágenes del pak `killfeed2.pkz`, que Q2PRO baja
+por HTTP). El cvar `killfeed_style` del server es el estilo de quien no eligió (`0` por defecto). Se guarda en el juego
+del jugador (`seta kf`, userinfo `kfu`) y en el server por nombre, en `dday/killfeed.txt` (aquí el `0` sí se escribe:
+es una elección aunque el server tenga otro estilo por defecto). Sigue leyendo `kf_style` del userinfo de antes.
+
+## Elecciones de cada jugador (hitmarkers y killfeed)
+
+Lo que cada jugador elige con `hitmarker` y `killfeed` se guarda en dos lugares (`PlayerPref_*` en `src/g_utils.c`):
+
+- **En su juego**: el server le manda `set <u> x<n> u` y `seta <cvar> <n>` (`hmu`/`hm` y `kfu`/`kf`). Con Q2PRO, el
+  cvar queda en su `config.cfg` al cerrar el juego. Al entrar a un server, este le pide `set <u> x$<cvar> u`: el
+  cliente pone su valor en lugar de `$<cvar>` y lo manda en el userinfo. Así la elección pasa de S1 a S2 y sigue
+  aunque cambie de nombre.
+- **En el server, por nombre** (sin distinguir mayúsculas), en `dday/hitmarkers.txt` y `dday/killfeed.txt`: una línea
+  `<n> <nombre>` por jugador. Sirve para clientes que no guardan el cvar (r1q2, 3.20) o si juega desde otro PC.
+
+Manda lo del cliente (y se copia al archivo de ese server); si el cliente no trae nada, se usa el archivo. La "x" es
+para que el valor nunca llegue vacío (Q2PRO no reemplaza `$cvar` entre comillas y deja vacío lo que no existe).
 
 ## Servidor: TAB de equipos nuevo (`tab_panel`)
 

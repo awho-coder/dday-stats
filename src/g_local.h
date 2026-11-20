@@ -1069,6 +1069,12 @@ void Hitmarker_HeadVoice (edict_t *targ, edict_t *except);
 void Hitmarker_Cmd (edict_t *ent);
 void Hitmarker_Userinfo (edict_t *ent, char *userinfo);
 void Hitmarker_ClientBegin (edict_t *ent);
+// g_utils.c: choices of each player kept in his client and by name in the server (see PlayerPref_Load)
+int PlayerPref_Load (char *file, char *name);
+void PlayerPref_Save (char *file, char *name, int value);
+int PlayerPref_Client (char *userinfo, char *ukey, int count);
+void PlayerPref_AskClient (edict_t *ent, char *ukey, char *cvar);
+void PlayerPref_SetClient (edict_t *ent, char *ukey, char *cvar, int value);
 qboolean G_IsFFA(void);
 // g_vote.c: mapas de cada modo (FFA / Gun Game: ents/<mapa>_ffa.ent; control: ents/<mapa>.ctl)
 const char *Mode_NextMap (const char *current);	// proximo mapa de la rotacion del modo, NULL fuera de esos modos
@@ -1098,6 +1104,7 @@ qboolean Killfeed_Add(edict_t *killer, edict_t *victim, int mod, qboolean headsh
 void Killfeed_Frame(void);
 void Killfeed_ClientConnect(edict_t *ent);
 void Killfeed_Userinfo(edict_t *ent, char *userinfo);
+void Killfeed_ClientBegin(edict_t *ent);
 void Killfeed_Cmd(edict_t *ent);
 qboolean Killfeed_Shows(edict_t *ent);
 void FFA_SpawnReset(void);

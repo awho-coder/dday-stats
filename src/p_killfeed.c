@@ -368,6 +368,10 @@ static char KF_COLOR_TK[] = "#f44";	// "TK" and the verb of a teamkill (styles 1
 static char KF_COLOR_LABEL[] = "#bbb";	// the verb (style 6)
 
 static int			kf_client_style[KF_MAX_CLIENTS];	// -1: killfeed_style of the server
+// the style is kept in his client (seta kf, userinfo kfu) and by name in dday/killfeed.txt (0 too: the server may
+// have another one by default), see PlayerPref_Load in g_utils.c. kf_lookup: the name it was looked for in the file
+#define KF_FILE		"killfeed.txt"
+static char			kf_lookup[KF_MAX_CLIENTS][sizeof(((client_persistant_t *)0)->netname)];
 static qboolean		kf_client_feed[KF_MAX_CLIENTS];		// the client has a statusbar with the feed (sent by unicast)
 
 // The texts of the feed are drawn after all the pictures, grouped by color: the color command of the client (Q2PRO,
@@ -610,8 +614,19 @@ static int KF_ClientNum (edict_t *ent)
 static int KF_StyleOf (edict_t *ent)
 {
 	int		n = KF_ClientNum (ent);
-	int		style = (n >= 0) ? kf_client_style[n] : -1;
+	int		style;
 
+	// not chosen in this connection: the file of the server, once for each name
+	if (n >= 0 && kf_client_style[n] < 0 && ent->client && !ent->ai && ent->client->pers.netname[0] &&
+		strcmp (kf_lookup[n], ent->client->pers.netname))
+	{
+		Com_sprintf (kf_lookup[n], sizeof(kf_lookup[n]), "%s", ent->client->pers.netname);
+		style = PlayerPref_Load (KF_FILE, kf_lookup[n]);
+		if (style >= 0 && style < KF_STYLES)
+			kf_client_style[n] = style;
+	}
+
+	style = (n >= 0) ? kf_client_style[n] : -1;
 	if (style < 0)
 		style = killfeed_style ? (int)killfeed_style->value : KF_STYLE_OFF;
 	if (style < 0 || style >= KF_STYLES)
@@ -716,6 +731,14 @@ void Killfeed_ClientConnect (edict_t *ent)
 		return;
 	kf_client_style[n] = -1;
 	kf_client_feed[n] = false;
+	kf_lookup[n][0] = 0;
+}
+
+
+// when he comes in: the client is asked for the style it keeps
+void Killfeed_ClientBegin (edict_t *ent)
+{
+	PlayerPref_AskClient (ent, "kfu", "kf");
 }
 
 
@@ -730,49 +753,60 @@ static void KF_SetStyle (edict_t *ent, int style)
 }
 
 
-// userinfo "kf_style" (the command killfeed sets it in the client, or "set kf_style <style> u" in his config;
-// "killfeed" is read too). Every change of level reloads the game library and reconnects the clients: the style
-// would be lost if it were only kept here, the userinfo of the client brings it back on every connection
+// from ClientUserinfoChanged, with his name already set: the style the client brings ("kfu"; "kf_style" or "killfeed"
+// of before, "set kf_style <style> u" in some configs) goes first, and it is written in the file of this server too
 void Killfeed_Userinfo (edict_t *ent, char *userinfo)
 {
-	char	*s = Info_ValueForKey (userinfo, "kf_style");
-	int		style;
+	int		n = KF_ClientNum (ent);
+	int		style = PlayerPref_Client (userinfo, "kfu", KF_STYLES);
+	char	*s;
 
-	if (!s[0])
-		s = Info_ValueForKey (userinfo, "killfeed");
-
-	if (!s[0])
+	if (n < 0 || ent->ai)
 		return;
-	style = atoi (s);
-	if (style >= 0 && style < KF_STYLES)
-		KF_SetStyle (ent, style);
+	if (style < 0)
+	{
+		s = Info_ValueForKey (userinfo, "kf_style");
+		if (!s[0])
+			s = Info_ValueForKey (userinfo, "killfeed");
+		if (s[0] >= '0' && s[0] <= '9' && !s[1] && s[0] - '0' < KF_STYLES)
+			style = s[0] - '0';
+	}
+	if (style < 0 || style == kf_client_style[n])
+		return;
+
+	KF_SetStyle (ent, style);
+	if (ent->client && PlayerPref_Load (KF_FILE, ent->client->pers.netname) != style)
+		PlayerPref_Save (KF_FILE, ent->client->pers.netname, style);
 }
 
 
-// command "killfeed [style]"
+// command "killfeed [style]", kept in his client and in the server
 void Killfeed_Cmd (edict_t *ent)
 {
 	int		i, style, current = KF_StyleOf (ent);
+	char	*s;
 
 	if (gi.argc () < 2)
 	{
 		safe_cprintf (ent, PRINT_HIGH, "Estilos del killfeed (killfeed <numero>):\n");
 		for (i = 0; i < KF_STYLES; i++)
 			safe_cprintf (ent, PRINT_HIGH, "%s %d  %s\n", (i == current) ? "->" : "  ", i, kf_styles[i].name);
-		safe_cprintf (ent, PRINT_HIGH, "Se mantiene al cambiar de mapa. Para dejarlo fijo siempre, pon en tu autoexec.cfg: set kf_style <numero> u\n");
+		safe_cprintf (ent, PRINT_HIGH, "Queda guardado en tu juego y en el servidor.\n");
 		return;
 	}
 
-	style = atoi (gi.argv (1));
-	if (style < 0 || style >= KF_STYLES)
+	s = gi.argv (1);
+	style = atoi (s);
+	if (s[0] < '0' || s[0] > '9' || s[1] || style >= KF_STYLES)
 	{
 		safe_cprintf (ent, PRINT_HIGH, "killfeed: el estilo va de 0 a %d (killfeed sin numero muestra la lista)\n", KF_STYLES - 1);
 		return;
 	}
 
 	KF_SetStyle (ent, style);
-	// kept in the userinfo of the client, so that it comes back after every change of level (see Killfeed_Userinfo)
-	stuffcmd (ent, va ("set kf_style %d u\n", style));
+	if (ent->client)
+		PlayerPref_Save (KF_FILE, ent->client->pers.netname, style);
+	PlayerPref_SetClient (ent, "kfu", "kf", style);
 	safe_cprintf (ent, PRINT_HIGH, "Killfeed: %d %s\n", style, kf_styles[style].name);
 }
 
