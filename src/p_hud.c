@@ -1279,7 +1279,8 @@ void Team_FinalScoreboard (edict_t *ent)
 	char		string[1400], line[48], name[16];
 	int			sorted[2][MAX_CLIENTS], sortkey[2][MAX_CLIENTS], total[2] = {0, 0}, shown[2];
 	int			i, j, k, t, y, key, rows, more, secs, shots, acc, nhigh = 0, room;
-	int			mvp = -1, aim = -1, heal = -1, aim_acc = 0;
+	int			mvp = -1, aim = -1, heal = -1, aim_acc = 0, shift;
+	const char	*event_name;
 	qboolean	by_score = (ctb_mode->value || level.control_zone);	// the team score is points, not kills
 	gclient_t	*cl;
 
@@ -1324,7 +1325,11 @@ void Team_FinalScoreboard (edict_t *ent)
 	nhigh = (mvp >= 0) + (aim >= 0) + (heal >= 0);
 
 	// rows that fit between the titles of the teams and the highlights
-	room = (FINAL_BOTTOM - nhigh * TEAM_ROW_H - (nhigh ? 2 : 0) - FINAL_TEAMS_Y - 2 * FINAL_ROWS_DY - FINAL_TEAM_GAP) / TEAM_ROW_H;
+	// partida de torneo: su nombre va arriba del resultado (una fila menos de jugadores)
+	event_name = Torneo_Name ();
+	shift = event_name[0] ? TEAM_ROW_H : 0;
+	room = (FINAL_BOTTOM - nhigh * TEAM_ROW_H - (nhigh ? 2 : 0) - FINAL_TEAMS_Y - shift - 2 * FINAL_ROWS_DY -
+			FINAL_TEAM_GAP) / TEAM_ROW_H;
 	if (total[0] + total[1] <= room)
 	{
 		shown[0] = total[0];
@@ -1368,10 +1373,18 @@ void Team_FinalScoreboard (edict_t *ent)
 					 by_score ? team_list[1]->score : team_list[1]->kills);
 	else
 		Com_sprintf (line, sizeof(line), "Fin de la partida");
-	sprintf (string + strlen(string), "xv %d yv %d string2 \"%s\" ", 160 - 4 * (int)strlen(line),
-			 TEAM_PANEL_Y + FINAL_RESULT_Y, line);
+	if (shift)
+	{
+		char name[34];
 
-	y = TEAM_PANEL_Y + FINAL_TEAMS_Y;
+		Com_sprintf (name, sizeof(name), "%s", event_name);
+		sprintf (string + strlen(string), "xv %d yv %d string \"%s\" ", 160 - 4 * (int)strlen(name),
+				 TEAM_PANEL_Y + FINAL_RESULT_Y, name);
+	}
+	sprintf (string + strlen(string), "xv %d yv %d string2 \"%s\" ", 160 - 4 * (int)strlen(line),
+			 TEAM_PANEL_Y + FINAL_RESULT_Y + shift, line);
+
+	y = TEAM_PANEL_Y + FINAL_TEAMS_Y + shift;
 	for (t = 0; t < 2; t++)
 	{
 		rows = shown[t];

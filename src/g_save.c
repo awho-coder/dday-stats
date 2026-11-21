@@ -380,6 +380,7 @@ void InitGame (void)
 	StatsLog_Init ();
 	Vote_Init ();
 	Ready_Init ();
+	Torneo_Init ();
 	Nick_Init ();
 
 	// pbowens: reduce lag by manipulating userinfo on server basis

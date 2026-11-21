@@ -460,7 +460,8 @@ Detalle: [`../stats/README.md`](../stats/README.md).
 | `stats_server` | hostname | Identificador del servidor en la base. |
 | `stats_log_dir` | `""` | Carpeta de salida absoluta (vacío = `dday/stats/events`). |
 | `stats_mode` | `public` | `public` o `duel` (en duelo solo cuenta desde que termina la cuenta: `sv startcount` o el ready de los capitanes). |
-| `stats_event` | `""` | Nombre del torneo: marca las partidas como duelo oficial. Vaciarlo al terminar. |
+| `stats_event` | `""` | Clave del torneo: marca las partidas como oficiales. Lo pone `sv torneo` (ver abajo). |
+| `stats_event_name` | `""` | Nombre largo del torneo, solo para mostrar (mensaje de espera, inicio, pantalla final). Lo pone `sv torneo`. |
 
 ## Servidor: duelo con ready de los capitanes (`ready_mode`)
 
@@ -473,7 +474,7 @@ calentamiento (antes contaban para el ganador).
 | Cvar / comando | Por defecto | Qué hace |
 |---|---|---|
 | `ready_mode` | `0` | `1` = en duelo o torneo la partida empieza con el ready de los dos capitanes. |
-| `ready_time` | `0` | Minutos de la partida. `0` = el duelo dura hasta que gane un equipo; en torneo (sin cuenta no se dispara) usa `timelimit` o 20. |
+| `ready_time` | `0` | Minutos de la partida. `0` = dura hasta que gane un equipo (también en torneo: el daño se habilita cuando empieza la partida, aunque no tenga tiempo límite). |
 | `capitan` / `captain` | — | (Jugador) queda de capitán de su equipo, uno por equipo. También en el menú de equipos: "<equipo> (capitan)". |
 | `ready` / `listo` | — | (Capitán) su equipo está listo. Si el equipo no tiene capitán, quien lo escribe queda de capitán. |
 | `notready` / `unready` / `nolisto` | — | (Capitán) lo desmarca. |
@@ -481,28 +482,85 @@ calentamiento (antes contaban para el ganador).
 | `pausa` / `pause` / `timeout` | — | (Capitán, partida en juego) pausa: nadie se mueve ni recibe daño y el reloj se detiene. |
 | `seguir` / `continuar` / `unpause` | — | (Los dos capitanes) sigue antes de que se acabe la pausa, con una cuenta de 5 s. |
 | `pause_max` | `2` | Pausas de cada equipo por partida. `0` = sin pausas de capitanes. |
-| `pause_time` | `120` | Segundos que dura una pausa como máximo (después sigue sola). |
-| `pause_auto` | `1` | `1` = si se desconecta un jugador de un equipo, pausa hasta que vuelva (o `pause_time`). No cuenta en `pause_max`. |
+| `pause_time` | `120` | Segundos que dura la pausa de un capitán como máximo (después sigue sola). La pausa automática no tiene límite. |
+| `pause_auto` | `1` | `1` = si se desconecta un jugador de un equipo, pausa hasta que vuelva, sin límite de tiempo (si no vuelve, `seguir` de los dos capitanes). No cuenta en `pause_max`. |
 | `cancelar` / `cancel` | — | (Los dos capitanes, en menos de 30 s) cancelan la partida, como `sv resetcount`: vuelve el calentamiento y el ready. |
 | `sv ready` / `sv ready reset` / `sv ready seguir` | — | Estado (capitanes, ready, humanos, kills, pausas) / borrar capitanes y ready / sacar la pausa de los capitanes. |
 
 Los comandos sirven en la consola y en el chat (el mensaje exacto, con o sin `!`, también en el chat de
 equipo; el mensaje se ve igual). En la consola **no** usar `pause`: es un comando del cliente de Quake 2 y no
 llega al server; usar `pausa` o `timeout` (en el chat `pause` sí sirve). Si el capitán se va
-del equipo o del server, el equipo queda sin capitán (el próximo que escriba un comando de capitán lo será).
+del equipo o del server, la capitanía pasa altiro a otro jugador del equipo (se le avisa en el centro de la
+pantalla; antes de empezar, el ready del equipo se borra y el nuevo capitán lo vuelve a poner). Si no queda nadie,
+el próximo que escriba un comando de capitán lo será.
 `sv startcount` del admin sigue funcionando y se salta el ready; `sv resetcount` vuelve a pedirlo.
 
 Ya empezada la partida, el jugador de un equipo que se desconecta entra solo a su mismo equipo al volver
-(con el mismo nombre; elige clase en el menú de siempre). Con `pause_auto 1` la partida queda en pausa
+(con el mismo nombre) y con la clase que tenía (si hay cupo; el menú de clase se abre por si quiere otra). Con `pause_auto 1` la partida queda en pausa
 hasta que vuelva: al entrar a su equipo el server avisa "Volvio el que se habia caido" y la partida sigue sola
 tras una cuenta de 5 s (nadie pone ready; la cuenta empieza al entrar al equipo, así que tiene esos 5 s para
-elegir clase). Si no vuelve en `pause_time`, sigue igual; los dos capitanes pueden escribir `seguir` antes. Si
+elegir clase). La pausa automática no tiene límite de tiempo: si no vuelve, los dos capitanes escriben `seguir` (si su equipo
+quedó vacío, basta el otro capitán) o el admin `sv ready seguir`. Si
 vuelve con otro nombre no se le reconoce. Un echado con `vote kick` no pausa ni vuelve solo.
 Durante la pausa nadie se mueve; el tiempo límite, los objetivos y la zona de
 control no corren y las stats del duelo no cuentan ese rato.
 
 Los espectadores usan el chat de equipo (`messagemode2`) entre ellos: solo lo ven otros espectadores
 (se muestra con `(Espectadores)`). El chat general queda igual.
+
+## Servidor: torneo en un paso (`sv torneo`) y menú Duelo / Torneo
+
+Las fichas de torneo se crean en la web (panel admin → Torneos): **clave** corta (la que se escribe en el server)
+y **nombre** largo. El bot del chat baja cada 5 min las fichas abiertas (*Próximo* / *En curso*) de la API
+pública y las deja en `dday/torneos.txt` (`clave|minutos|nombre`); la DLL las lee de ahí.
+
+| Comando | Qué hace |
+|---|---|
+| `sv torneo` | Torneo activo y lista de torneos abiertos. |
+| `sv torneo <clave> [mapa] [minutos]` | Activa el torneo. Vale la clave exacta o un pedazo de la clave o del nombre si calza con un solo torneo (si no, lista los abiertos). Pone `stats_event` + `stats_event_name`, `tournament 1`, `stats_mode duel`, `ready_mode 1`, `ready_time` (los minutos del comando o de la ficha; `0` = sin tiempo), `mapvoting 0`, `bots 0` y `sv_maplist` = el mapa. Recarga el mapa si se dio uno o si el server no estaba en duelo. Con una partida en juego, sin mapa, no lo activa. `sv torneo clave 25` = 25 min sin cambiar de mapa. |
+| `sv torneo fin` | Lo termina y deja las cvars como estaban antes de activarlo. Con una partida en juego, termina al acabar esa partida. |
+
+- **Reinicios:** el torneo activo se guarda en `dday/torneo_activo.txt` (con su mapa y los valores previos de las
+  cvars). Si el server se reinicia, al cargar el mapa se vuelve a poner solo (y vuelve a su mapa).
+- **Fin automático:** si la ficha deja de estar abierta en la web (pasa a *Terminado*), el bot hace `sv torneo fin`.
+- Si alguien cambia `stats_event` a mano, el torneo se da por terminado (sin tocar las demás cvars).
+- Desde el bot: `torneo` (lista), `torneo <clave> [mapa] [min]`, `torneo fin`; `evento ...` es lo mismo.
+
+**Menú Duelo / Torneo** (solo con un torneo activo): lo abre cualquiera con `menuduelo` (o `menutorneo`) o
+desde el menú principal ("Duelo / Torneo"). Muestra el torneo, el estado de cada equipo y de la partida, y
+las acciones que sirven en ese momento para quien puede actuar como capitán (el capitán, o cualquiera de un equipo
+sin capitán, que queda de capitán):
+
+| Acción | Cuándo |
+|---|---|
+| Ser capitán / Listos / No estamos listos | Antes de empezar |
+| Cambiar mapa... | Antes de empezar: lo propone un capitán (lista = `sv_maplist` del `server.cfg`) y el otro lo acepta en su menú ("Aceptar mapa X", 60 s). Si el otro equipo está vacío, cambia directo |
+| Pedir pausa / Seguir | En la partida (las mismas reglas que `pausa` / `seguir`) |
+| Cancelar partida | Partida empezada o en la cuenta (los dos capitanes, como `cancelar`) |
+
+Echar a alguien no va en el menú: queda `vote kick`. Terminar el torneo: `sv torneo fin`, el bot, la web o el
+menú del árbitro.
+
+**Árbitro** (cualquiera que tenga la clave rcon del server, sin importar el nick):
+
+| Comando | Qué hace |
+|---|---|
+| `arbitro <clave rcon>` | **En la consola** (tecla `~`), no en el chat. Queda de árbitro mientras siga conectado (se avisa a todos: "X es arbitro") y se abre su menú. 3 claves malas lo bloquean hasta que se reconecte; cada intento malo queda en el log con nick e IP. |
+| `arbitro` | Abre el menú del árbitro (también "Arbitro..." en el menú Duelo / Torneo; sin torneo activo, "Arbitro" en el menú principal y en el de equipos). |
+| `arbitro salir` | Deja de ser árbitro. |
+
+Un mensaje de chat que empiece con `arbitro` o que contenga la clave rcon no se manda (se avisa que va en la consola).
+
+| Menú del árbitro | Qué hace |
+|---|---|
+| Activar torneo... / Cambiar torneo... | Torneo de la lista (fichas abiertas) → mapa (este u otro de la rotación) → minutos (de la ficha, 10-30 o sin tiempo); como `sv torneo <clave> [mapa] [min]`. Cambiar torneo solo sin partida en juego |
+| Empezar ya (sin ready) | Salta el ready de los capitanes y parte la cuenta (como `sv startcount` con los minutos del torneo) |
+| Pausar / Sacar la pausa | Su pausa no tiene tiempo ni gasta pausas de los equipos; solo él (o `sv ready seguir`) la saca, los capitanes no. "Sacar la pausa" también saca la de un capitán o la automática |
+| Reiniciar partida | Con confirmación: como `sv resetcount` (vuelve el calentamiento y el ready) |
+| Cambiar mapa... | Directo, sin que lo acepte el otro capitán; con una partida en juego pide confirmación (se corta) |
+| Minutos... | Cambia los minutos del torneo activo (desde la próxima partida) |
+| Terminar torneo | Con confirmación: como `sv torneo fin` (con una partida en juego, al acabarla) |
+| Menu de jugadores | El menú Duelo / Torneo normal |
 
 Duelo en modo control (`control_mode 1` + `stats_mode duel`): durante el calentamiento la zona se ve pero queda
 cerrada (nadie la gana antes del duelo); el bloqueo (`control_lock`) cuenta desde "Que comience el juego!". Rota y se

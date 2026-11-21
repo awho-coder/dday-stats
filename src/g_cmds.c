@@ -1428,7 +1428,7 @@ void Cmd_Drop_f (edict_t *ent)
 		return;
 
 	// kernel: do not allow to drop anything if the match has not begun yet (ni en pausa)
-	if (freeze_mode || (tournament->value && (countdownTimeLimit <= 0 || countdownActive > 0)))
+	if (freeze_mode || Tournament_Waiting ())
 		return;
 
 	s = gi.args(); 
@@ -2493,6 +2493,15 @@ void Cmd_Say_f (edict_t *ent, qboolean team, qboolean arg0, qboolean saved)
 				return;
 		}
 	*/
+
+		// la clave del arbitro (rcon) no sale en el chat
+		{
+			char guard[1024];
+
+			Com_sprintf (guard, sizeof(guard), "%s %s", arg0 ? gi.argv (0) : "", gi.args ());
+			if (Torneo_ChatGuard (ent, arg0 ? guard + 0 : gi.args ()))
+				return;
+		}
 
 		// duelo/torneo con ready_mode: "ready", "listo", "capitan" en el chat (el mensaje se muestra igual)
 		if (!arg0)
@@ -3561,12 +3570,31 @@ void ClientCommand (edict_t *ent)
 		return;
 	}
 	else if (Q_stricmp(cmd, "pausa") == 0 || Q_stricmp(cmd, "pause") == 0 || Q_stricmp(cmd, "timeout") == 0)
+	{
 		Cmd_Pause_f(ent);
+		return;
+	}
 	else if (Q_stricmp(cmd, "seguir") == 0 || Q_stricmp(cmd, "continuar") == 0 || Q_stricmp(cmd, "unpause") == 0 ||
 		Q_stricmp(cmd, "resume") == 0)
+	{
 		Cmd_Resume_f(ent);
+		return;
+	}
 	else if (Q_stricmp(cmd, "cancelar") == 0 || Q_stricmp(cmd, "cancel") == 0)
+	{
 		Cmd_Cancel_f(ent);
+		return;
+	}
+	else if (Q_stricmp(cmd, "menuduelo") == 0 || Q_stricmp(cmd, "menutorneo") == 0)
+	{
+		Cmd_TorneoMenu_f(ent);
+		return;
+	}
+	else if (Q_stricmp(cmd, "arbitro") == 0 || Q_stricmp(cmd, "referee") == 0)
+	{
+		Cmd_Arbitro_f(ent);
+		return;
+	}
 	else if (Q_stricmp(cmd, "capitan") == 0 || Q_stricmp(cmd, "captain") == 0)
 	{
 		Ready_ClaimCaptain(ent);

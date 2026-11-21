@@ -857,7 +857,7 @@ void T_Damage (edict_t *targ, edict_t *inflictor, edict_t *attacker, vec3_t dir,
 
 	// kernel: do not allow damage if the match has not begun yet, but allow it when changing teams
 	// pausa (sv freeze o la de los capitanes del duelo): nadie recibe dano
-	if ((freeze_mode || (tournament->value && (countdownTimeLimit <= 0 || countdownActive > 0)))
+	if ((freeze_mode || Tournament_Waiting ())
 		&& mod != MOD_CHANGETEAM && mod != MOD_CHANGETEAM_WOUNDED)
 		return;
 

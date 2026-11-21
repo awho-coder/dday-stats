@@ -1330,7 +1330,7 @@ void player_die (edict_t *self, edict_t *inflictor, edict_t *attacker, int damag
 		else
 		{
 			// kernel: do not allow to toss weapon when changing teams in tournament mode, bots also can not drop weapon
-			if (!(tournament->value && (countdownTimeLimit <= 0 || countdownActive > 0) &&
+			if (!(Tournament_Waiting () &&
 				  (meansOfDeath == MOD_CHANGETEAM || meansOfDeath == MOD_CHANGETEAM_WOUNDED
 				   || meansOfDeath == MOD_SUICIDE || self->ai)))
 			{
@@ -3242,6 +3242,7 @@ void ClientDisconnect (edict_t *ent)
 	StatsLog_ClientDisconnect (ent);
 	Vote_ClientDisconnect (ent);
 	Ready_ClientDisconnect (ent);
+	Torneo_ClientDisconnect (ent);
 	Nick_ClientDisconnect (ent);
 
 	if (stats->value && !level.intermissiontime)

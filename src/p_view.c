@@ -41,6 +41,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 // evil: global variables for countdown
 extern float countdownTimeLimit;
+extern int countdownActive;
 
 // kernel: to freeze them all
 extern qboolean freeze_mode;
@@ -2438,7 +2439,7 @@ void ClientEndServerFrame (edict_t *ent)
 			if (framediff % 100 == 0 && !ent->ai)
 				Ready_CenterPrint (ent);
 		}
-		else if (tournament->value && countdownTimeLimit <= 0 && !freeze_mode && !level.intermissiontime
+		else if (Tournament_Waiting () && !countdownActive && !freeze_mode && !level.intermissiontime
 			&& framediff % 100 == 0)
 			safe_centerprintf(ent, "Server is running in \"Tournament\" mode.\n\n"
 							  "Please wait for the countdown to begin the battle.");

@@ -787,7 +787,9 @@ static const char *Vote_What (void)
 }
 
 // valor de "set <name> <valor>" en el server.cfg (el que ejecuta el server al arrancar); false si no esta
-static qboolean Vote_CfgValue (const char *name, char *out, int size)
+qboolean Cfg_Value (const char *name, char *out, int size);
+#define Vote_CfgValue Cfg_Value
+qboolean Cfg_Value (const char *name, char *out, int size)
 {
 	char		line[1024], key[64];
 	const char	*p;

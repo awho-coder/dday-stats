@@ -1772,6 +1772,7 @@ void G_RunFrame (void)
 
 	Vote_RunFrame ();
 	Ready_RunFrame ();
+	Torneo_RunFrame ();
 	Nick_RunFrame ();
 	Tornado_RunFrame ();
 	Anticamp_RunFrame ();
@@ -1961,7 +1962,13 @@ void G_RunFrame (void)
 			}
 			else
 			{
-				centerprintall("Que comience el juego!");
+				if (Torneo_Name ()[0])
+				{
+					centerprintall("Que comience el juego!\n\n%.33s\npartida OFICIAL", Torneo_Name ());
+					safe_bprintf(PRINT_HIGH, "%s: partida OFICIAL.\n", Torneo_Name ());
+				}
+				else
+					centerprintall("Que comience el juego!");
 				gameStartTime = level.time;
 				// duelo: primero se borran las kills/score del calentamiento y despues las stats toman
 				// los contadores como base (al reves, el score del duelo quedaba restado)
