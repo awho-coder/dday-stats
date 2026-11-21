@@ -486,13 +486,18 @@ calentamiento (antes contaban para el ganador).
 | `cancelar` / `cancel` | — | (Los dos capitanes, en menos de 30 s) cancelan la partida, como `sv resetcount`: vuelve el calentamiento y el ready. |
 | `sv ready` / `sv ready reset` / `sv ready seguir` | — | Estado (capitanes, ready, humanos, kills, pausas) / borrar capitanes y ready / sacar la pausa de los capitanes. |
 
-Los comandos sirven en la consola y en el chat (el mensaje exacto, con o sin `!`). Si el capitán se va
+Los comandos sirven en la consola y en el chat (el mensaje exacto, con o sin `!`, también en el chat de
+equipo; el mensaje se ve igual). En la consola **no** usar `pause`: es un comando del cliente de Quake 2 y no
+llega al server; usar `pausa` o `timeout` (en el chat `pause` sí sirve). Si el capitán se va
 del equipo o del server, el equipo queda sin capitán (el próximo que escriba un comando de capitán lo será).
 `sv startcount` del admin sigue funcionando y se salta el ready; `sv resetcount` vuelve a pedirlo.
 
 Ya empezada la partida, el jugador de un equipo que se desconecta entra solo a su mismo equipo al volver
 (con el mismo nombre; elige clase en el menú de siempre). Con `pause_auto 1` la partida queda en pausa
-hasta que vuelva; si no vuelve en `pause_time`, sigue igual. Un echado con `vote kick` no pausa ni vuelve solo.
+hasta que vuelva: al entrar a su equipo el server avisa "Volvio el que se habia caido" y la partida sigue sola
+tras una cuenta de 5 s (nadie pone ready; la cuenta empieza al entrar al equipo, así que tiene esos 5 s para
+elegir clase). Si no vuelve en `pause_time`, sigue igual; los dos capitanes pueden escribir `seguir` antes. Si
+vuelve con otro nombre no se le reconoce. Un echado con `vote kick` no pausa ni vuelve solo.
 Durante la pausa nadie se mueve; el tiempo límite, los objetivos y la zona de
 control no corren y las stats del duelo no cuentan ese rato.
 
