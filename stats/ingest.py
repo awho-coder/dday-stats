@@ -896,7 +896,11 @@ def main():
             rebuild_elo = args.rebuild_ratings
             if args.init_schema:
                 conn.execute(SCHEMA_FILE.read_text(encoding="utf-8"))
-                log.info("esquema actualizado")
+                # Recrear vistas y funciones deja al planificador con estadisticas viejas: la pestana
+                # Partidas del mantenedor (tournament_sides dentro de una consulta grande) paso de
+                # 0,1 s a 14 s hasta un ANALYZE (2026-11-21).
+                conn.execute("ANALYZE")
+                log.info("esquema actualizado (y estadisticas al dia)")
                 # ratings recreada por una migracion: se recalcula sola
                 if conn.execute("SELECT EXISTS (SELECT 1 FROM matches WHERE ranked AND mode NOT IN ('ffa', 'gungame'))"
                                 " AND NOT EXISTS (SELECT 1 FROM ratings)").fetchone()[0]:
