@@ -50,7 +50,8 @@ def cfg_value(name):
         return ""
 
 # palabras del duelo que atiende la DLL (ready de los capitanes): el bot no las toma como comando
-DUEL_WORDS = {"ready", "listo", "listos", "notready", "unready", "noready", "nolisto", "capitan", "captain"}
+DUEL_WORDS = {"ready", "listo", "listos", "notready", "unready", "noready", "nolisto", "capitan", "captain",
+              "pausa", "pause", "timeout", "seguir", "continuar", "unpause", "resume", "cancelar", "cancel"}
 _ROLE = {"t": 0, "v": "public"}
 
 def server_role():

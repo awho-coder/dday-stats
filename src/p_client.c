@@ -4409,8 +4409,7 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 	if (!ent->ai &&
 		!client->kamikaze_plane &&	// el piloto lo mueve el avion
 		!client->limbo_mode && !ent->flyingnun &&
-		tournament->value &&
-		(freeze_mode || (countdownActive && !IsPlayerInsideSpawnProtect(ent))))
+		(freeze_mode || (tournament->value && countdownActive && !IsPlayerInsideSpawnProtect(ent))))
 	{
 		// make a retention effect
 		ent->velocity[PITCH] = -0.5 * ent->velocity[PITCH];
@@ -4418,7 +4417,10 @@ void ClientThink (edict_t *ent, usercmd_t *ucmd)
 		VectorCopy(ent->s.old_origin, ent->s.origin);
 
 		if (freeze_mode)
-			safe_centerprintf(ent, "You cannot move until the freeze is released!\n");
+		{
+			if (!Ready_Paused ())	// la pausa del duelo muestra su propio mensaje
+				safe_centerprintf(ent, "You cannot move until the freeze is released!\n");
+		}
 		else
 			safe_centerprintf(ent, "You're confined to this Spawn Area until the match begins.\n");
 	}

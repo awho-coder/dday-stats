@@ -151,6 +151,7 @@ cvar_t  *ent_files;
 cvar_t *exbattleinfo; // ZeRo
 cvar_t *random_class;	// ZeRo
 cvar_t *tab_panel;
+cvar_t *tab_final;
 cvar_t *officer_bonus; // ZeRo
 cvar_t *mauser_only;  //ddaylife
 cvar_t *sniper_only;  //ddaylife 
@@ -1535,6 +1536,7 @@ void CheckDMRules (void)
 		if (timeRemaining <= 0)
 		{
 			safe_bprintf(PRINT_HIGH, "Timelimit hit.\n");
+			level.end_by_time = true;
 
 			if (ctb_mode->value == 2 || level.control_zone)
 			{
@@ -1961,8 +1963,10 @@ void G_RunFrame (void)
 			{
 				centerprintall("Que comience el juego!");
 				gameStartTime = level.time;
+				// duelo: primero se borran las kills/score del calentamiento y despues las stats toman
+				// los contadores como base (al reves, el score del duelo quedaba restado)
+				Ready_MatchStart ();
 				StatsLog_CountdownDone ();
-				Ready_MatchStart ();	// duelo: borra las kills del calentamiento
 				timelimit->value = countdownTimeLimit / 60.0; // kernel: now in seconds
 				countdownActive = 0;
 			}

@@ -2694,7 +2694,7 @@ static qboolean SleepDart_CanSleep (edict_t *dart, edict_t *other)
 		return false;
 	if (client->resp.mos == MEDIC && invuln_medic->value)
 		return false;
-	if (tournament->value && (freeze_mode || countdownTimeLimit <= 0 || countdownActive > 0))
+	if (freeze_mode || (tournament->value && (countdownTimeLimit <= 0 || countdownActive > 0)))
 		return false;
 	return true;
 }
