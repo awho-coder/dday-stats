@@ -501,6 +501,10 @@ CREATE TABLE IF NOT EXISTS tournaments (
     CHECK (ends_on IS NULL OR starts_on IS NULL OR ends_on >= starts_on)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS tournaments_event_idx ON tournaments (event);
+-- Minutos de cada partida del torneo (0 = sin tiempo, hasta que gane un equipo; NULL = sin dato).
+-- Los lee el bot del server para "sv torneo" (torneos.txt).
+ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS match_minutes integer
+    CHECK (match_minutes BETWEEN 0 AND 180);
 
 -- Fases de un torneo (D22), cada una con su modalidad. Una partida cae en la fase con el
 -- starts_at mas reciente que no sea posterior a la partida; la primera fase (menor
@@ -1663,7 +1667,8 @@ SELECT t.id,
        coalesce(e.matches, 0)      AS matches,
        e.first_match, e.last_match,
        coalesce(e.maps, '{}')      AS maps,
-       t.updated_at, t.updated_by
+       t.updated_at, t.updated_by,
+       t.match_minutes
   FROM tournaments t
   FULL JOIN v_events e ON e.event = t.event;
 
@@ -1873,10 +1878,21 @@ BEGIN
        OR jsonb_array_length(p_phases) NOT BETWEEN 1 AND 10 THEN
         RAISE EXCEPTION 'el torneo necesita de 1 a 10 fases' USING ERRCODE = '22023';
     END IF;
+    -- Clave nueva o cambiada: minusculas, numeros y guiones, 3 a 24 (es lo que se escribe en el
+    -- server: "sv torneo <clave>"). Las fichas viejas conservan la suya mientras no la cambien, y
+    -- una clave que ya usan partidas (crear ficha de un torneo sin ficha) tambien vale.
+    IF p_id IS NOT NULL THEN
+        SELECT event INTO v_old FROM tournaments WHERE id = p_id;
+    END IF;
+    IF (p_id IS NULL OR v_new IS DISTINCT FROM v_old)
+       AND coalesce(v_new, '') !~ '^[a-z0-9][a-z0-9-]{1,22}[a-z0-9]$'
+       AND NOT EXISTS (SELECT 1 FROM matches WHERE event = v_new) THEN
+        RAISE EXCEPTION 'clave invalida: minusculas, numeros y guiones (3 a 24)' USING ERRCODE = '23514';
+    END IF;
     IF p_id IS NULL THEN
         INSERT INTO tournaments (event, name, status, starts_on, ends_on, format, description,
                                  rules_url, logo_url, champion_id, runner_up_id, visible,
-                                 updated_by)
+                                 match_minutes, updated_by)
         VALUES (v_new, coalesce(p_data->>'name', ''),
                 coalesce(p_data->>'status', 'upcoming'),
                 nullif(p_data->>'starts_on', '')::date, nullif(p_data->>'ends_on', '')::date,
@@ -1884,7 +1900,8 @@ BEGIN
                 coalesce(p_data->>'rules_url', ''), coalesce(p_data->>'logo_url', ''),
                 nullif(p_data->>'champion_id', '')::integer,
                 nullif(p_data->>'runner_up_id', '')::integer,
-                coalesce((p_data->>'visible')::boolean, true), p_admin)
+                coalesce((p_data->>'visible')::boolean, true),
+                nullif(p_data->>'match_minutes', '')::integer, p_admin)
         RETURNING id INTO v_id;
     ELSE
         SELECT event INTO v_old FROM tournaments WHERE id = p_id;
@@ -1909,6 +1926,7 @@ BEGIN
             champion_id = nullif(p_data->>'champion_id', '')::integer,
             runner_up_id = nullif(p_data->>'runner_up_id', '')::integer,
             visible = coalesce((p_data->>'visible')::boolean, true),
+            match_minutes = nullif(p_data->>'match_minutes', '')::integer,
             updated_at = now(), updated_by = p_admin
          WHERE id = p_id
         RETURNING id INTO v_id;
@@ -2536,6 +2554,7 @@ COMMENT ON TABLE tournaments IS 'Fichas de torneo del Ladder Test (se editan des
 COMMENT ON COLUMN tournaments.id IS 'Clave interna de la ficha.';
 COMMENT ON COLUMN tournaments.event IS 'Clave del torneo = cvar stats_event = matches.event (unica, 1 a 64 caracteres).';
 COMMENT ON COLUMN tournaments.name IS 'Nombre para mostrar (vacio = se usa la clave).';
+COMMENT ON COLUMN tournaments.match_minutes IS 'Minutos de cada partida (0 = sin tiempo; NULL = sin dato). Los usa sv torneo en el server.';
 COMMENT ON COLUMN tournaments.status IS 'Estado puesto por el administrador: upcoming, live o finished.';
 COMMENT ON COLUMN tournaments.starts_on IS 'Fecha de inicio (opcional).';
 COMMENT ON COLUMN tournaments.ends_on IS 'Fecha de fin (opcional; no anterior al inicio).';
