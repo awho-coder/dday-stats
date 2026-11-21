@@ -431,6 +431,24 @@ total (8 por equipo si hay más; la última fila dice "and N more"). No es latch
 | Cvar | Por defecto | Qué hace |
 |---|---|---|
 | `tab_panel` | `0` | `1` activa el TAB de equipos nuevo (panel del FFA, banderas, columna Cura). |
+| `tab_final` | `1` | Pantalla final (ver abajo). `0` = al terminar sale el TAB de siempre. |
+
+### Pantalla final (`tab_final`)
+
+Al terminar una partida por equipos (no FFA ni Gun Game ni campaña), en vez del TAB sale una pantalla propia
+con el panel de Snako, para jugadores y espectadores, tenga `tab_panel` lo que tenga:
+
+- Arriba el cartel de victoria; en la placa de bronce la duración (sin el calentamiento ni las pausas del duelo,
+  sin los ratos sin nadie; necesita `stats_log 1`).
+- Línea del resultado: "Gana USA 25-18 por kills" (también por puntos, por objetivos, por zona o por tiempo;
+  en control y CTB el marcador es de puntos), "Empate 18-18" o "Fin de la partida" (mapa votado).
+- Por equipo la bandera y su título, y por jugador K, M, +/-, precisión y puntos (Pts solo con
+  `player_scores 1`); tu fila en naranjo, `+` = Medic. Nombres cortados a 13 letras.
+- Abajo los destacados: MVP (más kills; a igualdad, menos muertes), mejor puntería (con 20 tiros o más) y más
+  curación (si algún Medic curó).
+- Caben unos 12 jugadores en total; con más, la última fila de cada equipo dice "y N mas" (se ven los de más puntos).
+- En duelo, las kills, muertes, precisión y curación del calentamiento no cuentan (se borran al empezar).
+- La segunda página del TAB (segunda pulsación) sigue igual.
 
 ## Servidor: estadísticas
 
@@ -459,11 +477,27 @@ calentamiento (antes contaban para el ganador).
 | `capitan` / `captain` | — | (Jugador) queda de capitán de su equipo, uno por equipo. También en el menú de equipos: "<equipo> (capitan)". |
 | `ready` / `listo` | — | (Capitán) su equipo está listo. Si el equipo no tiene capitán, quien lo escribe queda de capitán. |
 | `notready` / `unready` / `nolisto` | — | (Capitán) lo desmarca. |
-| `sv ready` / `sv ready reset` | — | Estado (capitanes, ready, humanos y kills) / borrar capitanes y ready. |
+| `ready_remind` | `60` | Si un equipo está listo y el otro no, cada tantos segundos se le recuerda al otro (chat y centro). `0` = sin aviso. |
+| `pausa` / `pause` / `timeout` | — | (Capitán, partida en juego) pausa: nadie se mueve ni recibe daño y el reloj se detiene. |
+| `seguir` / `continuar` / `unpause` | — | (Los dos capitanes) sigue antes de que se acabe la pausa, con una cuenta de 5 s. |
+| `pause_max` | `2` | Pausas de cada equipo por partida. `0` = sin pausas de capitanes. |
+| `pause_time` | `120` | Segundos que dura una pausa como máximo (después sigue sola). |
+| `pause_auto` | `1` | `1` = si se desconecta un jugador de un equipo, pausa hasta que vuelva (o `pause_time`). No cuenta en `pause_max`. |
+| `cancelar` / `cancel` | — | (Los dos capitanes, en menos de 30 s) cancelan la partida, como `sv resetcount`: vuelve el calentamiento y el ready. |
+| `sv ready` / `sv ready reset` / `sv ready seguir` | — | Estado (capitanes, ready, humanos, kills, pausas) / borrar capitanes y ready / sacar la pausa de los capitanes. |
 
 Los comandos sirven en la consola y en el chat (el mensaje exacto, con o sin `!`). Si el capitán se va
-del equipo o del server, el equipo queda sin capitán. `sv startcount` del admin sigue funcionando y se
-salta el ready; `sv resetcount` vuelve a pedirlo.
+del equipo o del server, el equipo queda sin capitán (el próximo que escriba un comando de capitán lo será).
+`sv startcount` del admin sigue funcionando y se salta el ready; `sv resetcount` vuelve a pedirlo.
+
+Ya empezada la partida, el jugador de un equipo que se desconecta entra solo a su mismo equipo al volver
+(con el mismo nombre; elige clase en el menú de siempre). Con `pause_auto 1` la partida queda en pausa
+hasta que vuelva; si no vuelve en `pause_time`, sigue igual. Un echado con `vote kick` no pausa ni vuelve solo.
+Durante la pausa nadie se mueve; el tiempo límite, los objetivos y la zona de
+control no corren y las stats del duelo no cuentan ese rato.
+
+Los espectadores usan el chat de equipo (`messagemode2`) entre ellos: solo lo ven otros espectadores
+(se muestra con `(Espectadores)`). El chat general queda igual.
 
 Duelo en modo control (`control_mode 1` + `stats_mode duel`): durante el calentamiento la zona se ve pero queda
 cerrada (nadie la gana antes del duelo); el bloqueo (`control_lock`) cuenta desde "Que comience el juego!". Rota y se

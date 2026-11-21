@@ -40,6 +40,7 @@ extern int countdownActive;
 extern int countdownValue;
 extern int countdownTimer;
 extern float countdownTimeLimit;
+extern qboolean freeze_mode;
 extern float gameStartTime;
 
 void EndObserverMode(edict_t *ent);
@@ -1426,8 +1427,8 @@ void Cmd_Drop_f (edict_t *ent)
 	if (!ent->client->resp.team_on || !ent->client->resp.mos || ent->client->grenade || ent->client->grenade_index )
 		return;
 
-	// kernel: do not allow to drop anything if the match has not begun yet
-	if (tournament->value && (countdownTimeLimit <= 0 || countdownActive > 0))
+	// kernel: do not allow to drop anything if the match has not begun yet (ni en pausa)
+	if (freeze_mode || (tournament->value && (countdownTimeLimit <= 0 || countdownActive > 0)))
 		return;
 
 	s = gi.args(); 
@@ -2581,6 +2582,10 @@ void Cmd_Say_f (edict_t *ent, qboolean team, qboolean arg0, qboolean saved)
 
 	if(team)//say only to team
 	{
+		// duelo/torneo con ready: el chat de equipo de los espectadores es entre ellos
+		if (Ready_SpectatorChat (ent, text))
+			return;
+
 		if (!ent->client->resp.team_on ||
 			!ent->client->resp.mos) {
 			safe_cprintf(ent, PRINT_HIGH, "You aren't on a team!\n");
@@ -3555,6 +3560,13 @@ void ClientCommand (edict_t *ent)
 		Cmd_NotReady_f(ent);
 		return;
 	}
+	else if (Q_stricmp(cmd, "pausa") == 0 || Q_stricmp(cmd, "pause") == 0 || Q_stricmp(cmd, "timeout") == 0)
+		Cmd_Pause_f(ent);
+	else if (Q_stricmp(cmd, "seguir") == 0 || Q_stricmp(cmd, "continuar") == 0 || Q_stricmp(cmd, "unpause") == 0 ||
+		Q_stricmp(cmd, "resume") == 0)
+		Cmd_Resume_f(ent);
+	else if (Q_stricmp(cmd, "cancelar") == 0 || Q_stricmp(cmd, "cancel") == 0)
+		Cmd_Cancel_f(ent);
 	else if (Q_stricmp(cmd, "capitan") == 0 || Q_stricmp(cmd, "captain") == 0)
 	{
 		Ready_ClaimCaptain(ent);

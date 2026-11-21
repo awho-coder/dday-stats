@@ -73,6 +73,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // evil: global variables for countdown
 extern int countdownActive;
 extern float countdownTimeLimit;
+extern qboolean freeze_mode;
 
 /*============================/  Fire Dodge  /============================*/
 
@@ -568,7 +569,7 @@ void PBM_Ignite (edict_t *victim, edict_t *attacker, vec3_t point)
 			return;
 
 		// kernel: do not allow to set on fire if the match has not begun yet
-		if (tournament->value && (countdownTimeLimit <= 0 || countdownActive > 0))
+		if (freeze_mode || (tournament->value && (countdownTimeLimit <= 0 || countdownActive > 0)))
 			return;
 
 	}

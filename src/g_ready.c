@@ -21,7 +21,22 @@
  * Mientras se espera, cada 10 s el centro de la pantalla explica que hacer y muestra el
  * estado de cada equipo. "sv startcount" del admin sigue funcionando (se salta el ready);
  * "sv resetcount" vuelve a pedir ready. "sv ready" muestra el estado y "sv ready reset"
- * borra capitanes y ready.
+ * borra capitanes y ready ("sv ready seguir" saca la pausa). Si un equipo esta listo y el otro no, cada ready_remind segundos
+ * se le recuerda al otro (0 = sin aviso).
+ *
+ * Ya empezada la partida:
+ *
+ *   pausa / pause / timeout     el capitan pausa la partida (pause_max pausas por equipo,
+ *                               0 = sin pausas); nadie se mueve ni recibe dano y el reloj se
+ *                               detiene. Dura pause_time segundos como maximo
+ *   seguir / continuar / unpause  los dos capitanes lo escriben para seguir antes; se
+ *                               reanuda con una cuenta de 5 segundos
+ *   cancelar / cancel           los dos capitanes (en menos de 30 s) cancelan la partida, como
+ *                               "sv resetcount": se vuelve al calentamiento y a pedir ready
+ *
+ * Si se desconecta un jugador de un equipo, al volver entra solo a su mismo equipo. Con
+ * pause_auto 1 ademas se pausa la partida hasta que vuelva (o pause_time segundos).
+ * Los espectadores usan el chat de equipo entre ellos (Ready_SpectatorChat).
  */
 
 #include "g_local.h"
@@ -31,23 +46,65 @@
 extern int		countdownActive;
 extern float	countdownTimeLimit;
 extern int		freeze_remaining;
+extern qboolean	freeze_mode;
+extern float	gameStartTime;
 
 void StartCount (int seconds);
+void ResetCountTimer (void);
+void ResetFreezeMode (void);
+void M_Team_Join (edict_t *ent, pmenu_t *p, int choice);
 
 static cvar_t	*ready_mode;	// 1 = la partida de duelo/torneo empieza con el ready de los capitanes
 static cvar_t	*ready_time;	// minutos del duelo (0 = hasta que gane un equipo)
+static cvar_t	*ready_remind;	// segundos entre avisos al equipo que no pone ready (0 = sin aviso)
+static cvar_t	*pause_max;		// pausas de cada capitan por partida (0 = sin pausas)
+static cvar_t	*pause_time;	// segundos que dura una pausa como maximo
+static cvar_t	*pause_auto;	// 1 = pausa sola cuando se desconecta un jugador de un equipo
+
+#define READY_MAX_DROPPED	16
+#define READY_RESUME_SECS	5
+#define READY_CANCEL_SECS	30
+
+typedef struct
+{
+	char		name[32];
+	int			team;
+	qboolean	in_pause;		// la pausa automatica espera que vuelva
+} ready_dropped_t;
 
 static struct
 {
 	int			captain[2];		// numero de cliente + 1 del capitan de cada equipo (0 = sin capitan)
 	qboolean	ready[2];
 	qboolean	started;		// la partida ya empezo (cuenta llego a 0 o el admin la tiro)
+	float		ready_since;	// level.time en que el primer equipo quedo listo
+	float		next_remind;
+
+	// pausa de los capitanes (o automatica)
+	qboolean	paused;
+	int			pause_team;		// equipo que la pidio, -1 = automatica (se cayo alguien)
+	char		pause_who[32];
+	float		pause_end;		// level.time en que sigue sola
+	float		resume_at;		// > 0: cuenta para seguir
+	int			resume_secs;	// ultimo segundo anunciado de la cuenta
+	qboolean	resume_ok[2];	// el capitan escribio seguir
+	int			pauses_used[2];
+	float		next_center;
+
+	float		cancel_at[2];	// level.time del "cancelar" de cada capitan (0 = no)
+
+	ready_dropped_t	dropped[READY_MAX_DROPPED];	// se cayeron con la partida empezada
+	int			kicked;			// numero de cliente + 1 echado por votacion (no pausa ni vuelve solo)
 } rd;
 
 void Ready_Init (void)
 {
 	ready_mode = gi.cvar ("ready_mode", "0", 0);
 	ready_time = gi.cvar ("ready_time", "0", 0);
+	ready_remind = gi.cvar ("ready_remind", "60", 0);
+	pause_max = gi.cvar ("pause_max", "2", 0);
+	pause_time = gi.cvar ("pause_time", "120", 0);
+	pause_auto = gi.cvar ("pause_auto", "1", 0);
 }
 
 // al cargar cada mapa
@@ -257,6 +314,11 @@ static void Ready_Set (edict_t *ent, qboolean on)
 	}
 	rd.ready[team] = on;
 	other = !team;
+	if (on && !rd.ready[other])
+	{
+		rd.ready_since = level.time;
+		rd.next_remind = 0;
+	}
 
 	if (on)
 		safe_cprintf (ent, PRINT_HIGH, "Si no estaban listos, escribe nolisto para deshacerlo.\n");
@@ -308,16 +370,415 @@ qboolean Ready_ChatCommand (edict_t *ent, const char *text)
 		Ready_Set (ent, false);
 	else if (!strcmp (word, "capitan") || !strcmp (word, "captain"))
 		Ready_ClaimCaptain (ent);
+	else if (!strcmp (word, "pausa") || !strcmp (word, "pause") || !strcmp (word, "timeout"))
+		Cmd_Pause_f (ent);
+	else if (!strcmp (word, "seguir") || !strcmp (word, "continuar") || !strcmp (word, "unpause") || !strcmp (word, "resume"))
+		Cmd_Resume_f (ent);
+	else if (!strcmp (word, "cancelar") || !strcmp (word, "cancel"))
+		Cmd_Cancel_f (ent);
 	else
 		return false;
 	return true;
 }
 
-// cada frame: capitanes que se fueron de su equipo o del server
+// aviso al equipo que no pone ready mientras el otro ya esta listo
+static void Ready_Remind (void)
+{
+	int		t, i;
+	edict_t	*cap, *e;
+	char	msg[160];
+
+	if (!ready_remind || ready_remind->value <= 0 || rd.ready[0] == rd.ready[1] || !Ready_Waiting ())
+		return;
+	if (level.time - rd.ready_since < ready_remind->value || level.time < rd.next_remind)
+		return;
+	rd.next_remind = level.time + ready_remind->value;
+
+	t = rd.ready[0] ? 1 : 0;	// el que falta
+	if (!Ready_HumansIn (t))
+		return;
+	cap = Ready_Captain (t);
+	if (cap)
+		Com_sprintf (msg, sizeof(msg), "%s esta listo hace %d min. %s: su capitan %s aun no pone ready.",
+			Ready_TeamName (!t), (int)((level.time - rd.ready_since) / 60), Ready_TeamName (t), cap->client->pers.netname);
+	else
+		Com_sprintf (msg, sizeof(msg), "%s esta listo hace %d min. %s: no tiene capitan, el que escriba ready lo sera.",
+			Ready_TeamName (!t), (int)((level.time - rd.ready_since) / 60), Ready_TeamName (t));
+	Ready_Say ("%s", msg);
+
+	for (i = 1; i <= game.maxclients; i++)
+	{
+		e = g_edicts + i;
+		if (Ready_TeamOf (e) == t)
+			safe_centerprintf (e, "%s ya esta listo\n\n%s\nescriban ready o listo", Ready_TeamName (!t),
+				cap ? va ("Capitan (%s):", cap->client->pers.netname) : "El capitan");
+	}
+}
+
+/*
+=================
+Pausa de los capitanes
+=================
+*/
+
+qboolean Ready_Paused (void)
+{
+	return rd.paused;
+}
+
+// la partida esta en juego (ya empezo, no ha terminado, no hay cuenta corriendo)
+static qboolean Ready_InPlay (void)
+{
+	return Ready_Mode () && rd.started && !level.intermissiontime && !countdownActive;
+}
+
+// ent actua como capitan de team: si el equipo no tiene, queda de capitan
+static qboolean Ready_AsCaptain (edict_t *ent, int team, const char *what)
+{
+	edict_t *cap = Ready_Captain (team);
+
+	if (!cap)
+	{
+		Ready_SetCaptain (ent, team);
+		return true;
+	}
+	if (cap == ent)
+		return true;
+	safe_cprintf (ent, PRINT_HIGH, "Solo el capitan de %s (%s) puede %s.\n", Ready_TeamName (team),
+		cap->client->pers.netname, what);
+	return false;
+}
+
+static int Ready_PauseSecs (void)
+{
+	return pause_time && pause_time->value > 0 ? (int)pause_time->value : 120;
+}
+
+static void Ready_BeginPause (int team, const char *who)
+{
+	freeze_mode = true;
+	rd.paused = true;
+	rd.pause_team = team;
+	Com_sprintf (rd.pause_who, sizeof(rd.pause_who), "%s", who);
+	rd.pause_end = level.time + Ready_PauseSecs ();
+	rd.resume_at = 0;
+	rd.resume_ok[0] = rd.resume_ok[1] = false;
+	rd.next_center = 0;
+	gi.positioned_sound (vec3_origin, &g_edicts[0], CHAN_AUTO, gi.soundindex ("misc/first_count.wav"), 1, ATTN_NONE, 0);
+}
+
+static void Ready_EndPause (void)
+{
+	int i;
+
+	rd.paused = false;
+	rd.resume_at = 0;
+	for (i = 0; i < READY_MAX_DROPPED; i++)
+		rd.dropped[i].in_pause = false;
+	ResetFreezeMode ();
+}
+
+static void Ready_StartResume (const char *why)
+{
+	if (rd.resume_at)
+		return;
+	rd.resume_at = level.time + READY_RESUME_SECS;
+	rd.resume_secs = 0;
+	Ready_Say ("%s: la partida sigue en %d segundos.", why, READY_RESUME_SECS);
+}
+
+static qboolean Ready_WaitingDropped (void)
+{
+	int i;
+
+	for (i = 0; i < READY_MAX_DROPPED; i++)
+		if (rd.dropped[i].name[0] && rd.dropped[i].in_pause)
+			return true;
+	return false;
+}
+
+static void Ready_PauseCenter (void)
+{
+	int		i, left, t;
+	char	head[96], who[2][64];
+	edict_t	*e;
+
+	if (rd.resume_at)
+	{
+		left = (int)(rd.resume_at - level.time + 0.99F);
+		if (left == rd.resume_secs || left <= 0)
+			return;
+		rd.resume_secs = left;
+		centerprintall ("La partida sigue en %d...", left);
+		return;
+	}
+
+	if (level.time < rd.next_center)
+		return;
+	rd.next_center = level.time + 1;
+
+	left = (int)(rd.pause_end - level.time);
+	if (left < 0)
+		left = 0;
+	if (rd.pause_team >= 0)
+		Com_sprintf (head, sizeof(head), "PAUSA de %s (%s)", Ready_TeamName (rd.pause_team), rd.pause_who);
+	else
+		Com_sprintf (head, sizeof(head), "PAUSA: se desconecto %s", rd.pause_who);
+	for (t = 0; t < 2; t++)
+		Com_sprintf (who[t], sizeof(who[t]), "%s: %s", Ready_TeamName (t), rd.resume_ok[t] ? "quiere seguir" : "en pausa");
+
+	for (i = 1; i <= game.maxclients; i++)
+	{
+		e = g_edicts + i;
+		if (!e->inuse || !e->client || e->ai)
+			continue;
+		safe_centerprintf (e, "%s\n\nSigue sola en %d:%02d%s\n"
+			"Para seguir antes, los dos capitanes\nescriben seguir\n\n%s\n%s",
+			head, left / 60, left % 60, rd.pause_team < 0 ? "\n(o cuando vuelva)" : "", who[0], who[1]);
+	}
+}
+
+static void Ready_PauseFrame (void)
+{
+	int		i;
+	float	old_start = gameStartTime;
+
+	if (!rd.paused)
+		return;
+
+	// el admin la saco con "sv freeze", o se termino la partida
+	if (!freeze_mode || level.intermissiontime)
+	{
+		rd.paused = false;
+		rd.resume_at = 0;
+		return;
+	}
+
+	// el reloj no corre en la pausa: el tiempo limite, el de los objetivos y la zona de control
+	gameStartTime += FRAMETIME;
+	if (level.control_gamestart == old_start)
+		level.control_gamestart = gameStartTime;
+	for (i = 0; i < MAX_TEAMS; i++)
+		if (team_list[i] && team_list[i]->time_to_win > 0)
+			team_list[i]->time_to_win += FRAMETIME;
+
+	if (!rd.resume_at)
+	{
+		if (level.time >= rd.pause_end)
+			Ready_StartResume ("Se acabo el tiempo de la pausa");
+		else if (rd.pause_team < 0 && !Ready_WaitingDropped ())
+			Ready_StartResume ("Volvio el que se habia caido");
+	}
+	else if (level.time >= rd.resume_at)
+	{
+		Ready_EndPause ();
+		centerprintall ("Sigue la partida!");
+		Ready_Say ("Sigue la partida.");
+		return;
+	}
+
+	Ready_PauseCenter ();
+}
+
+void Cmd_Pause_f (edict_t *ent)
+{
+	int team = Ready_TeamOf (ent);
+
+	if (!Ready_Mode ())
+	{
+		safe_cprintf (ent, PRINT_HIGH, "La pausa solo sirve en duelo o torneo con ready.\n");
+		return;
+	}
+	if (!pause_max || pause_max->value <= 0)
+	{
+		safe_cprintf (ent, PRINT_HIGH, "Las pausas de los capitanes estan desactivadas.\n");
+		return;
+	}
+	if (rd.paused || freeze_mode)
+	{
+		safe_cprintf (ent, PRINT_HIGH, "La partida ya esta en pausa.\n");
+		return;
+	}
+	if (!Ready_InPlay ())
+	{
+		safe_cprintf (ent, PRINT_HIGH, countdownActive ? "Espera que termine la cuenta.\n" : "La partida no esta en juego.\n");
+		return;
+	}
+	if (team < 0)
+	{
+		safe_cprintf (ent, PRINT_HIGH, "Solo los capitanes pueden pedir pausa.\n");
+		return;
+	}
+	if (!Ready_AsCaptain (ent, team, "pedir pausa"))
+		return;
+	if (rd.pauses_used[team] >= (int)pause_max->value)
+	{
+		safe_cprintf (ent, PRINT_HIGH, "%s ya uso sus %d pausas.\n", Ready_TeamName (team), (int)pause_max->value);
+		return;
+	}
+
+	rd.pauses_used[team]++;
+	Ready_BeginPause (team, ent->client->pers.netname);
+	Ready_Say ("PAUSA de %s (%s), %d:%02d como maximo (pausa %d de %d). Para seguir antes, los dos capitanes escriben seguir.",
+		Ready_TeamName (team), ent->client->pers.netname, Ready_PauseSecs () / 60, Ready_PauseSecs () % 60,
+		rd.pauses_used[team], (int)pause_max->value);
+}
+
+void Cmd_Resume_f (edict_t *ent)
+{
+	int team = Ready_TeamOf (ent), t;
+
+	if (!rd.paused)
+	{
+		safe_cprintf (ent, PRINT_HIGH, freeze_mode ? "La pausa es del admin.\n" : "La partida no esta en pausa.\n");
+		return;
+	}
+	if (rd.resume_at)
+	{
+		safe_cprintf (ent, PRINT_HIGH, "La partida ya va a seguir.\n");
+		return;
+	}
+	if (team < 0)
+	{
+		safe_cprintf (ent, PRINT_HIGH, "Solo los capitanes pueden escribir seguir.\n");
+		return;
+	}
+	if (!Ready_AsCaptain (ent, team, "escribir seguir"))
+		return;
+	if (rd.resume_ok[team])
+	{
+		safe_cprintf (ent, PRINT_HIGH, "Ya escribiste seguir; falta el otro capitan.\n");
+		return;
+	}
+	rd.resume_ok[team] = true;
+
+	for (t = 0; t < 2; t++)
+		if (!rd.resume_ok[t] && Ready_HumansIn (t))
+		{
+			Ready_Say ("%s quiere seguir (%s). Falta que el capitan de %s escriba seguir.",
+				Ready_TeamName (team), ent->client->pers.netname, Ready_TeamName (t));
+			rd.next_center = 0;
+			return;
+		}
+	Ready_StartResume ("Los capitanes escribieron seguir");
+}
+
+/*
+=================
+Cancelar la partida (los dos capitanes)
+=================
+*/
+
+static void Ready_CancelMatch (void)
+{
+	StatsLog_CountdownReset ();
+	Ready_CountReset ();
+	ResetCountTimer ();
+	ResetFreezeMode ();
+	centerprintall ("Partida CANCELADA por los capitanes\n\nVuelve el calentamiento:\nlos capitanes escriben ready");
+	Ready_Say ("Los dos capitanes cancelaron la partida: vuelve el calentamiento, escriban ready para empezar otra.");
+}
+
+void Cmd_Cancel_f (edict_t *ent)
+{
+	int team = Ready_TeamOf (ent), t;
+
+	if (!Ready_Mode () || level.intermissiontime || (!rd.started && !countdownActive))
+	{
+		safe_cprintf (ent, PRINT_HIGH, "No hay una partida que cancelar.\n");
+		return;
+	}
+	if (team < 0)
+	{
+		safe_cprintf (ent, PRINT_HIGH, "Solo los capitanes pueden cancelar la partida.\n");
+		return;
+	}
+	if (!Ready_AsCaptain (ent, team, "cancelar"))
+		return;
+
+	rd.cancel_at[team] = level.time;
+	for (t = 0; t < 2; t++)
+		if (Ready_HumansIn (t) && (!rd.cancel_at[t] || level.time - rd.cancel_at[t] > READY_CANCEL_SECS))
+		{
+			Ready_Say ("%s quiere CANCELAR la partida (%s). Si el capitan de %s escribe cancelar en %d s, se cancela.",
+				Ready_TeamName (team), ent->client->pers.netname, Ready_TeamName (t), READY_CANCEL_SECS);
+			return;
+		}
+	rd.cancel_at[0] = rd.cancel_at[1] = 0;
+	Ready_CancelMatch ();
+}
+
+/*
+=================
+Los que se caen vuelven a su equipo
+=================
+*/
+
+static void Ready_AddDropped (edict_t *ent, int team, qboolean in_pause)
+{
+	int i, free_slot = -1;
+
+	for (i = 0; i < READY_MAX_DROPPED; i++)
+	{
+		if (!rd.dropped[i].name[0])
+		{
+			if (free_slot < 0)
+				free_slot = i;
+		}
+		else if (!Q_stricmp (rd.dropped[i].name, ent->client->pers.netname))
+		{
+			free_slot = i;
+			break;
+		}
+	}
+	if (free_slot < 0)
+		free_slot = 0;	// lleno: se pisa el mas viejo
+	Com_sprintf (rd.dropped[free_slot].name, sizeof(rd.dropped[free_slot].name), "%s", ent->client->pers.netname);
+	rd.dropped[free_slot].team = team;
+	rd.dropped[free_slot].in_pause = in_pause;
+}
+
+// los que vuelven entran solos a su mismo equipo (eligen clase en el menu de siempre)
+static void Ready_Rejoin (void)
+{
+	int		i, d;
+	edict_t	*e;
+
+	for (i = 1; i <= game.maxclients; i++)
+	{
+		e = g_edicts + i;
+		if (!e->inuse || !e->client || e->ai || e->client->resp.team_on || level.framenum < e->client->resp.enterframe + 10)
+			continue;
+		for (d = 0; d < READY_MAX_DROPPED; d++)
+		{
+			if (!rd.dropped[d].name[0] || Q_stricmp (rd.dropped[d].name, e->client->pers.netname))
+				continue;
+			if (!team_list[rd.dropped[d].team])
+				break;
+			M_Team_Join (e, NULL, rd.dropped[d].team + 11);
+			if (e->client->resp.team_on == team_list[rd.dropped[d].team])
+			{
+				Ready_Say ("%s volvio y entra a %s.", e->client->pers.netname, Ready_TeamName (rd.dropped[d].team));
+				rd.dropped[d].name[0] = '\0';
+				rd.dropped[d].in_pause = false;
+			}
+			break;
+		}
+	}
+}
+
+// cada frame: capitanes que se fueron de su equipo o del server, pausa, avisos
 void Ready_RunFrame (void)
 {
 	int		t;
 	edict_t	*cap;
+
+	Ready_PauseFrame ();
+
+	if (Ready_Mode () && rd.started && !level.intermissiontime && level.framenum % 5 == 0)
+		Ready_Rejoin ();
+
+	Ready_Remind ();
 
 	if (!rd.captain[0] && !rd.captain[1])
 		return;
@@ -340,7 +801,38 @@ void Ready_RunFrame (void)
 
 void Ready_ClientDisconnect (edict_t *ent)
 {
-	int t;
+	int			t, team = Ready_TeamOf (ent);
+	qboolean	pause;
+
+	if (rd.kicked == ent - g_edicts)
+	{
+		rd.kicked = 0;
+		team = -1;
+	}
+
+	// con la partida empezada: al volver entra a su equipo, y con pause_auto se pausa hasta que vuelva
+	if (team >= 0 && Ready_Mode () && rd.started && !level.intermissiontime)
+	{
+		pause = pause_auto && pause_auto->value && !countdownActive && (rd.paused || !freeze_mode);
+		Ready_AddDropped (ent, team, pause);
+		if (pause)
+		{
+			if (!rd.paused)
+				Ready_BeginPause (-1, ent->client->pers.netname);
+			else
+			{
+				// ya estaba en pausa: ahora espera tambien a este
+				rd.pause_team = -1;
+				Com_sprintf (rd.pause_who, sizeof(rd.pause_who), "%s", ent->client->pers.netname);
+				rd.pause_end = level.time + Ready_PauseSecs ();
+				rd.resume_at = 0;
+				rd.resume_ok[0] = rd.resume_ok[1] = false;
+			}
+			Ready_Say ("PAUSA: %s (%s) se desconecto. Si vuelve en %d:%02d entra solo a su equipo y la partida sigue; "
+				"si no, sigue igual. Los dos capitanes pueden escribir seguir.", ent->client->pers.netname,
+				Ready_TeamName (team), Ready_PauseSecs () / 60, Ready_PauseSecs () % 60);
+		}
+	}
 
 	for (t = 0; t < 2; t++)
 		if (rd.captain[t] == ent - g_edicts)
@@ -361,6 +853,8 @@ void Ready_MatchStart (void)
 		return;
 	rd.started = true;
 	rd.ready[0] = rd.ready[1] = false;
+	rd.pauses_used[0] = rd.pauses_used[1] = 0;
+	rd.cancel_at[0] = rd.cancel_at[1] = 0;
 
 	// duelo: las kills del calentamiento no cuentan para el ganador
 	if (!Ready_IsDuel () && !tournament->value)
@@ -378,12 +872,20 @@ void Ready_MatchStart (void)
 			g_edicts[i].client->resp.score = 0;
 			g_edicts[i].client->resp.points = 0;
 			g_edicts[i].client->resp.streak = 0;
+			// pantalla final: K, M, +/-, precision y curacion solo del duelo
+			g_edicts[i].client->resp.stat_human_plus = g_edicts[i].client->resp.stat_bot_plus = 0;
+			g_edicts[i].client->resp.stat_human_minus = g_edicts[i].client->resp.stat_bot_minus = 0;
+			g_edicts[i].client->resp.accuracy_hits = g_edicts[i].client->resp.accuracy_misses = 0;
+			g_edicts[i].client->resp.heal_given = 0;
 		}
 }
 
 // "sv resetcount": se vuelve a pedir ready
 void Ready_CountReset (void)
 {
+	if (rd.paused)
+		Ready_EndPause ();
+	memset (rd.dropped, 0, sizeof(rd.dropped));
 	rd.started = false;
 	rd.ready[0] = rd.ready[1] = false;
 }
@@ -394,8 +896,18 @@ void Svcmd_Ready_f (void)
 	int		t;
 	edict_t	*cap;
 
+	if (!Q_stricmp (gi.argv (2), "seguir"))
+	{
+		if (!rd.paused)
+			gi.cprintf (NULL, PRINT_HIGH, "ready: la partida no esta en pausa\n");
+		else
+			Ready_StartResume ("El admin saco la pausa");
+		return;
+	}
 	if (!Q_stricmp (gi.argv (2), "reset"))
 	{
+		if (rd.paused)
+			Ready_EndPause ();
 		Ready_Reset ();
 		gi.cprintf (NULL, PRINT_HIGH, "ready: capitanes y ready borrados\n");
 		if (Ready_Waiting ())
@@ -406,12 +918,17 @@ void Svcmd_Ready_f (void)
 	gi.cprintf (NULL, PRINT_HIGH, "ready_mode %d, %s, %s\n", (int)ready_mode->value,
 		Ready_Mode () ? (tournament->value ? "torneo" : "duelo") : "sin duelo ni torneo",
 		Ready_Waiting () ? "esperando ready" : (rd.started ? "partida empezada" : "sin esperar"));
+	if (rd.paused)
+		gi.cprintf (NULL, PRINT_HIGH, "  EN PAUSA (%s, %s), sigue sola en %d s\n",
+			rd.pause_team >= 0 ? Ready_TeamName (rd.pause_team) : "automatica", rd.pause_who, (int)(rd.pause_end - level.time));
+	gi.cprintf (NULL, PRINT_HIGH, "  pause_max %d, pause_time %d, pause_auto %d, ready_remind %d\n", (int)pause_max->value,
+		(int)pause_time->value, (int)pause_auto->value, (int)ready_remind->value);
 	for (t = 0; t < 2; t++)
 	{
 		cap = Ready_Captain (t);
-		gi.cprintf (NULL, PRINT_HIGH, "  %s: capitan %s, %s, %d humanos, %d kills\n", Ready_TeamName (t),
+		gi.cprintf (NULL, PRINT_HIGH, "  %s: capitan %s, %s, %d humanos, %d kills, %d pausas usadas\n", Ready_TeamName (t),
 			cap ? cap->client->pers.netname : "(ninguno)", rd.ready[t] ? "LISTO" : "no listo", Ready_HumansIn (t),
-			team_list[t] ? team_list[t]->kills : 0);
+			team_list[t] ? team_list[t]->kills : 0, rd.pauses_used[t]);
 	}
 }
 
@@ -419,4 +936,30 @@ void Svcmd_Ready_f (void)
 qboolean Ready_MenuCaptain (void)
 {
 	return Ready_Waiting ();
+}
+
+// chat de equipo de un espectador: solo lo ven los otros espectadores. true si lo mando
+qboolean Ready_SpectatorChat (edict_t *ent, const char *text)
+{
+	int		i;
+	edict_t	*e;
+
+	if (!Ready_Mode () || ent->client->resp.team_on)
+		return false;
+
+	for (i = 1; i <= game.maxclients; i++)
+	{
+		e = g_edicts + i;
+		if (e->inuse && e->client && !e->ai && !e->client->resp.team_on)
+			safe_cprintf (e, PRINT_CHAT, "(Espectadores)%s", text);
+	}
+	if (dedicated->value)
+		safe_cprintf (NULL, PRINT_CHAT, "(Espectadores)%s", text);
+	return true;
+}
+
+// vote kick: el echado no pausa la partida ni vuelve solo a su equipo
+void Ready_Kicked (int clientnum)
+{
+	rd.kicked = clientnum + 1;
 }

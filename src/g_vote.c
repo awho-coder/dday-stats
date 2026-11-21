@@ -931,6 +931,7 @@ static void Vote_End (qboolean passed, const char *why)
 	if (vote.type == VTYPE_KICK)
 	{
 		Vote_LogYes ();
+		Ready_Kicked (vote.target);
 		gi.AddCommandString (va ("kick %d\n", vote.target));
 		return;
 	}

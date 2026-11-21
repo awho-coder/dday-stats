@@ -1489,6 +1489,13 @@ void StatsLog_CountdownReset (void)
 	}
 }
 
+// segundos jugados de la partida que termino (pantalla final): en duelo sin el calentamiento ni las
+// pausas, si no sin los ratos sin nadie en un equipo. 0 = no se sabe (stats_log 0)
+int StatsLog_Duration (void)
+{
+	return sl.duel ? sl.live_seconds : (int)sl.last_time;
+}
+
 /*
 =================
 Golpes de suerte

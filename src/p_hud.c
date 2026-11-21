@@ -1224,6 +1224,234 @@ static void Team_PanelScoreboard (edict_t *ent, qboolean second_page)
 	gi.WriteString (string);
 }
 
+/*
+==================
+Final screen (tab_final 1): at the end of a team match, the panel of Snako with the result and how it was won,
+the duration on the brass plate, K / M / +/- / Prec / Pts of every player and the highlights (MVP, best aim,
+most heal). Same panel, flags and positions as Team_PanelLayout; rows are 33 characters from TEAM_X.
+==================
+*/
+#define FINAL_PLATE_Y		11		// text on the brass plate (pic y 8..22)
+#define FINAL_RESULT_Y		30		// result line, first line of the dark area
+#define FINAL_TEAMS_Y		44
+#define FINAL_BOTTOM		268		// last pixel row of the dark area (pic y 270)
+#define FINAL_TEAM_GAP		6
+#define FINAL_ROWS_DY		32		// rows right below the flag (the column titles go to the right of it)
+#define FINAL_COLS_X		(TEAM_X + 14 * 8)	// the numbers start after mark + name (14 characters)
+#define FINAL_MIN_SHOTS		20		// best aim: only with this many shots
+
+static int Final_Kills (gclient_t *cl)
+{
+	return cl->resp.stat_human_plus + cl->resp.stat_bot_plus;
+}
+
+static int Final_Deaths (gclient_t *cl)
+{
+	return cl->resp.stat_human_minus + cl->resp.stat_bot_minus;
+}
+
+static int Final_Acc (gclient_t *cl, int *shots)
+{
+	*shots = cl->resp.accuracy_hits + cl->resp.accuracy_misses;
+	return *shots ? cl->resp.accuracy_hits * 100 / *shots : 0;
+}
+
+// how the winner won (deduced from the state at the end)
+static const char *Final_Reason (int w)
+{
+	TeamS_t *t = team_list[w];
+
+	if (level.control_winner)
+		return "por zona";
+	if (!level.control_zone && t->need_kills > 0 && t->kills >= t->need_kills)
+		return "por kills";
+	if (!level.control_zone && t->need_points > 0 && t->score >= t->need_points)
+		return "por puntos";
+	if (!level.control_zone && t->time_to_win > 0 && t->time_to_win <= level.intermissiontime + 1)
+		return "por objetivos";
+	if (level.end_by_time)
+		return "por tiempo";
+	return "";
+}
+
+void Team_FinalScoreboard (edict_t *ent)
+{
+	char		string[1400], line[48], name[16];
+	int			sorted[2][MAX_CLIENTS], sortkey[2][MAX_CLIENTS], total[2] = {0, 0}, shown[2];
+	int			i, j, k, t, y, key, rows, more, secs, shots, acc, nhigh = 0, room;
+	int			mvp = -1, aim = -1, heal = -1, aim_acc = 0;
+	qboolean	by_score = (ctb_mode->value || level.control_zone);	// the team score is points, not kills
+	gclient_t	*cl;
+
+	for (i = 0; i < game.maxclients; i++)
+	{
+		if (!(g_edicts + 1 + i)->inuse || !game.clients[i].resp.team_on)
+			continue;
+		cl = &game.clients[i];
+		t = cl->resp.team_on->index;
+		if (t < 0 || t > 1)
+			continue;
+
+		// order: points (if they are shown), then kills
+		key = (player_scores->value ? cl->resp.score * 1000 : 0) + Final_Kills (cl);
+		for (j = 0; j < total[t]; j++)
+			if (key > sortkey[t][j])
+				break;
+		for (k = total[t]; k > j; k--)
+		{
+			sorted[t][k] = sorted[t][k - 1];
+			sortkey[t][k] = sortkey[t][k - 1];
+		}
+		sorted[t][j] = i;
+		sortkey[t][j] = key;
+		total[t]++;
+
+		// highlights
+		if (mvp < 0 || Final_Kills (cl) > Final_Kills (&game.clients[mvp]) ||
+			(Final_Kills (cl) == Final_Kills (&game.clients[mvp]) && Final_Deaths (cl) < Final_Deaths (&game.clients[mvp])))
+			mvp = i;
+		acc = Final_Acc (cl, &shots);
+		if (shots >= FINAL_MIN_SHOTS && (aim < 0 || acc > aim_acc))
+		{
+			aim = i;
+			aim_acc = acc;
+		}
+		if (cl->resp.heal_given > 0 && (heal < 0 || cl->resp.heal_given > game.clients[heal].resp.heal_given))
+			heal = i;
+	}
+	if (mvp >= 0 && Final_Kills (&game.clients[mvp]) <= 0)
+		mvp = -1;
+	nhigh = (mvp >= 0) + (aim >= 0) + (heal >= 0);
+
+	// rows that fit between the titles of the teams and the highlights
+	room = (FINAL_BOTTOM - nhigh * TEAM_ROW_H - (nhigh ? 2 : 0) - FINAL_TEAMS_Y - 2 * FINAL_ROWS_DY - FINAL_TEAM_GAP) / TEAM_ROW_H;
+	if (total[0] + total[1] <= room)
+	{
+		shown[0] = total[0];
+		shown[1] = total[1];
+	}
+	else
+	{
+		shown[0] = total[0] < room / 2 ? total[0] : (total[1] < room / 2 ? room - total[1] : room / 2);
+		shown[1] = room - shown[0] < total[1] ? room - shown[0] : total[1];
+	}
+
+	Com_sprintf (string, sizeof(string), "xv 0 yv %d picn " FFA_PIC_SCORE " ", TEAM_PANEL_Y);
+
+	// victory picture above the panel, as in the scoreboard
+	if (Last_Team_Winner == 0 || Last_Team_Winner == 1)
+		sprintf (string + strlen(string), "yv %d picn victory_%s ", TEAM_PANEL_Y - TEAM_BANNER_H - 4,
+				 team_list[Last_Team_Winner]->teamid);
+	else if (Last_Team_Winner == -1)
+		sprintf (string + strlen(string), "yv %d picn victory_none ", TEAM_PANEL_Y - TEAM_BANNER_H - 4);
+
+	// duration on the brass plate
+	secs = StatsLog_Duration ();
+	if (secs > 0)
+	{
+		Com_sprintf (line, sizeof(line), "%d:%02d", secs / 60, secs % 60);
+		sprintf (string + strlen(string), "xv %d yv %d string \"%s\" ", 160 - 4 * (int)strlen(line),
+				 TEAM_PANEL_Y + FINAL_PLATE_Y, line);
+	}
+
+	// result: who won, the score (the winner first) and how
+	if (Last_Team_Winner == 0 || Last_Team_Winner == 1)
+	{
+		int w = Last_Team_Winner;
+
+		Com_sprintf (line, sizeof(line), "Gana %.10s %d-%d %s", team_list[w]->teamname,
+					 by_score ? team_list[w]->score : team_list[w]->kills,
+					 by_score ? team_list[!w]->score : team_list[!w]->kills, Final_Reason (w));
+	}
+	else if (Last_Team_Winner == -1)
+		Com_sprintf (line, sizeof(line), "Empate %d-%d", by_score ? team_list[0]->score : team_list[0]->kills,
+					 by_score ? team_list[1]->score : team_list[1]->kills);
+	else
+		Com_sprintf (line, sizeof(line), "Fin de la partida");
+	sprintf (string + strlen(string), "xv %d yv %d string2 \"%s\" ", 160 - 4 * (int)strlen(line),
+			 TEAM_PANEL_Y + FINAL_RESULT_Y, line);
+
+	y = TEAM_PANEL_Y + FINAL_TEAMS_Y;
+	for (t = 0; t < 2; t++)
+	{
+		rows = shown[t];
+		more = 0;
+		if (shown[t] < total[t])
+		{
+			rows = shown[t] > 0 ? shown[t] - 1 : 0;
+			more = total[t] - rows;
+		}
+
+		gi.imageindex (va("teams/%s", team_list[t]->teamid));
+		sprintf (string + strlen(string), "xv %d yv %d picn teams/%s xv %d yv %d string2 \"%-8.8s K %3d/%-3d%cP %3d/%-3d\" ",
+				 TEAM_X, y, team_list[t]->teamid, TEAM_TEXT_X, y + 5, team_list[t]->teamname,
+				 team_list[t]->kills, team_list[t]->need_kills, team_list[t]->kills_and_points ? '&' : ' ',
+				 team_list[t]->score, team_list[t]->need_points);
+		sprintf (string + strlen(string), "xv %d yv %d string \"%s\" xv %d ", FINAL_COLS_X, y + TEAM_HEADER_DY,
+				 player_scores->value ? "  K  M +/- Prec Pts" : "  K  M +/- Prec", TEAM_X);
+
+		for (i = 0; i < rows; i++)
+		{
+			char pts[8];
+
+			cl = &game.clients[sorted[t][i]];
+			acc = Final_Acc (cl, &shots);
+			if (player_scores->value)
+				sprintf (pts, "%4d", cl->resp.score > 999 ? 999 : (cl->resp.score < -99 ? -99 : cl->resp.score));
+			else
+				pts[0] = '\0';
+			// the row of the player looking at it is drawn with the alternate (orange) text
+			sprintf (string + strlen(string), "yv %d %s \"%c%-13.13s%3d%3d%+4d%4d%%%s\" ",
+					 y + FINAL_ROWS_DY + i * TEAM_ROW_H,
+					 (sorted[t][i] == ent - g_edicts - 1) ? "string2" : "string",
+					 (cl->resp.mos == MEDIC) ? '+' : ' ', cl->pers.netname,
+					 Final_Kills (cl) > 99 ? 99 : Final_Kills (cl), Final_Deaths (cl) > 99 ? 99 : Final_Deaths (cl),
+					 Final_Kills (cl) - Final_Deaths (cl), acc, pts);
+		}
+		if (more)
+		{
+			sprintf (string + strlen(string), "yv %d string \"  y %d mas\" ", y + FINAL_ROWS_DY + rows * TEAM_ROW_H, more);
+			rows++;
+		}
+		y += FINAL_ROWS_DY + rows * TEAM_ROW_H + FINAL_TEAM_GAP;
+	}
+
+	// highlights, at the bottom of the dark area
+	y = TEAM_PANEL_Y + FINAL_BOTTOM - nhigh * TEAM_ROW_H;
+	if (mvp >= 0)
+	{
+		Com_sprintf (name, sizeof(name), "%s", game.clients[mvp].pers.netname);
+		sprintf (string + strlen(string), "xv %d yv %d string2 \"MVP: %s (%d kills)\" ", TEAM_X, y, name,
+				 Final_Kills (&game.clients[mvp]));
+		y += TEAM_ROW_H;
+	}
+	if (aim >= 0)
+	{
+		Com_sprintf (name, 13, "%s", game.clients[aim].pers.netname);		// 12: the line fits in the panel
+		sprintf (string + strlen(string), "xv %d yv %d string \"Mejor punteria: %s %d%%\" ", TEAM_X, y, name, aim_acc);
+		y += TEAM_ROW_H;
+	}
+	if (heal >= 0)
+	{
+		Com_sprintf (name, 13, "%s", game.clients[heal].pers.netname);
+		sprintf (string + strlen(string), "xv %d yv %d string \"Mas curacion: %s %d\" ", TEAM_X, y, name,
+				 game.clients[heal].resp.heal_given > 99999 ? 99999 : game.clients[heal].resp.heal_given);
+	}
+
+	if (strlen(string) > 1300)	// for debugging...
+		gi.dprintf ("Warning: final scoreboard string neared or exceeded max length (%d)\n", (int)strlen(string));
+
+	gi.WriteByte (svc_layout);
+	gi.WriteString (string);
+}
+
+// the final screen replaces the team scoreboard at the end of a normal team match
+qboolean Team_FinalActive (void)
+{
+	return level.intermissiontime && tab_final && tab_final->value && !G_IsFFA () && !level.campaign &&
+		team_list[0] && team_list[1];
+}
+
 void A_ScoreboardMessage (edict_t *ent)//, edict_t *killer)
 {
 //	char scoreleftpic[256];   //faf:  for team dll support
@@ -1252,6 +1480,12 @@ void A_ScoreboardMessage (edict_t *ent)//, edict_t *killer)
 	if (G_IsFFA())
 	{
 		FFA_ScoreboardMessage(ent, false);
+		return;
+	}
+
+	if (Team_FinalActive ())
+	{
+		Team_FinalScoreboard (ent);
 		return;
 	}
 
@@ -2580,6 +2814,13 @@ void SplittedScoreboardMessage (edict_t *ent)
 	if (G_IsFFA())
 	{
 		FFA_ScoreboardMessage(ent, false);
+		return;
+	}
+
+	// end of the match: the spectators see the final screen too
+	if (Team_FinalActive ())
+	{
+		Team_FinalScoreboard (ent);
 		return;
 	}
 

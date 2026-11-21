@@ -496,6 +496,7 @@ typedef struct
 	int			control_winner;		// equipo ganador + 1 (0 = nadie todavia)
 	float		control_start;		// level.time en que empezo la disputa (0 = sin empezar)
 	float		control_gamestart;	// gameStartTime visto al empezar (cambia con cada cuenta regresiva)
+	qboolean	end_by_time;		// la partida termino por tiempo (pantalla final: "por tiempo")
 	float		control_msghold;	// hasta cuando no se tapa un aviso general con el estado de la zona
 	int			control_msgstate[MAX_CLIENTS];	// configstring del estado de la zona en el HUD de cada jugador (0 = nada)
 	int			control_introsent[MAX_CLIENTS];	// veces que se mostro la explicacion del modo a cada jugador
@@ -849,6 +850,7 @@ extern cvar_t  *ent_files;
 
 extern cvar_t  *exbattleinfo; // ZeRo - Activa datos de batalla adicionales: headshots, helmet saves y killing spree. Valores sobre 2 determinan las kills necesarias para la racha.
 extern cvar_t  *random_class; // ZeRo
+extern cvar_t  *tab_final; // 1 = at the end of a team match the final screen (result, K/M/+/-/Prec/Pts, MVP) instead of the scoreboard
 extern cvar_t  *tab_panel; // 1 = new team scoreboard (FFA-style panel, flags, Medic heal column); 0 = the classic one
 extern cvar_t  *officer_bonus; // ZeRo - Activa el bonus de cooldown para los airstrikes del officer. Cada kill resta 5 segundos.
 extern cvar_t  *sniper_only;
@@ -2700,6 +2702,12 @@ void Ready_CountReset (void);
 void Cmd_Ready_f (edict_t *ent);
 void Cmd_NotReady_f (edict_t *ent);
 void Svcmd_Ready_f (void);
+void Cmd_Pause_f (edict_t *ent);
+void Cmd_Resume_f (edict_t *ent);
+void Cmd_Cancel_f (edict_t *ent);
+qboolean Ready_Paused (void);
+qboolean Ready_SpectatorChat (edict_t *ent, const char *text);
+void Ready_Kicked (int clientnum);
 
 // g_nicks.c: nicks y tags de clan protegidos con clave (dday/nicks.txt)
 void Nick_Init (void);
