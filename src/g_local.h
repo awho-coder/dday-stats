@@ -2724,6 +2724,7 @@ qboolean Torneo_Active (void);
 const char *Torneo_Name (void);
 void Torneo_OpenMenu (edict_t *ent);
 void Svcmd_Torneo_f (void);
+void Svcmd_Mapas_f (void);
 qboolean Torneo_MenuAvailable (edict_t *ent);
 void Torneo_ClientDisconnect (edict_t *ent);
 qboolean Torneo_ChatGuard (edict_t *ent, const char *text);

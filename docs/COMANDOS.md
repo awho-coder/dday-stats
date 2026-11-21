@@ -584,6 +584,21 @@ con el mismo nombre.
 
 Un `mvdrecord` manual con otro nombre sigue funcionando, pero esa grabación no sale en la web.
 
+## Servidor: lista de mapas para la web (`sv mapas`)
+
+`sv mapas [desde]` responde los mapas del server en páginas que caben en un paquete de rcon (la usa el
+mantenedor de **Mapas** del panel admin de la web para detectar solo los posibles de cada modo):
+
+```
+mapas <total> <desde> <hasta>
+ctl: <mapas con ents/<mapa>.ctl>        (solo en la página 0: control de zona)
+ffa: <mapas con ents/<mapa>_ffa.ent>    (solo en la página 0: Gun Game / FFA)
+<nombres de los .bsp desde..hasta-1>
+```
+
+Los nombres son los `.bsp` de `maps/` (homedir y basedir) en orden alfabético; la página 0 vuelve a leer la
+carpeta (un mapa recién subido aparece sin cambiar de mapa). Siguiente página: `sv mapas <hasta>`.
+
 ## Servidor: votación de los jugadores y nicks protegidos
 
 Detalle: [`VOTACION.md`](VOTACION.md).

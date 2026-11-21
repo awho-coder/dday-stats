@@ -966,6 +966,8 @@ void	ServerCommand (void)
 
 	if (Q_stricmp (cmd, "test") == 0)
 		Svcmd_Test_f ();
+	else if (Q_stricmp (cmd, "mapas") == 0)
+		Svcmd_Mapas_f ();
 	else if (Q_stricmp (cmd, "maplist") == 0) 
 		Svcmd_Maplist_f (); 
 	else if (Q_stricmp (cmd, "mapinfo") == 0)
