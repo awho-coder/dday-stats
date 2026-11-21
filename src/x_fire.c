@@ -569,7 +569,7 @@ void PBM_Ignite (edict_t *victim, edict_t *attacker, vec3_t point)
 			return;
 
 		// kernel: do not allow to set on fire if the match has not begun yet
-		if (freeze_mode || (tournament->value && (countdownTimeLimit <= 0 || countdownActive > 0)))
+		if (freeze_mode || Tournament_Waiting ())
 			return;
 
 	}

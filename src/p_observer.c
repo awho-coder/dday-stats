@@ -1094,10 +1094,10 @@ void M_Team_Join(edict_t *ent, pmenu_t *p, int choice)
 
 
 
-// menu de equipos en duelo/torneo con ready: "<equipo> (capitan)" (filas 14 y 15)
+// menu de equipos en duelo/torneo con ready: bajo "Entrar como capitan", el equipo va en arg (indice + 1)
 void M_Team_JoinCaptain(edict_t *ent, pmenu_t *p, int choice)
 {
-	int team = choice - 14;
+	int team = (int)(size_t)p->arg - 1;
 
 	if (team < 0 || team > 1 || !team_list[team])
 		return;
@@ -1117,6 +1117,7 @@ void ChooseTeam(edict_t *ent) {
 	char* theText = NULL;
 	char teamname[17];
 	int max_clients;
+	int row;
 
 	if (G_IsFFA())
 		return;
@@ -1227,10 +1228,12 @@ void ChooseTeam(edict_t *ent) {
 			client_menu(ent, 9, "Auto Select",		PMENU_ALIGN_CENTER,	NULL, M_Team_Join );		
 	}
 
-//	client_menu(ent, 9, NULL,				PMENU_ALIGN_RIGHT,	NULL, NULL );
-	// duelo/torneo con ready_mode: entrar al equipo como capitan (el que pone ready)
+	// duelo/torneo con ready_mode: entrar al equipo como capitan (el que pone ready), alineado con
+	// las filas de los equipos; con torneo activo (sv torneo) tambien el menu Duelo / Torneo
+	row = 14;
 	if (Ready_MenuCaptain ())
 	{
+		client_menu(ent, row++, "*Entrar como capitan",	PMENU_ALIGN_CENTER,	NULL, NULL );
 		for (i = 0; i < 2; i++)
 		{
 			if (!captain_ok[i])
@@ -1238,15 +1241,18 @@ void ChooseTeam(edict_t *ent) {
 			strncpy(teamname, team_list[i]->teamname, 16);
 			teamname[16] = '\0';
 			theText = gi.TagMalloc(32, TAG_GAME);
-			Com_sprintf(theText, 32, "%s (capitan)", teamname);
-			client_menu(ent, (i + 14), theText, PMENU_ALIGN_LEFT, NULL, M_Team_JoinCaptain );
+			Com_sprintf(theText, 32, "%12s", teamname);
+			client_menu(ent, row++, theText, PMENU_ALIGN_LEFT, (void *)(size_t)(i + 1), M_Team_JoinCaptain );
 		}
-		client_menu(ent, 16, "Main Menu",		PMENU_ALIGN_RIGHT,	NULL, M_Main_Menu );
+		row++;
 	}
-	else
-		client_menu(ent, 14, "Main Menu",		PMENU_ALIGN_RIGHT,	NULL, M_Main_Menu );
-//	client_menu(ent, 11, NULL,				PMENU_ALIGN_RIGHT,	NULL, NULL );
-	client_menu(ent, 17, "*Use [ and ] to select", PMENU_ALIGN_CENTER,	NULL, NULL );
+	if (Torneo_MenuAvailable (ent))
+	{
+		client_menu(ent, row, Torneo_Active () ? "Duelo / Torneo" : "Arbitro",	PMENU_ALIGN_CENTER,	NULL, M_Torneo_Choose );
+		row += 2;
+	}
+	client_menu(ent, row, "Main Menu",		PMENU_ALIGN_CENTER,	NULL, M_Main_Menu );
+	client_menu(ent, row + 2, "*Use [ and ] to select", PMENU_ALIGN_CENTER,	NULL, NULL );
 
 
 	PMenu_Open(ent, ent->client->menu_cur , 5, sizeof(ent->client->menu_cur) / sizeof(pmenu_t));
@@ -1309,6 +1315,9 @@ void MainMenu(edict_t *ent)
 	client_menu(ent, 12, "Change Name   ",	PMENU_ALIGN_CENTER,	NULL, M_Name_Choose );
 	client_menu(ent, 13, "Help          ",	PMENU_ALIGN_CENTER,	NULL, M_Binds_Choose );
 	client_menu(ent, 14, "Credits       ",	PMENU_ALIGN_CENTER,	NULL, M_View_Credits );
+	// torneo activo (sv torneo): el menu de capitanes, pausa, mapa...
+	if (Torneo_MenuAvailable (ent))
+		client_menu(ent, 15, Torneo_Active () ? "Duelo / Torneo" : "Arbitro",	PMENU_ALIGN_CENTER,	NULL, M_Torneo_Choose );
 //	client_menu(ent, 7,  NULL,				PMENU_ALIGN_RIGHT,	NULL, NULL );
 	client_menu(ent, 17, "*Use [ and ] to select",			PMENU_ALIGN_CENTER,	NULL, NULL );
 
@@ -1318,6 +1327,12 @@ void MainMenu(edict_t *ent)
 
 void M_Main_Menu (edict_t *ent, pmenu_t *p, int choice) 
 { MainMenu(ent); }
+
+void M_Torneo_Choose (edict_t *ent, pmenu_t *p, int choice)
+{
+	PMenu_Close(ent);
+	Torneo_OpenMenu(ent);
+}
 
 void M_Team_Choose (edict_t *ent, pmenu_t *p, int choice) 
 {

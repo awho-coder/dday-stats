@@ -1005,6 +1005,8 @@ void	ServerCommand (void)
 		Svcmd_Tornado_f();
 	else if (Q_stricmp(cmd, "ready") == 0)
 		Svcmd_Ready_f();
+	else if (Q_stricmp(cmd, "torneo") == 0)
+		Svcmd_Torneo_f();
 	else if (Q_stricmp(cmd, "slap") == 0)
 		Svcmd_Slap_f();
 

@@ -1205,6 +1205,7 @@ void SpawnEntities2 (char *mapname, char *entities, char *spawnpoint)
 	memset (mapvotes, 0, sizeof(mapvotes));
 	Vote_Reset ();
 	Ready_Reset ();
+	Torneo_LevelStart ();
 	Nick_Load ();
 
 	InitItems ();

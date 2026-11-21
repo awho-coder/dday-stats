@@ -841,7 +841,7 @@ qboolean Pickup_Briefcase (edict_t *ent, edict_t *other)
 	index = ITEM_INDEX(ent->item);
 
 	// kernel: do not allow to pick up if the match has not begun yet
-	if (tournament->value && countdownTimeLimit <= 0)
+	if (Tournament_Waiting ())
 		return false;
 
 	other->client->has_briefcase = true;

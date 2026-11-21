@@ -93,6 +93,7 @@ GAME_OBJS =	\
 	g_statslog.o \
 	g_svcmds.o \
 	g_target.o \
+	g_torneo.o \
 	g_tornado.o \
 	g_trigger.o \
 	g_turret.o \
@@ -177,6 +178,8 @@ g_phys.o: g_phys.c g_local.h g_defines.h q_shared.h game.h p_menu.h \
  g_maps.h
 g_ready.o: g_ready.c g_local.h g_defines.h q_shared.h game.h \
  p_menu.h g_maps.h g_statslog.h x_fire.h
+g_torneo.o: g_torneo.c g_local.h g_defines.h q_shared.h game.h \
+ p_menu.h g_maps.h
 g_save.o: g_save.c g_local.h g_defines.h q_shared.h game.h p_menu.h \
  g_maps.h
 g_spawn.o: g_spawn.c g_local.h g_defines.h q_shared.h game.h p_menu.h \

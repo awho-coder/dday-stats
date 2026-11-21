@@ -209,11 +209,94 @@ HELP = ("[ADMIN] comandos: estado, kick <quien>, kickban <quien>, ban <ip>, unba
         "grabar on|off|ahora, alias <nick>, lock, unlock, say <texto>, ayuda")
 
 HELP_DUEL = ("[ADMIN] server de DUELOS: estado, capitanes [reset], modoready on|off, tiempoduelo <min>|libre, "
-             "duelo <mapa>, control <mapa>, normal, cuenta [min], reset, resetscore, marcador, torneo on|off, freeze, "
-             "evento <nombre>|off, grabar on|off|ahora, mapa <x>, pass <nueva>, passoff, kick <quien>, bots on|off, say <texto>")
+             "duelo <mapa>, control <mapa>, normal, cuenta [min], reset, resetscore, marcador, torneo [clave] [mapa] [min], "
+             "torneo fin, freeze, grabar on|off|ahora, mapa <x>, pass <nueva>, passoff, kick <quien>, bots on|off, say <texto>")
 
 def help_text():
     return HELP_DUEL if server_role() == "duel" else HELP
+
+# ── torneos: las fichas abiertas de la web van a dday/torneos.txt, que lee "sv torneo" de la DLL ──
+TORNEOS_URL    = "https://dday-server-api.duckdns.org/v1/ladder-test/tournaments"
+TORNEOS_FILE   = "/home/ubuntu/dday/dday/torneos.txt"
+TORNEO_ACTIVO  = "/home/ubuntu/dday/dday/torneo_activo.txt"
+TORNEOS_EVERY  = 300          # segundos entre descargas
+_TN = {"next": 0}
+TORNEO_FIN = {"fin", "off", "terminar", "termina", "quitar", "quitarlo", "limpiar", "ninguno", "sacar", "no",
+              "desactivar", "apagar", "0"}
+
+def torneo_activo_key():
+    """Clave del torneo activo (dday/torneo_activo.txt de la DLL), '' si no hay."""
+    try:
+        for line in open(TORNEO_ACTIVO, encoding="utf-8", errors="replace"):
+            if line.startswith("clave="):
+                return line[6:].strip()
+    except Exception:
+        pass
+    return ""
+
+def torneos_sync(force=False):
+    """Baja las fichas abiertas (Proximo / En curso) y escribe torneos.txt ('clave|minutos|nombre').
+    Si la ficha del torneo activo ya no esta abierta (la terminaron en la web), lo termina."""
+    if not force and time.time() < _TN["next"]:
+        return None
+    _TN["next"] = time.time() + TORNEOS_EVERY
+    import json, urllib.request
+    try:
+        req = urllib.request.Request(TORNEOS_URL, headers={"User-Agent": "dday-chat-admin"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = json.load(r)
+        lista = data["tournaments"]
+    except Exception as e:
+        print("torneos: no pude bajar la lista (%s); queda la anterior" % e)
+        return None
+    rows = []
+    for t in lista:
+        if t.get("registered") is False or t.get("status") not in ("upcoming", "live"):
+            continue
+        key = str(t.get("event") or "").strip()
+        if not key or "|" in key or "\n" in key:
+            continue
+        mins = t.get("match_minutes")
+        mins = str(int(mins)) if isinstance(mins, (int, float)) and mins >= 0 else ""
+        name = sin_tildes(str(t.get("name") or key)).replace("|", "/").replace("\n", " ").strip()[:60]
+        rows.append("%s|%s|%s" % (key, mins, name or key))
+    try:
+        tmp = TORNEOS_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write("# fichas abiertas de la web (lo escribe chat-admin cada %d s): clave|minutos|nombre\n" % TORNEOS_EVERY)
+            for r in rows:
+                f.write(r + "\n")
+        os.replace(tmp, TORNEOS_FILE)
+    except Exception as e:
+        print("torneos: no pude escribir %s (%s)" % (TORNEOS_FILE, e))
+        return None
+    act = torneo_activo_key()
+    if act and all(r.split("|", 1)[0] != act for r in rows):
+        print("torneos: la ficha %s ya no esta abierta en la web -> sv torneo fin" % act)
+        rcon("sv torneo fin")
+    return rows
+
+def torneo_cmd(arg):
+    """torneo [clave|parte del nombre] [mapa] [minutos] | torneo fin (lo hace 'sv torneo' de la DLL)."""
+    a = (arg or "").strip().strip('"')
+    if norm(a) in TORNEO_FIN:
+        out = _cl(rcon("sv torneo fin", wait=1.5)).splitlines()
+        return "[ADMIN] " + sin_tildes(out[-1] if out else "torneo terminado")[:170]
+    if norm(a) in ("on", "1", "activar", "si", "encender", "prender"):
+        return "[ADMIN] uso: torneo <clave> [mapa] [minutos]. 'torneo' solo lista los torneos abiertos de la web"
+    torneos_sync(force=True)
+    if a and not re.match(r"^[A-Za-z0-9 ._-]{2,80}$", a):
+        return "[ADMIN] clave invalida (letras, numeros, - . _)"
+    out = [l for l in _cl(rcon("sv torneo " + a if a else "sv torneo", wait=1.5)).splitlines() if l.strip()]
+    claves = [l.strip().split(" - ", 1)[0] for l in out if l.startswith("  ") and " - " in l]
+    abiertos = ("abiertos: " + ", ".join(claves)) if claves else "no hay torneos abiertos en la web"
+    if not a:
+        return ("[ADMIN] %s | %s" % (sin_tildes(out[0]) if out else "?", abiertos))[:190]
+    ok = [l for l in out if " activo en " in l]
+    if ok:
+        return "[ADMIN] " + sin_tildes(ok[0].replace("torneo: ", ""))[:170]
+    first = out[0].replace("torneo: ", "").replace(" Torneos abiertos:", "").replace(", escribe la clave:", ", escribe la clave") if out else "no se pudo"
+    return ("[ADMIN] %s | %s" % (sin_tildes(first), abiertos))[:190]
 
 def run_cmd(text, by):
     """Ejecuta un comando de chat. SIEMPRE vía whitelist. Devuelve respuesta para say()."""
@@ -554,17 +637,8 @@ def run_cmd(text, by):
         if not normal_maplist(): rcon('set sv_maplist "%s"' % POOL)
         sin = ", ".join(sorted(NO_NAV))
         return "[ADMIN] rotacion de 9 restaurada. Sin bots: %s" % sin, True
-    if verb in ("evento", "event", "torneoevento"):
-        nombre = (arg or "").strip().strip('"')
-        if norm(nombre) in ("off", "quitar", "quitarlo", "limpiar", "ninguno", "sacar", "terminar", "fin"):
-            rcon('set stats_event ""'); rcon("set tournament 0")
-            return "[ADMIN] evento TERMINADO: las partidas vuelven al ladder normal", True
-        if not nombre:
-            return "[ADMIN] uso: evento <nombre-del-torneo>  o  evento off", True
-        if not re.match(r"^[A-Za-z0-9 ._-]{3,40}$", nombre):
-            return "[ADMIN] nombre de evento invalido (letras, numeros, . _ -, max 40)", True
-        rcon('set stats_event "%s"' % nombre)
-        return "[ADMIN] evento '%s' ACTIVO: las partidas van al ladder OFICIAL" % nombre, True
+    if verb in ("evento", "event", "torneoevento", "torneo"):
+        return torneo_cmd(arg), True
     if verb in ("pass", "password", "clave", "contrasena", "contraseña"):
         if verb in ("passoff",):  # placeholder nunca alcanzado
             pass
@@ -681,16 +755,6 @@ def run_cmd(text, by):
     if verb in ("proximamapa", "saltarmapa", "siguientemapa"):
         rcon("sv nextmap")
         return "[ADMIN] cambiando al próximo mapa de la rotación", True
-    if verb in ("torneo",):
-        a = norm(arg)
-        if a in ("on", "1", "activar", "si"):
-            rcon("set tournament 1")
-            return "[ADMIN] tournament ON (habilita freeze mode)", True
-        if a in ("off", "0", "desactivar", "no"):
-            rcon("set tournament 0")
-            return "[ADMIN] tournament OFF", True
-        t = rcon("tournament")
-        return "[ADMIN] tournament: " + _cl(t)[:40], True
     if verb in ("freeze", "pausar", "congelar", "reanudar", "unfreeze"):
         rcon("sv freeze")
         return "[ADMIN] freeze mode toggulado (requiere tournament ON para actuar)", True
@@ -1276,6 +1340,8 @@ def daemon():
     while True:
         try: alias_tick()
         except Exception as e: print("ERR alias %s" % e)
+        try: torneos_sync()
+        except Exception as e: print("ERR torneos %s" % e)
         line = f.readline()
         if not line: time.sleep(0.3); continue
         if RCON_FROM.search(line):

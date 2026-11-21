@@ -2708,6 +2708,30 @@ void Cmd_Cancel_f (edict_t *ent);
 qboolean Ready_Paused (void);
 qboolean Ready_SpectatorChat (edict_t *ent, const char *text);
 void Ready_Kicked (int clientnum);
+qboolean Ready_Started (void);
+qboolean Tournament_Waiting (void);
+edict_t *Ready_CaptainOf (int team);
+int Ready_TeamOfPlayer (edict_t *ent);
+qboolean Ready_IsReady (int team);
+qboolean Ready_WantsResume (int team);
+qboolean Ready_MatchInProgress (void);
+qboolean Ready_InPlayNow (void);
+// g_torneo.c: torneo en un paso (sv torneo) y menu Duelo / Torneo
+void Torneo_Init (void);
+void Torneo_LevelStart (void);
+void Torneo_RunFrame (void);
+qboolean Torneo_Active (void);
+const char *Torneo_Name (void);
+void Torneo_OpenMenu (edict_t *ent);
+void Svcmd_Torneo_f (void);
+qboolean Torneo_MenuAvailable (edict_t *ent);
+void Torneo_ClientDisconnect (edict_t *ent);
+qboolean Torneo_ChatGuard (edict_t *ent, const char *text);
+void Cmd_Arbitro_f (edict_t *ent);
+void Cmd_TorneoMenu_f (edict_t *ent);
+void M_Torneo_Choose (edict_t *ent, pmenu_t *p, int choice);
+FILE *Game_OpenFile (char *file, char *mode);
+qboolean Cfg_Value (const char *name, char *out, int size);
 
 // g_nicks.c: nicks y tags de clan protegidos con clave (dday/nicks.txt)
 void Nick_Init (void);

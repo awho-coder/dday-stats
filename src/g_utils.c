@@ -728,6 +728,14 @@ static FILE *PlayerPref_Open (char *file, char *mode, char *path, size_t size)
 }
 
 // a line of the file without its end; false if it is not "<n> <name>"
+// abre un archivo de la carpeta del juego (dday/) en homedir, basedir o "."
+FILE *Game_OpenFile (char *file, char *mode)
+{
+	char path[256];
+
+	return PlayerPref_Open (file, mode, path, sizeof(path));
+}
+
 static qboolean PlayerPref_ParseLine (char *line, int *value, char **name)
 {
 	line[strcspn (line, "\r\n")] = 0;
