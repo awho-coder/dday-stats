@@ -217,8 +217,12 @@ def help_text():
 
 # ── torneos: las fichas abiertas de la web van a dday/torneos.txt, que lee "sv torneo" de la DLL ──
 TORNEOS_URL    = "https://dday-server-api.duckdns.org/v1/ladder-test/tournaments"
-TORNEOS_FILE   = "/home/ubuntu/dday/dday/torneos.txt"
-TORNEO_ACTIVO  = "/home/ubuntu/dday/dday/torneo_activo.txt"
+# La DLL lee y escribe primero en el homedir del server (+set homedir /var/data -> /var/data/dday) y si no, en el
+# basedir (/home/ubuntu/dday/dday): se usa la misma carpeta, la primera que exista.
+TORNEOS_DIRS   = ["/var/data/dday", "/home/ubuntu/dday/dday"]
+TORNEOS_DIR    = next((d for d in TORNEOS_DIRS if os.path.isdir(d)), TORNEOS_DIRS[-1])
+TORNEOS_FILE   = os.path.join(TORNEOS_DIR, "torneos.txt")
+TORNEO_ACTIVO  = os.path.join(TORNEOS_DIR, "torneo_activo.txt")
 TORNEOS_EVERY  = 300          # segundos entre descargas
 _TN = {"next": 0}
 TORNEO_FIN = {"fin", "off", "terminar", "termina", "quitar", "quitarlo", "limpiar", "ninguno", "sacar", "no",
