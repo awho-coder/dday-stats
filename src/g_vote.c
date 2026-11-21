@@ -564,6 +564,104 @@ int Mode_PreparedMaps (int vmode, const char **out, int max)
 	return n;
 }
 
+/*
+=================
+"sv mapas [desde]": mapas del server para el mantenedor de mapas de la web (detecta solo cuales
+sirven para cada modo). Va en paginas que caben en un paquete de rcon (el backend lee uno solo):
+
+	mapas <total> <desde> <hasta>
+	ctl: <mapas con ents/<mapa>.ctl>          (solo en la pagina 0)
+	ffa: <mapas con ents/<mapa>_ffa.ent>      (solo en la pagina 0)
+	<nombres de los mapas desde..hasta-1, separados por espacio>
+
+Los nombres son los .bsp de maps/ (homedir y basedir), en orden alfabetico.
+=================
+*/
+#define MAPAS_PAGE_BYTES	1150		// un paquete de rcon de Q2PRO trae unos 1380 bytes
+
+static void Mapas_AppendPrepared (char *out, int size, const char *label, int vmode)
+{
+	const char	*maps[VOTE_MAX_MAPS];
+	int			n = Mode_PreparedMaps (vmode, maps, VOTE_MAX_MAPS), i;
+
+	Vote_Cat (out, label, size);
+	for (i = 0; i < n; i++)
+	{
+		Vote_Cat (out, " ", size);
+		Vote_Cat (out, maps[i], size);
+	}
+	Vote_Cat (out, "\n", size);
+}
+
+// imprime un texto largo en pedazos de menos de 900 caracteres, cortando en un espacio o salto
+static void Mapas_Print (const char *text)
+{
+	char	chunk[900];
+	int		len;
+
+	while (*text)
+	{
+		len = (int)strlen (text);
+		if (len >= (int)sizeof(chunk))
+		{
+			len = sizeof(chunk) - 1;
+			while (len > 0 && text[len] != ' ' && text[len] != '\n')
+				len--;
+			if (len <= 0)
+				len = sizeof(chunk) - 1;
+			else
+				len++;		// el espacio va con este pedazo
+		}
+		memcpy (chunk, text, len);
+		chunk[len] = '\0';
+		gi.cprintf (NULL, PRINT_HIGH, "%s", chunk);
+		text += len;
+	}
+}
+
+void Svcmd_Mapas_f (void)
+{
+	char	head[64], body[MAPAS_PAGE_BYTES + 64], prepared[MAPAS_PAGE_BYTES];
+	int		from = atoi (gi.argv (2)), to, budget;
+
+	// mapas recien subidos: la pagina 0 vuelve a leer la carpeta (salvo con una votacion en curso)
+	if (from <= 0 && !vote.active)
+		vote_nummaps = -1;
+	Vote_LoadMaps ();
+	if (from < 0)
+		from = 0;
+	if (from > vote_nummaps)
+		from = vote_nummaps;
+
+	prepared[0] = '\0';
+	if (from == 0)
+	{
+		Mapas_AppendPrepared (prepared, sizeof(prepared), "ctl:", VMODE_CONTROL);
+		Mapas_AppendPrepared (prepared, sizeof(prepared), "ffa:", VMODE_FFA);
+	}
+
+	budget = MAPAS_PAGE_BYTES - (int)strlen (prepared) - 32;
+	body[0] = '\0';
+	for (to = from; to < vote_nummaps; to++)
+	{
+		int len = (int)strlen (vote_maps[to]) + 1;
+
+		if (budget - len < 0)
+			break;
+		if (body[0])
+			Vote_Cat (body, " ", sizeof(body));
+		Vote_Cat (body, vote_maps[to], sizeof(body));
+		budget -= len;
+	}
+	Com_sprintf (head, sizeof(head), "mapas %d %d %d\n", vote_nummaps, from, to);
+	// cprintf acepta ~1000 caracteres por llamada: va en pedazos (el rcon los junta en un paquete)
+	gi.cprintf (NULL, PRINT_HIGH, "%s", head);
+	if (prepared[0])
+		Mapas_Print (prepared);
+	Mapas_Print (body);
+	gi.cprintf (NULL, PRINT_HIGH, "\n");
+}
+
 // lista "dday2, gg_rats, tebessa2" de los mapas preparados para un modo
 static void Mode_MapListFor (int vmode, char *out, int size)
 {
